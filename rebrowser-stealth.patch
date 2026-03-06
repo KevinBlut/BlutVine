@@ -1,0 +1,403 @@
+
+diff --git a/packages/playwright-core/src/server/chromium/crConnection.ts b/packages/playwright-core/src/server/chromium/crConnection.ts
+index 8df1f6134..0d8440a42 100644
+--- a/packages/playwright-core/src/server/chromium/crConnection.ts
++++ b/packages/playwright-core/src/server/chromium/crConnection.ts
+@@ -6,7 +6,7 @@
+  * you may not use this file except in compliance with the License.
+  * You may obtain a copy of the License at
+  *
+- *     http://www.apache.org/licenses/LICENSE-2.0
++ * http://www.apache.org/licenses/LICENSE-2.0
+  *
+  * Unless required by applicable law or agreed to in writing, software
+  * distributed under the License is distributed on an "AS IS" BASIS,
+@@ -193,6 +193,91 @@ export class CRSession extends SdkObject<Protocol.EventMap & ConnectionEventMap>
+     }
+     this._callbacks.clear();
+   }
++
++  // --- REBROWSER PATCHES START ---
++
++  async __re__emitExecutionContext({ world, targetId, frame = null }: { world: 'utility' | 'main', targetId: string, frame?: any }) {
++    const fixMode = process.env['REBROWSER_PATCHES_RUNTIME_FIX_MODE'] || 'addBinding';
++    const utilityWorldName = process.env['REBROWSER_PATCHES_UTILITY_WORLD_NAME'] !== '0' ? process.env['REBROWSER_PATCHES_UTILITY_WORLD_NAME'] || 'util' : '__playwright_utility_world__';
++
++    if (process.env['REBROWSER_PATCHES_DEBUG'])
++      console.log(`[rebrowser-patches][crSession] targetId = ${targetId}, world = ${world}, frame = ${frame ? 'Y' : 'N'}, fixMode = ${fixMode}`);
++
++    let getWorldPromise: Promise<any>;
++    if (fixMode === 'addBinding') {
++      if (world === 'utility') {
++        getWorldPromise = this.__re__getIsolatedWorld({ client: this, frameId: targetId, worldName: utilityWorldName }).then(id => ({
++          id,
++          name: '__playwright_utility_world__',
++          auxData: { frameId: targetId, isDefault: false }
++        }));
++      } else {
++        getWorldPromise = this.__re__getMainWorld({ client: this, frameId: targetId, isWorker: frame === null }).then(id => ({
++          id,
++          name: '',
++          auxData: { frameId: targetId, isDefault: true }
++        }));
++      }
++    } else {
++      // alwaysIsolated mode
++      getWorldPromise = this.__re__getIsolatedWorld({ client: this, frameId: targetId, worldName: utilityWorldName }).then(id => ({
++        id,
++        name: '',
++        auxData: { frameId: targetId, isDefault: true }
++      }));
++    }
++
++    const contextPayload = await getWorldPromise;
++    this.emit('Runtime.executionContextCreated' as any, { context: contextPayload });
++  }
++
++  async __re__getMainWorld({ client, frameId, isWorker = false }: { client: CRSession, frameId: string, isWorker?: boolean }): Promise<number> {
++    let contextId: number | undefined;
++    const randomName = [...Array(Math.floor(Math.random() * 11) + 10)].map(() => Math.random().toString(36)[2]).join('');
++    
++    if (process.env['REBROWSER_PATCHES_DEBUG']) console.log(`[rebrowser-patches][getMainWorld] binding name = ${randomName}`);
++    
++    await client.send('Runtime.addBinding' as any, { name: randomName });
++
++    const bindingCalledHandler = (params: any) => {
++      if (process.env['REBROWSER_PATCHES_DEBUG']) console.log("[rebrowser-patches][bindingCalledHandler]", params);
++      if (contextId! > 0 || params.name !== randomName || params.payload !== frameId) return;
++      contextId = params.executionContextId;
++      client.off('Runtime.bindingCalled' as any, bindingCalledHandler);
++    };
++
++    client.on('Runtime.bindingCalled' as any, bindingCalledHandler);
++
++    if (isWorker) {
++      await client.send('Runtime.evaluate' as any, { expression: `this['${randomName}']('${frameId}')` });
++    } else {
++      await client.send('Page.addScriptToEvaluateOnNewDocument' as any, {
++        source: `document.addEventListener('${randomName}', (e) => self['${randomName}'](e.detail.frameId))`,
++        runImmediately: true
++      });
++      const createIsolatedWorldResult: any = await client.send('Page.createIsolatedWorld' as any, {
++        frameId,
++        worldName: randomName,
++        grantUniveralAccess: true
++      });
++      await client.send('Runtime.evaluate' as any, {
++        expression: `document.dispatchEvent(new CustomEvent('${randomName}', { detail: { frameId: '${frameId}' } }))`,
++        contextId: createIsolatedWorldResult.executionContextId
++      });
++    }
++    return contextId!;
++  }
++
++  async __re__getIsolatedWorld({ client, frameId, worldName }: { client: CRSession, frameId: string, worldName: string }): Promise<number> {
++    const createIsolatedWorldResult: any = await client.send('Page.createIsolatedWorld' as any, {
++      frameId,
++      worldName,
++      grantUniveralAccess: true
++    });
++    return createIsolatedWorldResult.executionContextId;
++  }
++
++  // --- REBROWSER PATCHES END ---
+ }
+ 
+ export class CDPSession extends SdkObject {
+@@ -206,6 +291,8 @@ export class CDPSession extends SdkObject {
+ 
+   constructor(parentSession: CRSession, sessionId: string) {
+     super(parentSession, 'cdp-session');
++    // Ported from Rebrowser logic: add a guid for internal tracking
++    (this as any).guid = `cdp-session@${sessionId}`;
+     this._session = parentSession.createChildSession(sessionId, (method, params) => this.emit(CDPSession.Events.Event, { method, params }));
+     this._listeners = [eventsHelper.addEventListener(parentSession, 'Target.detachedFromTarget', (event: Protocol.Target.detachedFromTargetPayload) => {
+       if (event.sessionId === sessionId)
+@@ -231,4 +318,4 @@ export class CDPSession extends SdkObject {
+     this._session.dispose();
+     this.emit(CDPSession.Events.Closed);
+   }
+-}
++}
+\ No newline at end of file
+
+diff --git a/packages/playwright-core/src/server/chromium/crDevTools.ts b/packages/playwright-core/src/server/chromium/crDevTools.ts
+index 74aa11c64..b3d94cb7c 100644
+--- a/packages/playwright-core/src/server/chromium/crDevTools.ts
++++ b/packages/playwright-core/src/server/chromium/crDevTools.ts
+@@ -5,7 +5,7 @@
+  * you may not use this file except in compliance with the License.
+  * You may obtain a copy of the License at
+  *
+- *     http://www.apache.org/licenses/LICENSE-2.0
++ * http://www.apache.org/licenses/LICENSE-2.0
+  *
+  * Unless required by applicable law or agreed to in writing, software
+  * distributed under the License is distributed on an "AS IS" BASIS,
+@@ -15,17 +15,16 @@
+  */
+ 
+ import fs from 'fs';
+-
+ import type { CRSession } from './crConnection';
+ 
+ const kBindingName = '__pw_devtools__';
+ 
+-// This class intercepts preferences-related DevTools embedder methods
+-// and stores preferences as a json file in the browser installation directory.
+ export class CRDevTools {
+   private _preferencesPath: string;
+   private _prefs: any;
+   private _savePromise: Promise<any>;
++  // Rebrowser compatibility hook
++  private __testHookOnBinding?: (parsed: any) => void;
+ 
+   constructor(preferencesPath: string) {
+     this._preferencesPath = preferencesPath;
+@@ -33,11 +32,16 @@ export class CRDevTools {
+   }
+ 
+   install(session: CRSession) {
+-    session.on('Runtime.bindingCalled', async event => {
++    session.on('Runtime.bindingCalled' as any, async (event: any) => {
+       if (event.name !== kBindingName)
+         return;
+       const parsed = JSON.parse(event.payload);
+       let result = undefined;
++
++      // Rebrowser hook call
++      if (this.__testHookOnBinding)
++        this.__testHookOnBinding(parsed);
++
+       if (parsed.method === 'getPreferences') {
+         if (this._prefs === undefined) {
+           try {
+@@ -58,20 +62,23 @@ export class CRDevTools {
+         this._prefs = {};
+         this._save();
+       }
+-      session.send('Runtime.evaluate', {
++      session.send('Runtime.evaluate' as any, {
+         expression: `window.DevToolsAPI.embedderMessageAck(${parsed.id}, ${JSON.stringify(result)})`,
+         contextId: event.executionContextId
+       }).catch(e => null);
+     });
++
+     Promise.all([
+-      session.send('Runtime.enable'),
+-      session.send('Runtime.addBinding', { name: kBindingName }),
+-      session.send('Page.enable'),
+-      session.send('Page.addScriptToEvaluateOnNewDocument', { source: `
++      // --- REBROWSER PATCH START ---
++      // Only enable Runtime if fix mode is explicitly disabled ('0')
++      process.env['REBROWSER_PATCHES_RUNTIME_FIX_MODE'] === '0' ? session.send('Runtime.enable' as any) : Promise.resolve(),
++      // --- REBROWSER PATCH END ---
++      
++      session.send('Runtime.addBinding' as any, { name: kBindingName }),
++      session.send('Page.enable' as any),
++      session.send('Page.addScriptToEvaluateOnNewDocument' as any, { source: `
+         (() => {
+           const init = () => {
+-            // Lazy init happens when InspectorFrontendHost is initialized.
+-            // At this point DevToolsHost is ready to be used.
+             const host = window.DevToolsHost;
+             const old = host.sendMessageToEmbedder.bind(host);
+             host.sendMessageToEmbedder = message => {
+@@ -90,14 +97,13 @@ export class CRDevTools {
+           });
+         })()
+       ` }),
+-      session.send('Runtime.runIfWaitingForDebugger'),
++      session.send('Runtime.runIfWaitingForDebugger' as any),
+     ]).catch(e => null);
+   }
+ 
+   _save() {
+-    // Serialize saves to avoid corruption.
+     this._savePromise = this._savePromise.then(async () => {
+       await fs.promises.writeFile(this._preferencesPath, JSON.stringify(this._prefs)).catch(e => null);
+     });
+   }
+-}
++}
+\ No newline at end of file
+
+diff --git a/packages/playwright-core/src/server/chromium/crPage.ts b/packages/playwright-core/src/server/chromium/crPage.ts
+index 9f56a3b9e..22fa44bbd 100644
+--- a/packages/playwright-core/src/server/chromium/crPage.ts
++++ b/packages/playwright-core/src/server/chromium/crPage.ts
+@@ -480,6 +480,18 @@ class FrameSession {
+             grantUniveralAccess: true,
+             worldName: this._crPage.utilityWorldName,
+           });
++
++          // --- START REBROWSER MODIFICATION ---
++          const fixMode = process.env['REBROWSER_PATCHES_RUNTIME_FIX_MODE'] || 'addBinding';
++          if (fixMode !== '0') {
++            (this._client as any).__re__emitExecutionContext({
++              world: 'utility',
++              targetId: frame._id,
++              frame
++            }).catch(() => {});
++          }
++          // --- END REBROWSER MODIFICATION ---
++          
+         }
+ 
+         const isInitialEmptyPage = this._isMainFrame() && this._page.mainFrame().url() === ':';
+@@ -497,7 +509,11 @@ class FrameSession {
+       }),
+       this._client.send('Log.enable', {}),
+       lifecycleEventsEnabled = this._client.send('Page.setLifecycleEventsEnabled', { enabled: true }),
+-      this._client.send('Runtime.enable', {}),
++
++      // --- START REBROWSER MODIFICATION ---
++      process.env['REBROWSER_PATCHES_RUNTIME_FIX_MODE'] === '0' ? this._client.send('Runtime.enable', {}) : Promise.resolve(),
++      // --- END REBROWSER MODIFICATION ---
++
+       this._client.send('Page.addScriptToEvaluateOnNewDocument', {
+         source: '',
+         worldName: this._crPage.utilityWorldName,
+@@ -620,6 +636,27 @@ class FrameSession {
+     if (this._eventBelongsToStaleFrame(framePayload.id))
+       return;
+     this._page.frameManager.frameCommittedNewDocumentNavigation(framePayload.id, framePayload.url + (framePayload.urlFragment || ''), framePayload.name || '', framePayload.loaderId, initial);
++    
++    // --- START REBROWSER MODIFICATION ---
++    const fixMode = process.env['REBROWSER_PATCHES_RUNTIME_FIX_MODE'] || 'addBinding';
++    if (fixMode !== '0') {
++      const frame = this._page.frameManager.frame(framePayload.id);
++      if (frame) {
++        (this._client as any).__re__emitExecutionContext({
++          world: 'main',
++          targetId: framePayload.id,
++          frame
++        }).catch(() => {});
++
++        (this._client as any).__re__emitExecutionContext({
++          world: 'utility',
++          targetId: framePayload.id,
++          frame
++        }).catch(() => {});
++      }
++    }
++    // --- END REBROWSER MODIFICATION ---
++    
+     if (!initial)
+       this._firstNonInitialNavigationCommittedFulfill();
+   }
+@@ -661,6 +698,17 @@ class FrameSession {
+     const frame = contextPayload.auxData ? this._page.frameManager.frame(contextPayload.auxData.frameId) : null;
+     if (!frame || this._eventBelongsToStaleFrame(frame._id))
+       return;
++
++    // --- START REBROWSER MODIFICATION ---
++    // If fixMode is on, we ignore standard events for the main/utility worlds 
++    // because we handle them manually via our __re__ methods.
++    const fixMode = process.env['REBROWSER_PATCHES_RUNTIME_FIX_MODE'] || 'addBinding';
++    if (fixMode !== '0') {
++        if (contextPayload.auxData && !!contextPayload.auxData.isDefault) return;
++        if (contextPayload.name === this._crPage.utilityWorldName) return;
++    }
++    // --- END REBROWSER MODIFICATION ---
++
+     const delegate = new CRExecutionContext(this._client, contextPayload);
+     let worldName: types.World|null = null;
+     if (contextPayload.auxData && !!contextPayload.auxData.isDefault)
+diff --git a/packages/playwright-core/src/server/chromium/crServiceWorker.ts b/packages/playwright-core/src/server/chromium/crServiceWorker.ts
+index 31d0ded84..a7be122e8 100644
+--- a/packages/playwright-core/src/server/chromium/crServiceWorker.ts
++++ b/packages/playwright-core/src/server/chromium/crServiceWorker.ts
+@@ -13,16 +13,16 @@
+  * See the License for the specific language governing permissions and
+  * limitations under the License.
+  */
++
+ import { Worker } from '../page';
+-import { createHandle, CRExecutionContext } from './crExecutionContext';
++import { CRExecutionContext } from './crExecutionContext';
+ import { CRNetworkManager } from './crNetworkManager';
+ import { BrowserContext } from '../browserContext';
+ import * as network from '../network';
+-import { ConsoleMessage } from '../console';
+-import { toConsoleMessageLocation } from './crProtocolHelper';
+ 
+ import type { CRBrowserContext } from './crBrowser';
+ import type { CRSession } from './crConnection';
++import type { Protocol } from './protocol';
+ 
+ export class CRServiceWorker extends Worker {
+   readonly browserContext: CRBrowserContext;
+@@ -33,15 +33,24 @@ export class CRServiceWorker extends Worker {
+     super(browserContext, url);
+     this._session = session;
+     this.browserContext = browserContext;
++
+     if (!process.env.PLAYWRIGHT_DISABLE_SERVICE_WORKER_NETWORK)
+       this._networkManager = new CRNetworkManager(null, this);
++
++    // --- REBROWSER PATCH START ---
++    const fixMode = process.env['REBROWSER_PATCHES_RUNTIME_FIX_MODE'] || 'addBinding';
++    if (fixMode !== '0') {
++      // Manually emit the context for the Service Worker to avoid detection
++      (session as any).__re__emitExecutionContext({
++        world: 'main',
++        targetId: url,
++      }).catch(() => {});
++    }
++
+     session.once('Runtime.executionContextCreated', event => {
+-      this.createExecutionContext(new CRExecutionContext(session, event.context));
++      this._createExecutionContext(new CRExecutionContext(session, event.context));
+     });
+-    if (this.browserContext._browser.majorVersion() >= 143)
+-      session.on('Inspector.workerScriptLoaded', () => this.workerScriptLoaded());
+-    else
+-      this.workerScriptLoaded();
++    // --- REBROWSER PATCH END ---
+ 
+     if (this._networkManager && this._isNetworkInspectionEnabled()) {
+       this.updateRequestInterception();
+@@ -51,23 +60,20 @@ export class CRServiceWorker extends Worker {
+       this._networkManager.addSession(session, undefined, true /* isMain */).catch(() => {});
+     }
+ 
+-    session.on('Runtime.consoleAPICalled', event => {
+-      if (!this.existingExecutionContext || process.env.PLAYWRIGHT_DISABLE_SERVICE_WORKER_CONSOLE)
+-        return;
+-      const args = event.args.map(o => createHandle(this.existingExecutionContext!, o));
+-      const message = new ConsoleMessage(null, this, event.type, undefined, args, toConsoleMessageLocation(event.stackTrace), event.timestamp);
+-      this.browserContext.emit(BrowserContext.Events.Console, message);
+-    });
++    // --- REBROWSER PATCH START ---
++    // Stealth: only enable Runtime if not in fix mode
++    if (fixMode === '0') {
++      session.send('Runtime.enable', {}).catch(e => {});
++    }
++    // --- REBROWSER PATCH END ---
+ 
+-    session.send('Runtime.enable', {}).catch(e => { });
+-    session.send('Runtime.runIfWaitingForDebugger').catch(e => { });
++    session.send('Runtime.runIfWaitingForDebugger').catch(e => {});
+     session.on('Inspector.targetReloadedAfterCrash', () => {
+-      // Resume service worker after restart.
+-      session._sendMayFail('Runtime.runIfWaitingForDebugger', {});
++      (session as any)._sendMayFail('Runtime.runIfWaitingForDebugger', {});
+     });
+   }
+ 
+-  override didClose() {
++  didClose() {
+     this._networkManager?.removeSession(this._session);
+     this._session.dispose();
+     super.didClose();
+@@ -122,4 +128,4 @@ export class CRServiceWorker extends Worker {
+   private _isNetworkInspectionEnabled(): boolean {
+     return this.browserContext._options.serviceWorkers !== 'block';
+   }
+-}
++}
+\ No newline at end of file
+-- 
+2.47.1.windows.2
+
