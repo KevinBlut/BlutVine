@@ -37,6 +37,7 @@ index 760242633c..9c22709a14 100644
 +
 +    noise_factor_x_ = norm_x * 0.002;
 +    noise_factor_y_ = norm_y * 0.002;
++  }
    if (base::FeatureList::IsEnabled(features::kDelayAsyncScriptExecution) &&
        features::kDelayAsyncScriptExecutionDelayByDefaultParam.Get()) {
      script_runner_delayer_->Activate();
