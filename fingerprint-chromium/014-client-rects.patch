@@ -12,7 +12,7 @@ index 760242633c..9c22709a14 100644
  #include "base/auto_reset.h"
  #include "base/containers/adapters.h"
  #include "base/debug/dump_without_crashing.h"
-@@ -1044,11 +1047,22 @@ Document::Document(const DocumentInit& initializer,
+@@ -1044,11 +1047,24 @@ Document::Document(const DocumentInit& initializer,
        data_(MakeGarbageCollected<DocumentData>(GetExecutionContext())) {
    TRACE_EVENT("blink", "Document::Document", perfetto::Flow::FromPointer(this));
    DCHECK(agent_);
