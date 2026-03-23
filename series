@@ -1,0 +1,16 @@
+fingerprint-chromium/000-add-fingerprint-switches.patch
+fingerprint-chromium/001-disable-runtime.enable.patch
+fingerprint-chromium/002-user-agent-fingerprint.patch
+fingerprint-chromium/003-audio-fingerprint.patch
+fingerprint-chromium/003-audio-fingerprint-2.patch
+fingerprint-chromium/005-hardware-concurrency-fingerprint.patch
+fingerprint-chromium/006-font-fingerprint.patch
+fingerprint-chromium/007-shadow-root.patch
+fingerprint-chromium/009-webdriver.patch
+fingerprint-chromium/010-headless.patch
+fingerprint-chromium/011-gpu-info.patch
+fingerprint-chromium/012-canvas-get-image-data.patch
+fingerprint-chromium/014-client-rects.patch
+fingerprint-chromium/015-canvas-measure-text.patch
+fingerprint-chromium/016-webgl-readPixels.patch
+fingerprint-chromium/018-timezone.patch
