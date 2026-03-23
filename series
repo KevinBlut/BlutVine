@@ -3,6 +3,7 @@ fingerprint-chromium/001-disable-runtime.enable.patch
 fingerprint-chromium/002-user-agent-fingerprint.patch
 fingerprint-chromium/003-audio-fingerprint.patch
 fingerprint-chromium/003-audio-fingerprint-2.patch
+fingerprint-chromium/004-rlz-spoofing.patch
 fingerprint-chromium/005-hardware-concurrency-fingerprint.patch
 fingerprint-chromium/006-font-fingerprint.patch
 fingerprint-chromium/007-shadow-root.patch
