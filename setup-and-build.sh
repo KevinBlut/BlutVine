@@ -2,15 +2,16 @@
 # setup_and_run.sh
 # 1. Installs System Dependencies
 # 2. Prepares the Chrome environment
-# 3. Fetches the Chromium source
-# 4. Syncs custom scripts from KevinBlut
-# 5. Runs the Patch and Build pipeline
+# 3. Fetches, Patches, and Builds Chromium 146
+# 4. Compresses the output for distribution
 
 set -euo pipefail
 
+# PATH CONFIGURATION
 _chrome_root="${HOME}/Chrome"
 _kevin_scripts="${HOME}/BlutVine/scripts"
 _chrome_scripts="${_chrome_root}/scripts"
+_output_dir="${_chrome_root}/build/src/out"
 
 log()  { echo "==> $*"; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
@@ -22,7 +23,7 @@ sudo apt install -y git python3 devscripts equivs docker.io curl
 
 # Ensure the current user can use Docker
 if ! groups | grep -q "\bdocker\b"; then
-    log "Adding user to docker group... (You might need to re-login for this to take effect)"
+    log "Adding user to docker group..."
     sudo usermod -aG docker "$USER" || true
 fi
 
@@ -30,16 +31,13 @@ fi
 if [ ! -d "$_chrome_root" ]; then
     log "Creating Chrome project folder..."
     mkdir -p "$_chrome_root"
-else
-    log "Chrome folder already exists."
 fi
 
 # ── Step 2: Navigate and Fetch ───────────────────────────────────────────────
 cd "$_chrome_root"
 
-log "Step 1/3: Running initial Fetch..."
+log "Step 1/4: Running initial Fetch..."
 if [ -f "${_kevin_scripts}/fetch.sh" ]; then
-    # We pass the first run to fetch.sh to get the source
     bash "${_kevin_scripts}/fetch.sh"
 else
     die "Could not find fetch.sh at ${_kevin_scripts}/fetch.sh"
@@ -58,12 +56,26 @@ else
 fi
 
 # ── Step 4: Run Patch & Build ────────────────────────────────────────────────
-log "Step 2/3: Applying patches..."
+log "Step 2/4: Applying patches..."
 bash scripts/patch.sh
 
-log "Step 3/3: Starting build (autoninja)..."
+log "Step 3/4: Starting build (autoninja)..."
 bash scripts/build.sh
 
+# ── Step 5: Compress Result ──────────────────────────────────────────────────
+log "Step 4/4: Compressing build output..."
+
+if [ -d "${_output_dir}/Default" ]; then
+    cd "${_output_dir}"
+    tar -czf chrome_build.tar.gz Default/
+    
+    log "Compression complete!"
+    log "Final Archive: ${_output_dir}/chrome_build.tar.gz"
+    du -sh chrome_build.tar.gz
+else
+    die "Build output directory not found at ${_output_dir}/Default. Build may have failed."
+fi
+
 log "==========================================="
-log "PROCESS COMPLETE: Project Bifrost is ready."
+log "PROCESS COMPLETE: Project Bifrost is packed."
 log "==========================================="
