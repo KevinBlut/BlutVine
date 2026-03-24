@@ -1,0 +1,121 @@
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index a2a14349d4..40d34b0c79 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -2456,6 +2456,7 @@ static_library("browser") {
+     "//components/webui/chrome_urls",
+     "//components/webui/flags",
+     "//components/zoom",
++    "//components/ungoogled:ungoogled_switches",
+     "//content/public/browser",
+     "//content/public/common",
+     "//content/public/common:buildflags",
+diff --git a/components/ungoogled/BUILD.gn b/components/ungoogled/BUILD.gn
+new file mode 100644
+index 0000000000..8b910a0cc8
+--- /dev/null
++++ b/components/ungoogled/BUILD.gn
+@@ -0,0 +1,14 @@
++# Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
++# Use of this source code is governed by a BSD-style license that can be
++# found in the LICENSE file.
++
++component("ungoogled_switches") {
++  sources = [
++    "ungoogled_switches.h",
++    "ungoogled_switches.cc",
++  ]
++
++  defines = [ "IS_UNGOOGLED_IMPL" ]
++
++  deps = [ "//base" ]
++}
+\ No newline at end of file
+diff --git a/components/ungoogled/ungoogled_switches.cc b/components/ungoogled/ungoogled_switches.cc
+new file mode 100644
+index 0000000000..15e63407e1
+--- /dev/null
++++ b/components/ungoogled/ungoogled_switches.cc
+@@ -0,0 +1,18 @@
++// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "components/ungoogled/ungoogled_switches.h"
++
++namespace switches {
++
++// Enable fingerprinting deception for getClientRects and getBoundingClientRect
++const char kFingerprintingClientRectsNoise[] = "fingerprinting-client-rects-noise";
++
++// Enable fingerprinting deception for measureText
++const char kFingerprintingCanvasMeasureTextNoise[] = "fingerprinting-canvas-measuretext-noise";
++
++// Enable fingerprinting deception for Canvas image data
++const char kFingerprintingCanvasImageDataNoise[] = "fingerprinting-canvas-image-data-noise";
++
++}  // namespace switches
+\ No newline at end of file
+diff --git a/components/ungoogled/ungoogled_switches.h b/components/ungoogled/ungoogled_switches.h
+new file mode 100644
+index 0000000000..b7a6a75e04
+--- /dev/null
++++ b/components/ungoogled/ungoogled_switches.h
+@@ -0,0 +1,20 @@
++// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// Defines all the fingerprinting command-line switches.
++
++#ifndef THIRD_PARTY_UNGOOGLED_FINGERPRINTING_SWITCHES_H_
++#define THIRD_PARTY_UNGOOGLED_FINGERPRINTING_SWITCHES_H_
++
++#include "base/component_export.h"
++
++namespace switches {
++
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingClientRectsNoise[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingCanvasMeasureTextNoise[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingCanvasImageDataNoise[];
++
++}
++
++#endif  // THIRD_PARTY_UNGOOGLED_FINGERPRINTING_SWITCHES_H_
+\ No newline at end of file
+diff --git a/content/browser/BUILD.gn b/content/browser/BUILD.gn
+index 2f57856179..c02f7d2fd8 100644
+--- a/content/browser/BUILD.gn
++++ b/content/browser/BUILD.gn
+@@ -160,6 +160,7 @@ source_set("browser") {
+     "//components/webauthn/core/browser",
+     "//components/webauthn/core/browser:client_data",
+     "//components/webauthn/core/browser:common_utils",
++    "//components/ungoogled:ungoogled_switches",
+     "//content:content_resources",
+     "//content/browser/aggregation_service/proto:aggregatable_report_proto",
+     "//content/browser/attribution_reporting:attribution_reporting_proto",
+diff --git a/content/child/BUILD.gn b/content/child/BUILD.gn
+index 71eaf47b71..95ae07d90b 100644
+--- a/content/child/BUILD.gn
++++ b/content/child/BUILD.gn
+@@ -82,6 +82,7 @@ target(link_target_type, "child") {
+     "//components/tracing:tracing_config",
+     "//components/variations",
+     "//components/webcrypto",
++    "//components/ungoogled:ungoogled_switches",
+     "//content/common",
+     "//content/common:mojo_bindings",
+     "//content/common/memory_coordinator/mojom",
+diff --git a/third_party/blink/renderer/platform/BUILD.gn b/third_party/blink/renderer/platform/BUILD.gn
+index 83ebf4a21a..7c8c5c521a 100644
+--- a/third_party/blink/renderer/platform/BUILD.gn
++++ b/third_party/blink/renderer/platform/BUILD.gn
+@@ -1815,6 +1815,7 @@ component("platform") {
+     "//components/viz/client",
+     "//components/viz/common",
+     "//components/webrtc:net_address_utils",
++    "//components/ungoogled:ungoogled_switches",
+     "//crypto",
+     "//device/vr/public/mojom:vr_service_blink",
+     "//gin",
