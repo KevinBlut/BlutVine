@@ -1,60 +1,39 @@
 #!/bin/bash
-# setup.sh
-# 1. Installs System Dependencies
-# 2. Prepares the Chrome environment
-# 3. Fetches the Chromium source
-# 4. Syncs custom scripts from BlutVine
-# 5. Applies Patches (NO COMPILATION)
-
+# setup.sh - Staging only (No Compile)
 set -euo pipefail
 
-# PATH CONFIGURATION
 _chrome_root="${HOME}/Chrome"
-_kevin_scripts="${HOME}/BlutVine/scripts"
+_blutvine_scripts="${HOME}/BlutVine/scripts"
 _chrome_scripts="${_chrome_root}/scripts"
 
 log()  { echo "==> $*"; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
 
-# ── Step 0: Install System Dependencies ──────────────────────────────────────
-log "Updating system and installing dependencies..."
-sudo apt update
-sudo apt install -y git python3 devscripts equivs docker.io curl
+# Step 0: System Prep
+log "Installing dependencies..."
+sudo apt update && sudo apt install -y git python3 devscripts equivs docker.io curl
 
-# ── Step 1: Create Chrome Folder ─────────────────────────────────────────────
+# Step 1: Initialize Chrome Folder
 if [ ! -d "$_chrome_root" ]; then
-    log "Creating Chrome project folder..."
+    log "Creating dedicated Chrome workspace..."
     mkdir -p "$_chrome_root"
 fi
 
-# ── Step 2: Navigate and Fetch ───────────────────────────────────────────────
+# Step 2: Enter Chrome and Fetch
 cd "$_chrome_root"
-
-log "Step 1/2: Running initial Fetch..."
-if [ -f "${_kevin_scripts}/fetch.sh" ]; then
-    bash "${_kevin_scripts}/fetch.sh"
+log "Running Fetch inside $(pwd)..."
+if [ -f "${_blutvine_scripts}/fetch.sh" ]; then
+    bash "${_blutvine_scripts}/fetch.sh"
 else
-    die "Could not find fetch.sh at ${_kevin_scripts}/fetch.sh"
+    die "Missing fetch.sh in ${_blutvine_scripts}"
 fi
 
-# ── Step 3: Sync Scripts ─────────────────────────────────────────────────────
-log "Syncing scripts into Chrome/scripts..."
+# Step 3: Sync Scripts & Patch
 mkdir -p "$_chrome_scripts"
+cp "${_blutvine_scripts}/"*.sh "$_chrome_scripts/"
+chmod +x "$_chrome_scripts/"*.sh
 
-if [ -d "$_kevin_scripts" ]; then
-    cp "${_kevin_scripts}/"*.sh "$_chrome_scripts/"
-    chmod +x "$_chrome_scripts/"*.sh
-    log "Scripts synced."
-else
-    die "Source scripts folder not found: $_kevin_scripts"
-fi
-
-# ── Step 4: Run Patch ────────────────────────────────────────────────────────
-log "Step 2/2: Applying patches..."
-# We use the newly synced script in Chrome/scripts
+log "Applying patches..."
 bash scripts/patch.sh
 
-log "==========================================="
-log "SETUP COMPLETE: Source is fetched and patched."
-log "Ready for manual build with: bash scripts/build.sh"
-log "==========================================="
+log "SUCCESS: Chrome is staged and patched in ${_chrome_root}"
