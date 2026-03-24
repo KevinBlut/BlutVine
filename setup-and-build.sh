@@ -9,7 +9,7 @@
 set -euo pipefail
 
 _chrome_root="${HOME}/Chrome"
-_kevin_scripts="${HOME}/KevinBlut/scripts"
+_kevin_scripts="${HOME}/BlutVine/scripts"
 _chrome_scripts="${_chrome_root}/scripts"
 
 log()  { echo "==> $*"; }
