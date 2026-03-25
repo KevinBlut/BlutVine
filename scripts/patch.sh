@@ -1,35 +1,41 @@
 #!/bin/bash
-# patch.sh - Applies Bifrost fingerprinting patches (Excludes 013, 015)
+# patch.sh
 set -euo pipefail
 _force=false
 for arg in "$@"; do [ "$arg" == "--force" ] && _force=true; done
 
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/shared.sh"
 setup_paths
-_patch_dir="${HOME}/BlutVine/fingerprint-chromium"
+
+# Path updated to BlutVine/series
+_kevin_blut_dir="${HOME}/BlutVine"
+_patch_dir="${_kevin_blut_dir}/fingerprint-chromium"
+_series_file="${_kevin_blut_dir}/series"
 
 main() {
     if stamp_exists "patched" && ! $_force; then
         log "Patches already applied. Skipping."
     else
-        cd "${_src_dir}"
-        log "Applying custom C++ patches (skipping 013 and 015)..."
+        [ -f "$_series_file" ] || die "Series file not found at $_series_file"
         
-        for p in "${_patch_dir}/"*.patch; do
-            _patch_name=$(basename "$p")
+        cd "${_src_dir}"
+        log "Applying patches from: $_series_file"
+
+        while IFS= read -r patch_file || [ -n "$patch_file" ]; do
+            # Skip empty lines or comments
+            [[ -z "$patch_file" || "$patch_file" == \#* ]] && continue
             
-            # Exclusion logic for 013 and 015
-            if [[ "$_patch_name" == *"013"* ]] || [[ "$_patch_name" == *"015"* ]]; then
-                info "Skipping excluded patch: $_patch_name"
-                continue
-            fi
-            
-            git apply --ignore-whitespace "$p" || echo "Warning: Patch $_patch_name failed to apply."
-        done
+            # Trim whitespace
+            patch_file=$(echo "$patch_file" | xargs)
+
+            log "Applying: $patch_file"
+            git apply --ignore-whitespace "${_patch_dir}/${patch_file}" || die "Failed on: $patch_file"
+        done < "$_series_file"
+        
         write_stamp "patched"
     fi
 
-    log "Writing GN build arguments..."
+    log "Writing GN arguments..."
     mkdir -p "${_out_dir}"
     cat > "${_out_dir}/args.gn" <<GN_ARGS
 is_debug = false
