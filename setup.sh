@@ -2,9 +2,13 @@
 # setup.sh - Staging only (No Compile)
 set -euo pipefail
 
-_chrome_root="${HOME}/Chrome"
+# CHROME_ROOT is the single source of truth for where everything lives.
+# Exported so that shared.sh's repo_root() picks it up in every sub-script,
+# regardless of where those scripts are physically located on disk.
+export CHROME_ROOT="${HOME}/Chrome"
+
 _blutvine_scripts="${HOME}/BlutVine/scripts"
-_chrome_scripts="${_chrome_root}/scripts"
+_chrome_scripts="${CHROME_ROOT}/scripts"
 
 log()  { echo "==> $*"; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
@@ -14,14 +18,12 @@ log "Installing dependencies..."
 sudo apt update && sudo apt install -y git python3 devscripts equivs docker.io curl
 
 # Step 1: Initialize Chrome Folder
-if [ ! -d "$_chrome_root" ]; then
-    log "Creating dedicated Chrome workspace..."
-    mkdir -p "$_chrome_root"
-fi
+log "Initializing Chrome workspace at ${CHROME_ROOT}..."
+mkdir -p "$CHROME_ROOT"
+cd "$CHROME_ROOT"
 
-# Step 2: Enter Chrome and Fetch
-cd "$_chrome_root"
-log "Running Fetch inside $(pwd)..."
+# Step 2: Fetch (gclient sync)
+log "Running fetch..."
 if [ -f "${_blutvine_scripts}/fetch.sh" ]; then
     bash "${_blutvine_scripts}/fetch.sh"
 else
@@ -29,11 +31,12 @@ else
 fi
 
 # Step 3: Sync Scripts & Patch
+log "Syncing scripts to ${_chrome_scripts}..."
 mkdir -p "$_chrome_scripts"
 cp "${_blutvine_scripts}/"*.sh "$_chrome_scripts/"
 chmod +x "$_chrome_scripts/"*.sh
 
 log "Applying patches..."
-bash scripts/patch.sh
+bash "$_chrome_scripts/patch.sh"
 
-log "SUCCESS: Chrome is staged and patched in ${_chrome_root}"
+log "SUCCESS: Chrome is staged and patched in ${CHROME_ROOT}"
