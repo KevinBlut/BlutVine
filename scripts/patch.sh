@@ -1,5 +1,5 @@
 #!/bin/bash
-# patch.sh - Applies Bifrost fingerprinting patches
+# patch.sh - Applies Bifrost fingerprinting patches (Excludes 013, 015)
 set -euo pipefail
 _force=false
 for arg in "$@"; do [ "$arg" == "--force" ] && _force=true; done
@@ -13,17 +13,24 @@ main() {
         log "Patches already applied. Skipping."
     else
         cd "${_src_dir}"
-        log "Applying custom C++ patches..."
-        # Example of the batch application
+        log "Applying custom C++ patches (skipping 013 and 015)..."
+        
         for p in "${_patch_dir}/"*.patch; do
-            git apply --ignore-whitespace "$p" || echo "Warning: Patch $p failed to apply cleanly."
+            _patch_name=$(basename "$p")
+            
+            # Exclusion logic for 013 and 015
+            if [[ "$_patch_name" == *"013"* ]] || [[ "$_patch_name" == *"015"* ]]; then
+                info "Skipping excluded patch: $_patch_name"
+                continue
+            fi
+            
+            git apply --ignore-whitespace "$p" || echo "Warning: Patch $_patch_name failed to apply."
         done
         write_stamp "patched"
     fi
 
     log "Writing GN build arguments..."
     mkdir -p "${_out_dir}"
-    # Fix: is_component_build=false for Official Build compatibility
     cat > "${_out_dir}/args.gn" <<GN_ARGS
 is_debug = false
 is_official_build = true
