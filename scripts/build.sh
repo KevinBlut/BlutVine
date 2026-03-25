@@ -1,5 +1,5 @@
 #!/bin/bash
-# build.sh - Toolchain setup and Ninja compilation
+# build.sh
 set -euo pipefail
 _clean=false
 for arg in "$@"; do [ "$arg" == "--clean" ] && _clean=true; done
@@ -9,17 +9,15 @@ setup_paths
 
 main() {
     if $_clean; then
-        log "Wiping output directory..."
+        log "Cleaning build directory..."
         rm -rf "${_out_dir}"
-        bash "${_root}/scripts/patch.sh" --force
+        bash "$(dirname "${BASH_SOURCE[0]}")/patch.sh" --force
     fi
 
     setup_toolchain
-
-    log "Generating build files..."
+    log "Generating GN files..."
     gn gen "${_out_dir}"
-
-    log "Starting Ninja build..."
+    log "Starting Ninja compile..."
     autoninja -C "${_out_dir}" chrome chromedriver
 }
 main
