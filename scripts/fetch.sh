@@ -1,5 +1,5 @@
 #!/bin/bash
-# fetch.sh - Pulls Chromium source
+# fetch.sh
 set -euo pipefail
 _force=false
 for arg in "$@"; do [ "$arg" == "--force" ] && _force=true; done
@@ -10,17 +10,17 @@ ensure_depot_tools
 
 main() {
     if $_force; then
-        log "Cleaning existing source..."
+        log "Force-cleaning source..."
         rm -rf "${_src_dir}" "${_build_dir}/chromium_version.txt"
         rm -f "${_src_dir}/"*.stamp
     fi
 
     if stamp_exists "gclient_synced" && ! $_force; then
-        log "Source already synced. Skipping."
+        log "Source already exists. Use --force to re-fetch."
         exit 0
     fi
 
-    log "Fetching latest stable version..."
+    log "Detecting stable version..."
     local ver
     ver=$(curl -fsSL "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1" | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['version'])")
     echo "$ver" > "${_build_dir}/chromium_version.txt"
