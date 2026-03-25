@@ -124,15 +124,15 @@ index 0000000000..a9c0d177e3
 +
 +// Chromium version list (for seed-based selection)
 +constexpr const char* kChromiumVersions[] = {
++    "146.0.7680.164",
 +    "146.0.7680.153",
 +    "146.0.7680.120",
-+    "146.0.7680.119",
 +    "146.0.7680.116",
 +    "146.0.7680.115"
 +};
 +
 +// Default versions for Client Hints (Sec-CH-UA)
-+constexpr const char* kChromeDefaultVersion = "146.0.7680.153";
++constexpr const char* kChromeDefaultVersion = "146.0.7680.164";
 +constexpr const char* kEdgeDefaultVersion = "146.0.3856.72";
 +constexpr const char* kOperaDefaultVersion = "128.0.5807.52";
 +constexpr const char* kVivaldiDefaultVersion = "7.9.3970.39";
