@@ -121,8 +121,12 @@ setup_toolchain() {
 
 gn_gen() {
     log "Generating build files with gn..."
+    # Bootstrap depot_tools so gn can find python3_bin_reldir.txt
+    if [ -f "${_depot_tools_dir}/ensure_bootstrap" ]; then
+        "${_depot_tools_dir}/ensure_bootstrap" || true
+    fi
     cd "${_src_dir}"
-    gn gen out/Default
+    "${_depot_tools_dir}/gn" gen out/Default
     log "gn gen complete."
 }
 
@@ -131,8 +135,10 @@ gn_gen() {
 run_build() {
     log "Compiling chrome + chromedriver..."
     cd "${_src_dir}"
-    # Using 'autoninja' is recommended as it detects CPU cores automatically
-    if command -v autoninja >/dev/null 2>&1; then
+    # Prefer autoninja from depot_tools (detects CPU cores automatically)
+    if [ -f "${_depot_tools_dir}/autoninja" ]; then
+        "${_depot_tools_dir}/autoninja" -C out/Default chrome chromedriver
+    elif command -v autoninja >/dev/null 2>&1; then
         autoninja -C out/Default chrome chromedriver
     else
         ninja -C out/Default chrome chromedriver
