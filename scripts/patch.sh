@@ -18,7 +18,6 @@ setup_paths
 
 # 2. Define the path to your custom patches (relative to your home directory)
 _kevin_blut_dir="${HOME}/BlutVine"
-
 # ── verify source tree exists ─────────────────────────────────────────────────
 
 check_src() {
@@ -39,17 +38,39 @@ apply_custom_patches() {
     fi
 
     [ -d "${_kevin_blut_dir}" ] || die "KevinBlut directory not found at: ${_kevin_blut_dir}"
-    [ -f "${_kevin_blut_dir}/series" ] || die "No 'series' file found in ${_kevin_blut_dir}."
 
     log "Applying Project Bifrost patches from: ${_kevin_blut_dir}"
 
     cd "${_src_dir}"
-    while IFS= read -r patch_file || [ -n "$patch_file" ]; do
-        [[ -z "$patch_file" || "$patch_file" =~ ^# ]] && continue
 
-        log "  -> Applying: ${patch_file}"
-        patch -p1 < "${_kevin_blut_dir}/${patch_file}" || die "Failed to apply ${patch_file}"
-    done < "${_kevin_blut_dir}/series"
+    # These two use plain git apply (no whitespace flags needed)
+    _apply() {
+        log "  -> Applying: $1"
+        git apply "$1" || die "Failed to apply $1"
+    }
+    _apply_ws() {
+        log "  -> Applying: $1"
+        git apply --ignore-whitespace --ignore-space-change "$1" || die "Failed to apply $1"
+    }
+
+    _apply "${_kevin_blut_dir}/fingerprint-chromium/add-components-ungoogled.patch"
+    _apply "${_kevin_blut_dir}/fingerprint-chromium/000-add-fingerprint-switches.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/001-disable-runtime.enable.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/002-user-agent-fingerprint.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/003-audio-fingerprint.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/003-audio-fingerprint-2.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/005-hardware-concurrency-fingerprint.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/006-font-fingerprint.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/007-shadow-root.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/009-webdriver.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/010-headless.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/011-gpu-info.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/012-canvas-get-image-data.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/013-canvas-toDataUrl.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/014-client-rects.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/015-canvas-measure-text.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/016-webgl-readPixels.patch"
+    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/018-timezone.patch"
 
     # Utilizing shared write_stamp helper
     write_stamp "patched"
