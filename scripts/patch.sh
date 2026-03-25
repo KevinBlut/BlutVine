@@ -25,8 +25,8 @@ check_src() {
     [ -d "${_src_dir}" ] || \
         die "Source directory not found: ${_src_dir}. Run fetch.sh first."
     
-    stamp_exists "downloaded" || \
-        die "Source not fully downloaded. Run fetch.sh first."
+    stamp_exists "gclient_synced" || \
+        die "Source not synced. Run fetch.sh first."
 }
 
 # ── apply custom patches ──────────────────────────────────────────────────────
