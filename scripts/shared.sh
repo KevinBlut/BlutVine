@@ -1,8 +1,9 @@
 #!/bin/bash
-# shared.sh - Base functions for Project Bifrost
+# shared.sh
 set -euo pipefail
 
 log()  { echo "==> $*"; }
+info() { echo "    $*"; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
 
 repo_root() {
@@ -16,7 +17,6 @@ setup_paths() {
     _out_dir="${_src_dir}/out/Default"
     _depot_tools_dir="${_build_dir}/depot_tools"
 
-    # Setup Architecture
     _host_arch=$(uname -m)
     case "$_host_arch" in
         x86_64)  _host_arch="x64"  ;;
@@ -26,7 +26,6 @@ setup_paths() {
     [ "$_build_arch" = "x86_64" ] && _build_arch="x64"
 
     mkdir -p "${_build_dir}"
-    # Critical: Ensure depot_tools is in PATH for all sub-shells
     export PATH="${_depot_tools_dir}:${PATH}"
 }
 
@@ -44,7 +43,6 @@ setup_toolchain() {
     python3 "${_src_dir}/tools/clang/scripts/update.py"
     python3 "${_src_dir}/build/linux/sysroot_scripts/install-sysroot.py" --arch="$_host_arch"
 
-    # Fix: Robust Node.js detection for Debian-based systems
     local node_bin
     node_bin=$(command -v node || command -v nodejs)
     mkdir -p "${_src_dir}/third_party/node/linux/node-linux-x64/bin"
