@@ -66,9 +66,7 @@ apply_custom_patches() {
     _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/010-headless.patch"
     _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/011-gpu-info.patch"
     _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/012-canvas-get-image-data.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/013-canvas-toDataUrl.patch"
     _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/014-client-rects.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/015-canvas-measure-text.patch"
     _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/016-webgl-readPixels.patch"
     _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/018-timezone.patch"
 
