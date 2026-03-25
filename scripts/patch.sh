@@ -70,12 +70,39 @@ write_gn_args() {
     log "Writing GN build arguments..."
     mkdir -p "${_out_dir}"
 
-    # Utilizing the flags file in your project root
+    # Write sensible release build flags inline.
+    # To override, place a flags.linux.gn in ~/Chrome/ and it will be used instead.
     if [ -f "${_root}/flags.linux.gn" ]; then
+        log "Using custom flags.linux.gn from ${_root}/"
         cat "${_root}/flags.linux.gn" > "${_out_dir}/args.gn"
     else
-        log "WARNING: flags.linux.gn not found. Creating minimal args.gn."
-        touch "${_out_dir}/args.gn"
+        log "No flags.linux.gn found — writing default release flags."
+        cat > "${_out_dir}/args.gn" <<'GN_ARGS'
+# ── Release build ─────────────────────────────────────────────────────────────
+is_debug = false
+is_official_build = true
+symbol_level = 0
+
+# ── Optimisation ──────────────────────────────────────────────────────────────
+is_component_build = true
+use_thin_lto = true
+use_lld = true
+
+# ── Codecs / media ────────────────────────────────────────────────────────────
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+
+# ── Remove things you don't need ──────────────────────────────────────────────
+enable_nacl = false
+enable_remoting = false
+enable_reading_list = false
+build_with_chromium_features = true
+
+# ── Linux-specific ────────────────────────────────────────────────────────────
+use_cups = true
+use_pulseaudio = true
+link_pulseaudio = true
+GN_ARGS
     fi
 
     # Using the _build_arch variable from shared.sh
