@@ -12,6 +12,13 @@ die()  { echo "ERROR: $*" >&2; exit 1; }
 # ── repo root ─────────────────────────────────────────────────────────────────
 
 repo_root() {
+    # Allow the caller (setup-and-build.sh) to pin the root explicitly.
+    # This prevents BASH_SOURCE[0]-based resolution from returning the wrong
+    # directory when scripts are copied to a different location mid-run.
+    if [ -n "${CHROME_ROOT:-}" ]; then
+        echo "$CHROME_ROOT"
+        return
+    fi
     local _base
     _base="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
     cd "${_base}/.." >/dev/null 2>&1 && pwd
