@@ -54,19 +54,35 @@ check_ready() {
 clean_output() {
     log "Cleaning out/ directory..."
     rm -rf "${_src_dir}/out"
-    
-    # re-write GN args since we wiped out/
     clear_stamp "gn_args"
-    mkdir -p "${_out_dir}"
+    clear_stamp "toolchain"
 
+    # Re-write args.gn by calling patch.sh's write_gn_args equivalent
+    mkdir -p "${_out_dir}"
     log "Re-writing GN args after clean..."
     if [ -f "${_root}/flags.linux.gn" ]; then
         cat "${_root}/flags.linux.gn" > "${_out_dir}/args.gn"
+    else
+        cat > "${_out_dir}/args.gn" <<'GN_ARGS'
+is_debug = false
+is_official_build = true
+symbol_level = 0
+is_component_build = true
+use_thin_lto = true
+use_lld = true
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+enable_nacl = false
+enable_remoting = false
+enable_reading_list = false
+build_with_chromium_features = true
+use_cups = true
+use_pulseaudio = true
+link_pulseaudio = true
+GN_ARGS
     fi
-    
     echo "target_cpu = \"${_build_arch}\""    >> "${_out_dir}/args.gn"
     echo "v8_target_cpu = \"${_build_arch}\"" >> "${_out_dir}/args.gn"
-    
     write_stamp "gn_args"
 }
 
@@ -90,9 +106,13 @@ main() {
     # 2. Ensure depot_tools in PATH (required for gn and toolchain scripts)
     ensure_depot_tools
 
-    # 3. Setup toolchain (clang, rust, sysroot)
-    # We NO LONGER call fix_tool_downloading because it was deleted from shared.sh
-    setup_toolchain
+    # 3. Setup toolchain (clang, rust, sysroot) — only if not already done
+    if ! stamp_exists "toolchain" || $_force; then
+        setup_toolchain
+        write_stamp "toolchain"
+    else
+        log "Toolchain already set up, skipping. (--force to redo)"
+    fi
 
     # 4. Generate build files
     # This uses the gn_gen function from shared.sh
