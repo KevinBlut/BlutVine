@@ -22,6 +22,12 @@ if ! command -v docker >/dev/null 2>&1; then
 else
     log "Docker already installed, skipping."
 fi
+if ! command -v node >/dev/null 2>&1; then
+    log "Node.js not found, installing..."
+    sudo apt install -y nodejs
+else
+    log "Node.js already installed, skipping."
+fi
 
 # Step 1: Initialize Chrome Folder
 log "Initializing Chrome workspace at ${CHROME_ROOT}..."
