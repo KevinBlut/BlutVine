@@ -17,7 +17,7 @@ done
 setup_paths
 
 # 2. Define the path to your custom patches (relative to your home directory)
-_kevin_blut_dir="${HOME}/BlutVine/fingerprint-chromium"
+_kevin_blut_dir="${HOME}/BlutVine"
 
 # ── verify source tree exists ─────────────────────────────────────────────────
 
