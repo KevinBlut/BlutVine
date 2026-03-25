@@ -117,6 +117,7 @@ main() {
 
     # Step 3: gclient sync — checks out src/ and all DEPS at the pinned tag
     run_gclient_sync "$version"
+    mkdir -p "${_src_dir}"
     write_stamp "gclient_synced"
 
     # Step 4: Sanity check
