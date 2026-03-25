@@ -60,11 +60,11 @@ bash "$_chrome_scripts/build.sh"
 # ── Step 5: Archive Result ────────────────────────────────────────────────────
 
 log "Compressing build output..."
-if [ -d "${_output_dir}/Default" ]; then
+if [ -f "${_output_dir}/Default/chrome" ]; then
     cd "${_output_dir}"
     tar -czf chrome_build.tar.gz Default/
     log "Archive created: ${_output_dir}/chrome_build.tar.gz"
     du -sh chrome_build.tar.gz
 else
-    die "Build output not found at ${_output_dir}/Default"
+    die "Build output not found — chrome binary missing from ${_output_dir}/Default"
 fi
