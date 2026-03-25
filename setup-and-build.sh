@@ -19,7 +19,13 @@ die()  { echo "ERROR: $*" >&2; exit 1; }
 # ── Step 0: System Prep ───────────────────────────────────────────────────────
 
 log "Updating system..."
-sudo apt update && sudo apt install -y git python3 devscripts equivs docker.io curl
+sudo apt update && sudo apt install -y git python3 devscripts equivs curl
+if ! command -v docker >/dev/null 2>&1; then
+    log "Docker not found, installing..."
+    sudo apt install -y docker.io
+else
+    log "Docker already installed, skipping."
+fi
 
 # ── Step 1: Initialize Chrome folder ─────────────────────────────────────────
 
