@@ -117,6 +117,15 @@ setup_toolchain() {
     ln -sf "$(which node)" "${_src_dir}/third_party/node/linux/node-linux-x64/bin/node"
 }
 
+# ── gn generate ───────────────────────────────────────────────────────────────
+
+gn_gen() {
+    log "Generating build files with gn..."
+    cd "${_src_dir}"
+    gn gen out/Default
+    log "gn gen complete."
+}
+
 # ── compile ───────────────────────────────────────────────────────────────────
 
 run_build() {
