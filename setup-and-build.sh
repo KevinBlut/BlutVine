@@ -1,40 +1,58 @@
 #!/bin/bash
-# setup_and_run.sh - Full Automation
+# setup-and-build.sh - Full Automation
 set -euo pipefail
 
-_chrome_root="${HOME}/Chrome"
+# ── config ────────────────────────────────────────────────────────────────────
+
+# CHROME_ROOT is the single source of truth for where everything lives.
+# Exported so that shared.sh's repo_root() picks it up in every sub-script,
+# regardless of where those scripts are physically located on disk.
+export CHROME_ROOT="${HOME}/Chrome"
+
 _blutvine_scripts="${HOME}/BlutVine/scripts"
-_chrome_scripts="${_chrome_root}/scripts"
-_output_dir="${_chrome_root}/build/src/out"
+_chrome_scripts="${CHROME_ROOT}/scripts"
+_output_dir="${CHROME_ROOT}/build/src/out"
 
 log()  { echo "==> $*"; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
 
-# Step 0: System Prep
+# ── Step 0: System Prep ───────────────────────────────────────────────────────
+
 log "Updating system..."
 sudo apt update && sudo apt install -y git python3 devscripts equivs docker.io curl
 
-# Step 1: Initialize & CD
-mkdir -p "$_chrome_root"
-cd "$_chrome_root"
+# ── Step 1: Initialize Chrome folder ─────────────────────────────────────────
 
-# Step 2: Fetch
+log "Initializing Chrome workspace at ${CHROME_ROOT}..."
+mkdir -p "$CHROME_ROOT"
+cd "$CHROME_ROOT"
+
+# ── Step 2: Fetch (gclient sync) ──────────────────────────────────────────────
+# fetch.sh sources shared.sh which reads CHROME_ROOT, so all paths resolve
+# under ~/Chrome regardless of where the script file lives.
+
 log "Fetching Chromium source..."
 bash "${_blutvine_scripts}/fetch.sh"
 
-# Step 3: Sync & Patch
+# ── Step 3: Copy scripts then Patch ──────────────────────────────────────────
+# Scripts are copied to ~/Chrome/scripts/ so everything is self-contained.
+# patch.sh and build.sh will also read CHROME_ROOT, so paths stay consistent.
+
+log "Syncing scripts to ${_chrome_scripts}..."
 mkdir -p "$_chrome_scripts"
 cp "${_blutvine_scripts}/"*.sh "$_chrome_scripts/"
 chmod +x "$_chrome_scripts/"*.sh
 
 log "Applying patches..."
-bash scripts/patch.sh
+bash "$_chrome_scripts/patch.sh"
 
-# Step 4: Build
+# ── Step 4: Build ─────────────────────────────────────────────────────────────
+
 log "Starting compilation..."
-bash scripts/build.sh
+bash "$_chrome_scripts/build.sh"
 
-# Step 5: Archive Result
+# ── Step 5: Archive Result ────────────────────────────────────────────────────
+
 log "Compressing build output..."
 if [ -d "${_output_dir}/Default" ]; then
     cd "${_output_dir}"
@@ -42,5 +60,5 @@ if [ -d "${_output_dir}/Default" ]; then
     log "Archive created: ${_output_dir}/chrome_build.tar.gz"
     du -sh chrome_build.tar.gz
 else
-    die "Build output not found!"
+    die "Build output not found at ${_output_dir}/Default"
 fi
