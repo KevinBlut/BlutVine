@@ -64,7 +64,7 @@ clean_output() {
     else
         cat > "${_out_dir}/args.gn" <<'GN_ARGS'
 is_debug = false
-is_official_build = true
+is_official_build = false
 symbol_level = 0
 is_component_build = true
 use_thin_lto = true
