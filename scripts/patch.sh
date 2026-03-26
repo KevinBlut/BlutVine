@@ -83,7 +83,7 @@ write_gn_args() {
         cat > "${_out_dir}/args.gn" <<'GN_ARGS'
 # ── Release build ─────────────────────────────────────────────────────────────
 is_debug = false
-is_official_build = true
+is_official_build = false
 symbol_level = 0
 
 # ── Optimisation ──────────────────────────────────────────────────────────────
