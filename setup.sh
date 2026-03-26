@@ -22,26 +22,36 @@ log() { echo "==> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 # ── Step 1: Install system dependencies ───────────────────────────────────────
-
+ 
+# Kill the background auto-updater so it doesn't hold the dpkg lock
+log "Disabling unattended-upgrades..."
+sudo systemctl stop unattended-upgrades || true
+sudo systemctl disable unattended-upgrades || true
+# Wait in case it's already mid-run and holding the lock
+while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+    log "Waiting for dpkg lock to be released..."
+    sleep 5
+done
+ 
 log "Installing system dependencies..."
 sudo apt update && sudo apt install -y \
     git python3 curl ninja-build \
     devscripts equivs
-
+ 
 if ! command -v docker >/dev/null 2>&1; then
     log "Docker not found, installing..."
     sudo apt install -y docker.io
 else
     log "Docker already installed, skipping."
 fi
-
+ 
 if ! command -v node >/dev/null 2>&1; then
     log "Node.js not found, installing..."
     sudo apt install -y nodejs
 else
     log "Node.js already installed, skipping."
 fi
-
+ 
 # ── Step 2: Create Chrome workspace ───────────────────────────────────────────
 
 log "Creating Chrome workspace at ${CHROME_ROOT}..."
