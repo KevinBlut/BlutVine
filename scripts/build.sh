@@ -64,17 +64,11 @@ clean_output() {
     else
         cat > "${_out_dir}/args.gn" <<'GN_ARGS'
 is_debug = false
-is_official_build = false
 symbol_level = 0
 is_component_build = true
-use_thin_lto = true
-use_lld = true
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
 enable_nacl = false
-enable_remoting = false
-enable_reading_list = false
-build_with_chromium_features = true
 use_cups = true
 use_pulseaudio = true
 link_pulseaudio = true
