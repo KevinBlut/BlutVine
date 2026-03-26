@@ -26,15 +26,14 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 
 # ── Step 1: Install system dependencies ───────────────────────────────────────
 
-# Kill the background auto-updater so it doesn't hold the dpkg lock
-log "Disabling unattended-upgrades..."
-sudo systemctl stop unattended-upgrades || true
-sudo systemctl disable unattended-upgrades || true
-# Wait in case it's already mid-run and holding the lock
-while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-    log "Waiting for dpkg lock to be released..."
-    sleep 5
-done
+# Hard-kill anything holding the dpkg lock — vast.ai images often leave
+# unattended-upgrades running or with a stale lock file on first boot
+log "Clearing dpkg locks..."
+sudo systemctl stop unattended-upgrades apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+sudo systemctl disable unattended-upgrades apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+sudo kill -9 $(sudo lsof /var/lib/dpkg/lock-frontend 2>/dev/null | awk 'NR>1{print $2}') 2>/dev/null || true
+sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock
+sudo dpkg --configure -a || true
 
 log "Installing system dependencies..."
 sudo apt update
