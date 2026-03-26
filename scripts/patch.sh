@@ -1,8 +1,12 @@
 #!/bin/bash
 # patch.sh
-# Applies custom fingerprinting patches from the KevinBlut repository.
+# Applies custom fingerprinting patches from BlutVine using the series file.
 # Run after fetch.sh, before build.sh.
-
+#
+# The series file at ${BLUTVINE_DIR}/series (default: ~/BlutVine/series) lists
+# each patch path relative to the BlutVine root, one per line.
+# Lines starting with # and blank lines are ignored.
+#
 set -euo pipefail
 
 _force=false
@@ -15,62 +19,49 @@ done
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)/shared.sh"
 setup_paths
 
-# Path to custom patches. Override by setting BLUTVINE_DIR in the environment.
-_kevin_blut_dir="${BLUTVINE_DIR:-${HOME}/BlutVine}"
-
 # ── verify source tree exists ─────────────────────────────────────────────────
 
 check_src() {
     [ -d "${_src_dir}" ] || \
         die "Source directory not found: ${_src_dir}. Run fetch.sh first."
-
     stamp_exists "gclient_synced" || \
         die "Source not synced. Run fetch.sh first."
 }
 
-# ── apply custom patches ──────────────────────────────────────────────────────
+# ── apply patches via series file ─────────────────────────────────────────────
 
-apply_custom_patches() {
+apply_patches_from_series() {
     if stamp_exists "patched" && ! $_force; then
-        log "Custom patches already applied, skipping. (--force to redo)"
+        log "Patches already applied, skipping. (--force to redo)"
         return 0
     fi
 
-    [ -d "${_kevin_blut_dir}" ] || \
-        die "BlutVine directory not found at: ${_kevin_blut_dir}. Set BLUTVINE_DIR to override."
+    [ -d "${_blutvine_dir}" ] || \
+        die "BlutVine directory not found: ${_blutvine_dir}. Set BLUTVINE_DIR to override."
 
-    log "Applying Project Bifrost patches from: ${_kevin_blut_dir}"
+    local series_file="${_blutvine_dir}/series"
+    [ -f "$series_file" ] || \
+        die "series file not found: ${series_file}"
 
+    log "Applying patches from series: ${series_file}"
     cd "${_src_dir}"
 
-    _apply() {
-        log "  -> Applying: $1"
-        git apply "$1" || die "Failed to apply $1"
-    }
-    _apply_ws() {
-        log "  -> Applying: $1"
-        git apply --ignore-whitespace --ignore-space-change "$1" || die "Failed to apply $1"
-    }
+    local applied=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip blank lines and comments
+        [[ -z "$line" || "$line" == \#* ]] && continue
 
-    _apply "${_kevin_blut_dir}/fingerprint-chromium/add-components-ungoogled.patch"
-    _apply "${_kevin_blut_dir}/fingerprint-chromium/000-add-fingerprint-switches.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/001-disable-runtime.enable.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/002-user-agent-fingerprint.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/003-audio-fingerprint.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/003-audio-fingerprint-2.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/005-hardware-concurrency-fingerprint.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/006-font-fingerprint.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/007-shadow-root.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/009-webdriver.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/010-headless.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/011-gpu-info.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/012-canvas-get-image-data.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/014-client-rects.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/016-webgl-readPixels.patch"
-    _apply_ws "${_kevin_blut_dir}/fingerprint-chromium/018-timezone.patch"
+        local patch_file="${_blutvine_dir}/${line}"
+        [ -f "$patch_file" ] || die "Patch listed in series not found: ${patch_file}"
 
+        log "  -> Applying: ${line}"
+        git apply --ignore-whitespace --ignore-space-change "$patch_file" \
+            || die "Failed to apply patch: ${patch_file}"
+        (( applied++ )) || true
+    done < "$series_file"
+
+    log "Applied ${applied} patch(es) successfully."
     write_stamp "patched"
-    log "Patching process successful."
 }
 
 # ── GN args ───────────────────────────────────────────────────────────────────
@@ -130,11 +121,10 @@ main() {
     log "Starting patch.sh (Project Bifrost)"
 
     check_src
-    apply_custom_patches
+    apply_patches_from_series
     write_gn_args
 
-    # Write a 'domsub' stamp so build.sh check_ready() remains satisfied.
-    # This stamp has no work behind it — it just marks that patch.sh ran fully.
+    # 'domsub' stamp satisfies build.sh check_ready() — marks patch.sh ran fully
     write_stamp "domsub"
 
     echo ""
