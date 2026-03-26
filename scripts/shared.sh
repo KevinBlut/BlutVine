@@ -49,23 +49,34 @@ setup_paths() {
     _dl_cache="${_build_dir}/download_cache"
     _depot_tools_dir="${_build_dir}/depot_tools"
 
+    # BlutVine root — overridable via env var.
+    # series file lives at: ${_blutvine_dir}/series
+    # patches live at:      ${_blutvine_dir}/fingerprint-chromium/
+    _blutvine_dir="${BLUTVINE_DIR:-${HOME}/BlutVine}"
+
     setup_arch
     mkdir -p "${_dl_cache}" "${_build_dir}"
 }
 
 # ── chromium version ──────────────────────────────────────────────────────────
 
-get_latest_stable_version() {
+# Hits the Chromium releases API, caches the result to chromium_version.txt.
+# Called only from fetch.sh — no other script should call this.
+fetch_and_cache_version() {
+    log "Fetching latest stable Chromium version..."
     local api_url="https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1"
     local version
     version=$(curl -fsSL "$api_url" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 print(data[0]['version'])
-" 2>/dev/null) || die "Failed to fetch latest stable Chromium version"
-    echo "$version"
+" 2>/dev/null) || die "Failed to fetch latest stable Chromium version from API"
+    log "Latest stable: ${version}"
+    echo "$version" > "${_build_dir}/chromium_version.txt"
 }
 
+# Reads the version that fetch.sh already cached to disk.
+# Safe to call once the gclient_synced stamp exists — fetch.sh writes both.
 get_cached_version() {
     local ver_file="${_build_dir}/chromium_version.txt"
     [ -f "$ver_file" ] || die "No cached version found. Run fetch.sh first."
@@ -85,9 +96,8 @@ ensure_depot_tools() {
         git -C "${_depot_tools_dir}" pull --ff-only || true
     fi
     export PATH="${_depot_tools_dir}:${PATH}"
-    # NOTE: DEPOT_TOOLS_UPDATE is intentionally NOT set to 0 here so that
-    # depot_tools can bootstrap itself (writes python3_bin_reldir.txt, etc.)
-    # on first use. Once gn_gen() has run successfully the tools are stable.
+    # Do NOT set DEPOT_TOOLS_UPDATE=0 globally — depot_tools needs to be able
+    # to bootstrap itself (writes python3_bin_reldir.txt, etc.) on first use.
     export GCLIENT_SUPPRESS_GIT_VERSION_WARNING=1
 }
 
@@ -116,15 +126,13 @@ setup_toolchain() {
 
 gn_gen() {
     log "Bootstrapping depot_tools before gn gen..."
-    # Run bootstrap in a subshell so DEPOT_TOOLS_UPDATE=1 is scoped here only.
-    # This ensures python3_bin_reldir.txt and other bootstrap artefacts are
-    # written before gn is invoked.
+    # Scoped subshell so DEPOT_TOOLS_UPDATE=1 only applies here.
+    # Ensures python3_bin_reldir.txt is written before gn is invoked.
     (
         export DEPOT_TOOLS_UPDATE=1
         if [ -f "${_depot_tools_dir}/ensure_bootstrap" ]; then
             "${_depot_tools_dir}/ensure_bootstrap"
         else
-            # Fallback: running gclient --version triggers the same bootstrap
             "${_depot_tools_dir}/gclient" --version >/dev/null 2>&1 || true
         fi
     )
@@ -153,15 +161,13 @@ run_build() {
 
 # ── stamp helpers ─────────────────────────────────────────────────────────────
 
-# All stamp functions require setup_paths() to have been called first so that
-# _src_dir is defined. Callers must never invoke these before setup_paths().
+# All stamp functions require setup_paths() to have been called first.
 
 stamp_exists() { [ -f "${_src_dir}/${1}.stamp" ]; }
 write_stamp()  { touch "${_src_dir}/${1}.stamp"; }
 clear_stamp()  { rm -f "${_src_dir}/${1}.stamp"; }
 
 clear_all_stamps() {
-    # Use find to avoid a glob-literal error when no .stamp files exist
     find "${_src_dir}" -maxdepth 1 -name "*.stamp" -delete
     log "All stamps cleared."
 }
