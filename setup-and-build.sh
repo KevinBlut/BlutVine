@@ -1,62 +1,92 @@
 #!/bin/bash
-# setup-and-build.sh - Full Automation (Fetch, Patch, and Compile)
+# setup-and-build.sh - Full Automation
 set -euo pipefail
 
-# ── 1. Configuration ──────────────────────────────────────────────────────────
-# Single source of truth for the build workspace
+# ── config ────────────────────────────────────────────────────────────────────
+
 export CHROME_ROOT="${HOME}/Chrome"
-_blutvine_root="${HOME}/BlutVine"
-_blutvine_scripts="${_blutvine_root}/scripts"
+
+_blutvine_scripts="${HOME}/BlutVine/scripts"
 _chrome_scripts="${CHROME_ROOT}/scripts"
-_output_dir="${CHROME_ROOT}/build/src/out/Default"
+_output_dir="${CHROME_ROOT}/build/src/out"
 
-log() { echo "==> $*"; }
+log()  { echo "==> $*"; }
+die()  { echo "ERROR: $*" >&2; exit 1; }
 
-# ── 2. System Prep ────────────────────────────────────────────────────────────
-log "Step 0: Updating Git and installing dependencies..."
+# ── Step 0: System Prep ───────────────────────────────────────────────────────
 
-# Fix: Update Git to 2.46+ to satisfy depot_tools and suppress warnings
-sudo add-apt-repository ppa:git-core/ppa -y
-sudo apt update && sudo apt install -y git python3 curl nodejs ninja-build
+log "Updating system..."
+sudo apt update && sudo apt install -y \
+    git python3 curl ninja-build \
+    devscripts equivs
 
-# Suppress the git version warning from gclient during the fetch phase
-export GCLIENT_SUPPRESS_GIT_VERSION_WARNING=1
+if ! command -v docker >/dev/null 2>&1; then
+    log "Docker not found, installing..."
+    sudo apt install -y docker.io
+else
+    log "Docker already installed, skipping."
+fi
 
-# ── 3. Workspace & Script Sync ────────────────────────────────────────────────
-log "Step 1: Initializing workspace and syncing scripts..."
+if ! command -v node >/dev/null 2>&1; then
+    log "Node.js not found, installing..."
+    sudo apt install -y nodejs
+else
+    log "Node.js already installed, skipping."
+fi
+
+# Install Chromium's own build dependency list if available.
+# This covers system libraries (libgbm-dev, libasound2-dev, etc.) that the
+# Chromium build system needs but that apt alone won't pull in.
+_install_build_deps="${CHROME_ROOT}/build/src/build/install-build-deps.sh"
+if [ -f "$_install_build_deps" ]; then
+    log "Installing Chromium build deps via install-build-deps.sh..."
+    sudo bash "$_install_build_deps" --no-syms --no-arm --no-chromeos-fonts --no-nacl
+else
+    log "install-build-deps.sh not present yet — will be available after fetch."
+fi
+
+# ── Step 1: Initialize Chrome folder ─────────────────────────────────────────
+
+log "Initializing Chrome workspace at ${CHROME_ROOT}..."
+mkdir -p "$CHROME_ROOT"
+cd "$CHROME_ROOT"
+
+# ── Step 2: Fetch (gclient sync) ──────────────────────────────────────────────
+
+log "Fetching Chromium source..."
+bash "${_blutvine_scripts}/fetch.sh"
+
+# ── Step 3: Install build deps (now that install-build-deps.sh exists) ────────
+
+if [ -f "$_install_build_deps" ] && [ ! -f "${CHROME_ROOT}/.build_deps_installed" ]; then
+    log "Installing Chromium system build dependencies..."
+    sudo bash "$_install_build_deps" --no-syms --no-arm --no-chromeos-fonts --no-nacl
+    touch "${CHROME_ROOT}/.build_deps_installed"
+fi
+
+# ── Step 4: Copy scripts then Patch ──────────────────────────────────────────
+
+log "Syncing scripts to ${_chrome_scripts}..."
 mkdir -p "$_chrome_scripts"
-
-# FIX: Sync scripts FIRST. 
-# This ensures that fetch.sh, patch.sh, and build.sh all run from 
-# within the Chrome/scripts context with consistent relative paths.
 cp "${_blutvine_scripts}/"*.sh "$_chrome_scripts/"
 chmod +x "$_chrome_scripts/"*.sh
 
-# ── 4. Execution ──────────────────────────────────────────────────────────────
-# We execute the pipeline using the scripts now located in the workspace.
-
-log "Step 2: Fetching Chromium source..."
-bash "$_chrome_scripts/fetch.sh"
-
-log "Step 3: Applying Bifrost patches (via series file)..."
-# Note: patch.sh now looks for the series file at ~/BlutVine/series
+log "Applying patches..."
 bash "$_chrome_scripts/patch.sh"
 
-log "Step 4: Starting compilation (This may take several hours)..."
+# ── Step 5: Build ─────────────────────────────────────────────────────────────
+
+log "Starting compilation..."
 bash "$_chrome_scripts/build.sh"
 
-# ── 5. Post-Build ─────────────────────────────────────────────────────────────
-log "Step 5: Verifying and archiving build output..."
+# ── Step 6: Archive Result ────────────────────────────────────────────────────
 
-if [ -f "${_output_dir}/chrome" ]; then
-    log "Build successful! Creating archive..."
-    cd "$(dirname "$_output_dir")"
+log "Compressing build output..."
+if [ -f "${_output_dir}/Default/chrome" ]; then
+    cd "${_output_dir}"
     tar -czf chrome_build.tar.gz Default/
-    log "Final archive located at: $(dirname "$_output_dir")/chrome_build.tar.gz"
-    
-    # Optional: Display the size of the final package
-    du -sh "chrome_build.tar.gz"
+    log "Archive created: ${_output_dir}/chrome_build.tar.gz"
+    du -sh chrome_build.tar.gz
 else
-    echo "ERROR: Build failed. Chrome binary not found in ${_output_dir}"
-    exit 1
+    die "Build output not found — chrome binary missing from ${_output_dir}/Default"
 fi
