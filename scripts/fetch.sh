@@ -19,16 +19,6 @@ done
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)/shared.sh"
 setup_paths
 
-# ── fetch latest stable version number ───────────────────────────────────────
-
-fetch_version() {
-    log "Fetching latest stable Chromium version..."
-    local version
-    version="$(get_latest_stable_version)"
-    log "Latest stable: ${version}"
-    echo "$version" > "${_build_dir}/chromium_version.txt"
-}
-
 # ── gclient sync ──────────────────────────────────────────────────────────────
 
 run_gclient_sync() {
@@ -63,12 +53,10 @@ GCLIENT
 # ── sanity check ──────────────────────────────────────────────────────────────
 
 check_src_exists() {
-    if [ ! -d "${_src_dir}" ]; then
+    [ -d "${_src_dir}" ] || \
         die "Expected source directory not found after sync: ${_src_dir}"
-    fi
-    if [ ! -f "${_src_dir}/BUILD.gn" ]; then
+    [ -f "${_src_dir}/BUILD.gn" ] || \
         die "Source directory looks incomplete — BUILD.gn missing in ${_src_dir}"
-    fi
     log "Source tree looks good: ${_src_dir}"
 }
 
@@ -88,8 +76,6 @@ main() {
 
     # Already fully fetched?
     if stamp_exists "gclient_synced" && ! $_force; then
-        # get_cached_version is safe here: we confirmed gclient_synced stamp
-        # exists, which is only written after chromium_version.txt is created.
         local cached_ver
         cached_ver="$(get_cached_version)"
         log "Source already fetched (version ${cached_ver}). Use --force to re-fetch."
@@ -102,15 +88,15 @@ main() {
         command -v "$cmd" >/dev/null 2>&1 || die "Required tool not found: $cmd"
     done
 
-    # Step 1: Get version — must happen before get_cached_version is called below
-    fetch_version
+    # Step 1: Hit the API and cache the version — only fetch.sh does this
+    fetch_and_cache_version
     local version
     version="$(get_cached_version)"
 
     # Step 2: depot_tools (needed for gclient)
     ensure_depot_tools
 
-    # Step 3: gclient sync
+    # Step 3: gclient sync — checks out src/ and all DEPS at the pinned tag
     run_gclient_sync "$version"
     mkdir -p "${_src_dir}"
     write_stamp "gclient_synced"
