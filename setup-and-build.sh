@@ -83,7 +83,7 @@ _install_build_deps="${CHROME_ROOT}/build/src/build/install-build-deps.sh"
 if [ -f "$_install_build_deps" ] && [ ! -f "${CHROME_ROOT}/.build_deps_installed" ]; then
     log "Installing Chromium system build dependencies..."
     sudo DEBIAN_FRONTEND=noninteractive bash "$_install_build_deps" \
-        --no-syms --no-arm --no-chromeos-fonts --no-nacl --force \
+        --no-syms --no-arm --no-chromeos-fonts --no-nacl \
         2>&1 | tee "${CHROME_ROOT}/install-build-deps.log" || \
         die "install-build-deps.sh failed. Check ${CHROME_ROOT}/install-build-deps.log"
     touch "${CHROME_ROOT}/.build_deps_installed"
