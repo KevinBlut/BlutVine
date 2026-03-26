@@ -36,13 +36,12 @@ check_ready() {
         die "Patches not applied. Run patch.sh first."
 
     stamp_exists "domsub" || \
-        die "Patching phase (domsub) not completed. Run patch.sh first."
+        die "Patching phase not completed. Run patch.sh first."
 
     stamp_exists "gn_args" || \
         die "GN args not written. Run patch.sh first."
 
-    # Check for a usable build tool — autoninja (preferred) or ninja (fallback).
-    # run_build() in shared.sh tries them in the same order.
+    # Check for a usable build tool — mirrors the priority order in run_build()
     if [ ! -f "${_depot_tools_dir}/autoninja" ] && \
        ! command -v autoninja >/dev/null 2>&1 && \
        ! command -v ninja >/dev/null 2>&1; then
@@ -98,15 +97,12 @@ main() {
 
     check_ready
 
-    # 1. Optional Clean
     if $_clean; then
         clean_output
     fi
 
-    # 2. Ensure depot_tools in PATH
     ensure_depot_tools
 
-    # 3. Setup toolchain (clang, rust, sysroot) — only if not already done
     if ! stamp_exists "toolchain" || $_force; then
         setup_toolchain
         write_stamp "toolchain"
@@ -114,10 +110,7 @@ main() {
         log "Toolchain already set up, skipping. (--force to redo)"
     fi
 
-    # 4. Generate build files (includes depot_tools bootstrap fix)
     gn_gen
-
-    # 5. Compile
     run_build
 
     echo ""
