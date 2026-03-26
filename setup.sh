@@ -1,45 +1,70 @@
 #!/bin/bash
-# setup.sh - Staging Environment Preparation
+# setup.sh - Staging only (No Compile)
 set -euo pipefail
 
-# ── configuration ─────────────────────────────────────────────────────────────
-
 export CHROME_ROOT="${HOME}/Chrome"
-_blutvine_root="${HOME}/BlutVine"
-_blutvine_scripts="${_blutvine_root}/scripts"
+
+_blutvine_scripts="${HOME}/BlutVine/scripts"
 _chrome_scripts="${CHROME_ROOT}/scripts"
 
-log() { echo "==> $*"; }
+log()  { echo "==> $*"; }
+die()  { echo "ERROR: $*" >&2; exit 1; }
 
-# ── 1. System Prep ────────────────────────────────────────────────────────────
+# ── Step 0: System Prep ───────────────────────────────────────────────────────
 
-log "Updating Git and installing dependencies..."
-# Fix: Update Git to 2.46+ to satisfy depot_tools requirements
-sudo add-apt-repository ppa:git-core/ppa -y
-sudo apt update && sudo apt install -y git python3 curl nodejs
+log "Installing dependencies..."
+sudo apt update && sudo apt install -y \
+    git python3 curl ninja-build \
+    devscripts equivs
 
-# Suppress the git version warning from gclient
-export GCLIENT_SUPPRESS_GIT_VERSION_WARNING=1
+if ! command -v docker >/dev/null 2>&1; then
+    log "Docker not found, installing..."
+    sudo apt install -y docker.io
+else
+    log "Docker already installed, skipping."
+fi
 
-# ── 2. Workspace Initialization ───────────────────────────────────────────────
+if ! command -v node >/dev/null 2>&1; then
+    log "Node.js not found, installing..."
+    sudo apt install -y nodejs
+else
+    log "Node.js already installed, skipping."
+fi
 
-log "Initializing workspace at ${CHROME_ROOT}..."
+# Install Chromium's own build dependency list if available.
+# This covers system libraries (libgbm-dev, libasound2-dev, etc.) that the
+# Chromium build system needs but that apt alone won't pull in.
+_install_build_deps="${CHROME_ROOT}/build/src/build/install-build-deps.sh"
+if [ -f "$_install_build_deps" ]; then
+    log "Installing Chromium build deps via install-build-deps.sh..."
+    sudo bash "$_install_build_deps" --no-syms --no-arm --no-chromeos-fonts --no-nacl
+else
+    log "install-build-deps.sh not present yet (run after fetch.sh if needed)."
+fi
+
+# ── Step 1: Initialize Chrome Folder ─────────────────────────────────────────
+
+log "Initializing Chrome workspace at ${CHROME_ROOT}..."
+mkdir -p "$CHROME_ROOT"
+cd "$CHROME_ROOT"
+
+# ── Step 2: Fetch (gclient sync) ──────────────────────────────────────────────
+
+log "Running fetch..."
+if [ -f "${_blutvine_scripts}/fetch.sh" ]; then
+    bash "${_blutvine_scripts}/fetch.sh"
+else
+    die "Missing fetch.sh in ${_blutvine_scripts}"
+fi
+
+# ── Step 3: Sync Scripts & Patch ──────────────────────────────────────────────
+
+log "Syncing scripts to ${_chrome_scripts}..."
 mkdir -p "$_chrome_scripts"
-
-# FIX: Sync scripts BEFORE running any of them.
-# This ensures fetch.sh and patch.sh run from the correct local context.
-log "Synchronizing scripts to workspace..."
 cp "${_blutvine_scripts}/"*.sh "$_chrome_scripts/"
 chmod +x "$_chrome_scripts/"*.sh
 
-# ── 3. Execution ──────────────────────────────────────────────────────────────
-
-log "Step 1: Fetching Chromium source..."
-bash "$_chrome_scripts/fetch.sh"
-
-log "Step 2: Applying patches (using ${_blutvine_root}/series)..."
+log "Applying patches..."
 bash "$_chrome_scripts/patch.sh"
 
-log "Staging complete."
-log "Source tree is prepared and patched in ${CHROME_ROOT}/build/src"
-log "To compile, run: bash ${_chrome_scripts}/build.sh"
+log "SUCCESS: Chrome is staged and patched in ${CHROME_ROOT}"
