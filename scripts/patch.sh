@@ -81,27 +81,12 @@ write_gn_args() {
     else
         log "No flags.linux.gn found — writing default release flags."
         cat > "${_out_dir}/args.gn" <<'GN_ARGS'
-# ── Release build ─────────────────────────────────────────────────────────────
 is_debug = false
-is_official_build = false
 symbol_level = 0
-
-# ── Optimisation ──────────────────────────────────────────────────────────────
 is_component_build = true
-use_thin_lto = true
-use_lld = true
-
-# ── Codecs / media ────────────────────────────────────────────────────────────
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
-
-# ── Remove things you don't need ──────────────────────────────────────────────
 enable_nacl = false
-enable_remoting = false
-enable_reading_list = false
-build_with_chromium_features = true
-
-# ── Linux-specific ────────────────────────────────────────────────────────────
 use_cups = true
 use_pulseaudio = true
 link_pulseaudio = true
