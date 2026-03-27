@@ -7,7 +7,10 @@ set -euo pipefail
 repo_root() {
     local _base_dir
     _base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-    cd "${_base_dir}/.." >/dev/null 2>&1 && pwd
+    # BASH_SOURCE[0] is scripts/shared.sh, so:
+    # _base_dir = BlutVine/scripts/
+    # ../..     = parent of BlutVine/ (where Chrome/ should live alongside BlutVine/)
+    cd "${_base_dir}/../.." >/dev/null 2>&1 && pwd
 }
 
 setup_arch() {
