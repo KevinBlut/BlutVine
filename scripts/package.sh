@@ -3,28 +3,35 @@ set -euo pipefail
 
 _current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 _root_dir="$(cd "$_current_dir/.." && pwd)"
-_build_dir="$_root_dir/build"
-_release_dir="$_build_dir/release"
-_app_dir="$_release_dir/ungoogled-chromium.AppDir"
+_chrome_dir="$_root_dir/Chrome"
+_src_dir="$_chrome_dir/src"
+_out_dir="$_src_dir/out/Default"
+_release_dir="$_chrome_dir/release"
+_app_dir="$_release_dir/chromium.AppDir"
 
-_chromium_version=$(cat "$_root_dir/ungoogled-chromium/chromium_version.txt")
-_ungoogled_revision=$(cat "$_root_dir/ungoogled-chromium/revision.txt")
+# Read version directly from the fetched Chromium source tree
+_ver_file="$_src_dir/chrome/VERSION"
+if [ ! -f "$_ver_file" ]; then
+    echo "ERROR: cannot find $_ver_file — has the source been fetched?" >&2
+    exit 1
+fi
+_major=$(grep ^MAJOR "$_ver_file" | cut -d= -f2)
+_minor=$(grep ^MINOR "$_ver_file" | cut -d= -f2)
+_build=$(grep ^BUILD "$_ver_file" | cut -d= -f2)
+_patch=$(grep ^PATCH "$_ver_file" | cut -d= -f2)
+_version="$_major.$_minor.$_build.$_patch"
 
-_app_name="ungoogled-chromium"
-_version="$_chromium_version-$_ungoogled_revision"
-
-_arch=$(cat "$_build_dir/src/out/Default/args.gn" \
-                | grep ^target_cpu \
-                | tail -1 \
-                | sed 's/.*=//' \
-                | cut -d'"' -f2)
+# Detect build arch from args.gn
+_arch=$(grep ^target_cpu "$_out_dir/args.gn" \
+    | tail -1 \
+    | sed 's/.*=//' \
+    | cut -d'"' -f2)
 
 if [ "$_arch" = "x64" ]; then
     _arch="x86_64"
 fi
 
-_release_name="$_app_name-$_version-$_arch"
-_update_info="gh-releases-zsync|ungoogled-software|ungoogled-chromium-portablelinux|latest|$_app_name-*-$_arch.AppImage.zsync"
+_release_name="chromium-$_version-$_arch"
 _tarball_name="${_release_name}_linux"
 _tarball_dir="$_release_dir/$_tarball_name"
 
@@ -49,12 +56,12 @@ vk_swiftshader_icd.json
 xdg-mime
 xdg-settings"
 
-echo "copying release files and creating $_tarball_name.tar.xz"
+echo "Packaging Chromium ${_version} (${_arch})"
 
 mkdir -p "$_tarball_dir"
 
 for file in $_files; do
-    cp -r "$_build_dir/src/out/Default/$file" "$_tarball_dir" &
+    cp -r "$_out_dir/$file" "$_tarball_dir" &
 done
 wait
 
@@ -62,38 +69,47 @@ _size="$(du -sk "$_tarball_dir" | cut -f1)"
 
 pushd "$_release_dir"
 
+echo "Creating $_tarball_name.tar.xz ..."
 tar vcf - "$_tarball_name" \
     | pv -s"${_size}k" \
     | xz -e9 > "$_release_dir/$_tarball_name.tar.xz" &
 
-# create AppImage
+# create AppImage (no update info since this is a personal build)
 rm -rf "$_app_dir"
-mkdir -p "$_app_dir/opt/ungoogled-chromium/" "$_app_dir/usr/share/icons/hicolor/48x48/apps/"
-cp -r "$_tarball_dir"/* "$_app_dir/opt/ungoogled-chromium/"
-cp "$_root_dir/package/ungoogled-chromium.desktop" "$_app_dir"
-sed -i -e 's|Exec=chromium|Exec=AppRun|g' "$_app_dir/ungoogled-chromium.desktop"
+mkdir -p "$_app_dir/opt/chromium/" "$_app_dir/usr/share/icons/hicolor/48x48/apps/"
+cp -r "$_tarball_dir"/* "$_app_dir/opt/chromium/"
+
+cat > "$_app_dir/chromium.desktop" <<'EOF'
+[Desktop Entry]
+Name=Chromium
+Exec=AppRun
+Icon=chromium
+Type=Application
+Categories=Network;WebBrowser;
+EOF
 
 cat > "$_app_dir/AppRun" <<'EOF'
 #!/bin/sh
 THIS="$(readlink -f "${0}")"
 HERE="$(dirname "${THIS}")"
-export LD_LIBRARY_PATH="${HERE}"/usr/lib:$PATH
-export CHROME_WRAPPER="${THIS}"
-"${HERE}"/opt/ungoogled-chromium/chrome "$@"
+export LD_LIBRARY_PATH="${HERE}/opt/chromium:${LD_LIBRARY_PATH:-}"
+"${HERE}/opt/chromium/chrome" "$@"
 EOF
 chmod a+x "$_app_dir/AppRun"
 
-cp "${_app_dir}/opt/ungoogled-chromium/product_logo_48.png" "$_app_dir/usr/share/icons/hicolor/48x48/apps/chromium.png"
-cp "${_app_dir}/usr/share/icons/hicolor/48x48/apps/chromium.png" "$_app_dir"
+cp "$_app_dir/opt/chromium/product_logo_48.png" \
+    "$_app_dir/usr/share/icons/hicolor/48x48/apps/chromium.png"
+cp "$_app_dir/usr/share/icons/hicolor/48x48/apps/chromium.png" "$_app_dir"
 
-export APPIMAGETOOL_APP_NAME="$_app_name"
 export VERSION="$_version"
 
-appimagetool \
-    -u "$_update_info" \
-    "$_app_dir" \
-    "$_release_name.AppImage" &
+echo "Creating $_release_name.AppImage ..."
+appimagetool "$_app_dir" "$_release_name.AppImage" &
+
 popd
 wait
 
 rm -rf "$_tarball_dir" "$_app_dir"
+
+echo "Done. Output: $_release_dir/$_release_name.AppImage"
+echo "       Tarball: $_release_dir/$_tarball_name.tar.xz"
