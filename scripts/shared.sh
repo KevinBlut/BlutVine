@@ -161,7 +161,7 @@ apply_blutvine_patches() {
         return 0
     fi
 
-    local series="${_patches_dir}/series"
+    local series="${_root}/series"
     if [ ! -f "${series}" ]; then
         echo "ERROR: patch series file not found at ${series}" >&2
         exit 1
