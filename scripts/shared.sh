@@ -166,7 +166,7 @@ apply_blutvine_patches() {
         return 0
     fi
 
-    local series="${_root}/series"
+    local series="${_patches_dir}/series"
     if [ ! -f "${series}" ]; then
         echo "ERROR: patch series file not found at ${series}" >&2
         exit 1
@@ -197,7 +197,7 @@ write_gn_args() {
     mkdir -p "${_out_dir}"
 
     # Use only your own flags file; ungoogled-chromium flags.gn is gone.
-    cat "${_root}/flags.linux.gn" | tee "${_out_dir}/args.gn"
+    cat "${_patches_dir}/flags.linux.gn" | tee "${_out_dir}/args.gn"
     echo "target_cpu = \"$_build_arch\"" | tee -a "${_out_dir}/args.gn"
     echo "v8_target_cpu = \"$_build_arch\"" | tee -a "${_out_dir}/args.gn"
 }
