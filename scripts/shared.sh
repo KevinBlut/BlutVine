@@ -143,10 +143,12 @@ fetch_chromium() {
         echo "Tarball already cached at ${dest}"
     fi
 
-    echo "Unpacking ${tarball} into ${_chrome_dir} ..."
-    mkdir -p "${_chrome_dir}"
-    tar -xf "${dest}" -C "${_chrome_dir}" --strip-components=1
+    echo "Unpacking ${tarball} into ${_src_dir} ..."
+    mkdir -p "${_src_dir}"
+    tar -xf "${dest}" -C "${_src_dir}" --strip-components=1
 
+    # ensure parent directory exists before writing stamp
+    mkdir -p "$(dirname "${stamp}")"
     touch "${stamp}"
 }
 
