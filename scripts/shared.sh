@@ -54,8 +54,22 @@ setup_paths() {
 }
 
 # ---------------------------------------------------------------------------
+# _sccache_arch
+#   Maps _host_arch (x64 / arm64) to the musl triple used in sccache
+#   GitHub release filenames.
+# ---------------------------------------------------------------------------
+_sccache_arch() {
+    case "${_host_arch}" in
+        x64)   echo "x86_64-unknown-linux-musl" ;;
+        arm64) echo "aarch64-unknown-linux-musl" ;;
+        *)     echo "x86_64-unknown-linux-musl" ;;  # best-effort fallback
+    esac
+}
+
+# ---------------------------------------------------------------------------
 # setup_sccache
-#   Installs sccache if missing, verifies the B2 connection, and sets the
+#   Installs sccache if missing (to a user-writable path so it works under
+#   non-root Docker users), verifies the B2 connection, and sets the
 #   compiler wrapper env vars that Chromium's build system will pick up.
 # ---------------------------------------------------------------------------
 setup_sccache() {
@@ -64,24 +78,45 @@ setup_sccache() {
         return 0
     fi
 
-    # install sccache if not already present
+    # Install sccache to a user-writable directory so non-root Docker users
+    # don't get "permission denied" writing to /usr/local/bin.
+    local sccache_bin_dir="${HOME}/.local/bin"
+    local sccache_bin="${sccache_bin_dir}/sccache"
+    mkdir -p "${sccache_bin_dir}"
+    export PATH="${sccache_bin_dir}:${PATH}"
+
     if ! command -v sccache &>/dev/null; then
         echo "Installing sccache..."
         if command -v cargo &>/dev/null; then
-            cargo install sccache
+            cargo install sccache --root "${HOME}/.local"
         else
-            # grab the latest prebuilt binary from GitHub releases
+            # Download the correct prebuilt binary for the host architecture.
+            # Previously this was hardcoded to x86_64, which caused exec-format
+            # errors (reported as "permission denied") on arm64 hosts.
+            local sccache_triple
+            sccache_triple="$(_sccache_arch)"
+
             local sccache_ver
             sccache_ver=$(curl -fsSL \
                 "https://api.github.com/repos/mozilla/sccache/releases/latest" \
                 | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
-            local sccache_url="https://github.com/mozilla/sccache/releases/download/${sccache_ver}/sccache-${sccache_ver}-x86_64-unknown-linux-musl.tar.gz"
+
+            echo "Downloading sccache ${sccache_ver} (${sccache_triple})..."
+            local sccache_url="https://github.com/mozilla/sccache/releases/download/${sccache_ver}/sccache-${sccache_ver}-${sccache_triple}.tar.gz"
             curl -fsSL "${sccache_url}" \
-                | tar -xz -C /usr/local/bin --strip-components=1 \
-                    "sccache-${sccache_ver}-x86_64-unknown-linux-musl/sccache"
-            chmod +x /usr/local/bin/sccache
+                | tar -xz -C "${sccache_bin_dir}" --strip-components=1 \
+                    "sccache-${sccache_ver}-${sccache_triple}/sccache"
+            chmod +x "${sccache_bin}"
         fi
     fi
+
+    # Set the sccache disk-cache and socket dir to somewhere the current user
+    # definitely owns. When the container uid doesn't match the image's default
+    # home, the default path (~/.cache/sccache) may not be writable, which
+    # causes "permission denied" on --start-server.
+    local sccache_cache_dir="${_chrome_dir}/.sccache"
+    mkdir -p "${sccache_cache_dir}"
+    export SCCACHE_DIR="${sccache_cache_dir}"
 
     # stop any existing sccache server so we start fresh with B2 config
     sccache --stop-server 2>/dev/null || true
@@ -99,9 +134,13 @@ setup_sccache() {
     echo "Starting sccache server with Backblaze B2 backend..."
     sccache --start-server
 
+    # Give the server a moment to finish initialising its B2 connection
+    # before querying stats to avoid spurious errors.
+    sleep 1
+
     echo "sccache version: $(sccache --version)"
     echo "sccache stats (should show B2 as backend):"
-    sccache --show-stats
+    sccache --show-stats || echo "Warning: sccache stats unavailable (server may still be starting)"
 
     # tell Chromium's build to use sccache as the compiler wrapper
     export CC_wrapper="sccache"
@@ -259,7 +298,7 @@ setup_toolchain() {
     # Create the symlink using the discovered path
     local node_path
     node_path=$(which node 2>/dev/null || true)
-    
+
     if [ -n "$node_path" ]; then
         echo "Linking node ($node_path) -> $node_target_dir/node"
         ln -sf "$node_path" "$node_target_dir/node"
