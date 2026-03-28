@@ -19,6 +19,10 @@ sudo apt-get install -y \
     pkg-config \
     patch
 
+# Restart systemd manager so it reloads updated libraries (suppresses the
+# "daemon using outdated libraries" warning). No-op inside Docker containers.
+sudo systemctl daemon-reexec 2>/dev/null || true
+
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)/shared.sh"
 
 setup_paths
