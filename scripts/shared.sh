@@ -34,9 +34,9 @@ setup_arch() {
 
 setup_paths() {
     _root="$(repo_root)"
-    _scripts_dir="${_root}/scripts"
     _chrome_dir="${_root}/Chrome"              # vanilla Chromium sources live here
     _patches_dir="${_root}/BlutVine"           # your patch series lives here
+    _scripts_dir="${_patches_dir}/scripts"
     _build_dir="${_chrome_dir}/build"          # build artefacts stay inside Chrome/build/
     _dl_cache="${_chrome_dir}/download_cache"  # tarball cache inside Chrome/
     _src_dir="${_build_dir}/src"               # Chrome/build/src
