@@ -1,0 +1,53 @@
+# flags.linux.gn
+# Stock Chromium build flags for Linux.
+# is_component_build=true for fast incremental recompilation.
+
+# Use the system (unbundled) toolchain — required when building from the
+# official source tarball, which ships without Chromium's prebuilt clang/rust.
+# GN will read CC, CXX, AR, NM from the environment (set by shared.sh).
+custom_toolchain = "//build/toolchain/linux/unbundle:default"
+host_toolchain   = "//build/toolchain/linux/unbundle:default"
+
+# Build type
+is_official_build = false
+is_component_build = true
+is_debug = false
+
+# Clang — system clang, no bundled plugins
+is_clang = true
+
+# Linker — lld is faster than gold/bfd
+use_lld = true
+
+# use_thin_lto is intentionally omitted — it conflicts with is_component_build
+
+# Proprietary codecs (H.264, AAC, MP4 — same as official Chrome)
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+
+# Widevine DRM (needed for Netflix, Spotify, etc.)
+enable_widevine = true
+
+# VA-API hardware video acceleration
+use_vaapi = true
+
+# Wayland and X11 support
+use_ozone = true
+ozone_platform_wayland = true
+ozone_platform_x11 = true
+
+# Sysroot (use Chromium's bundled sysroot for a reproducible build)
+use_sysroot = true
+
+# Symbol level — 0 means no debug symbols, keeps binary small
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+
+# NaCl is deprecated and disabled in modern Chromium
+enable_nacl = false
+
+# Google API keys — leave blank for now, add later if needed
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
