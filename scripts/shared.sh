@@ -333,9 +333,7 @@ setup_toolchain() {
 
 gn_gen() {
     cd "${_src_dir}"
-    # Add the warning flag to bypass the deprecation error during the bootstrap build
-    ./tools/gn/bootstrap/bootstrap.py -o out/Default/gn --skip-generate-buildfiles \
-        --with-warning-flags="-Wno-error=deprecated-declarations"
+    ./tools/gn/bootstrap/bootstrap.py -o out/Default/gn --skip-generate-buildfiles
 
     ./out/Default/gn gen out/Default --fail-on-unused-args
 }
