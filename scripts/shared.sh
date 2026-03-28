@@ -3,49 +3,55 @@ set -euo pipefail
 
 # shared build functions used by local and CI scripts
 
-# resolve repo root directory regardless of caller location
+# ---------------------------------------------------------------------------
+# repo_root
+#   Resolves the parent directory that contains both BlutVine/ and Chrome/
+# ---------------------------------------------------------------------------
 repo_root() {
     local _base_dir
     _base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-    # BASH_SOURCE[0] is scripts/shared.sh, so:
-    # _base_dir = BlutVine/scripts/
-    # ../..     = parent of BlutVine/ (where Chrome/ should live alongside BlutVine/)
+    # BASH_SOURCE[0] is BlutVine/scripts/shared.sh
+    # ..    = BlutVine/
+    # ../.. = repo root (where Chrome/ lives alongside BlutVine/)
     cd "${_base_dir}/../.." >/dev/null 2>&1 && pwd
 }
 
+# ---------------------------------------------------------------------------
+# setup_arch
+#   Sets _host_arch and _build_arch (both use GN-style names: x64 / arm64)
+# ---------------------------------------------------------------------------
 setup_arch() {
     _host_arch=$(uname -m)
+    case "${_host_arch}" in
+        x86_64)  _host_arch="x64"   ;;
+        aarch64) _host_arch="arm64" ;;
+    esac
 
-    if [ "$_host_arch" = "x86_64" ]; then
-        _host_arch="x64"
-    elif [ "$_host_arch" = "aarch64" ]; then
-        _host_arch="arm64"
-    fi
-
-    _build_arch="$_host_arch"
+    _build_arch="${_host_arch}"
     if [ -n "${ARCH:-}" ]; then
-        _build_arch="$ARCH"
-    fi
-
-    if [ "$_build_arch" = "x86_64" ]; then
-        _build_arch=x64
+        _build_arch="${ARCH}"
+        [ "${_build_arch}" = "x86_64" ] && _build_arch="x64"
     fi
 }
 
+# ---------------------------------------------------------------------------
+# setup_paths
+#   Initialises all path variables and sources sccache credentials if present
+# ---------------------------------------------------------------------------
 setup_paths() {
     _root="$(repo_root)"
-    _chrome_dir="${_root}/Chrome"              # vanilla Chromium sources live here
-    _patches_dir="${_root}/BlutVine"           # your patch series lives here
+    _chrome_dir="${_root}/Chrome"
+    _patches_dir="${_root}/BlutVine"
     _scripts_dir="${_patches_dir}/scripts"
-    _build_dir="${_chrome_dir}/build"          # build artefacts stay inside Chrome/build/
-    _dl_cache="${_chrome_dir}/download_cache"  # tarball cache inside Chrome/
-    _src_dir="${_build_dir}/src"               # Chrome/build/src
+    _build_dir="${_chrome_dir}/build"
+    _dl_cache="${_chrome_dir}/download_cache"
+    _src_dir="${_build_dir}/src"
     _out_dir="${_src_dir}/out/Default"
+
     setup_arch
 
     mkdir -p "${_chrome_dir}" "${_dl_cache}" "${_build_dir}"
 
-    # load sccache credentials if the config file exists
     local sccache_cfg="${_scripts_dir}/sccache.sh"
     if [ -f "${sccache_cfg}" ]; then
         # shellcheck source=/dev/null
@@ -54,23 +60,57 @@ setup_paths() {
 }
 
 # ---------------------------------------------------------------------------
-# _sccache_arch
-#   Maps _host_arch (x64 / arm64) to the musl triple used in sccache
-#   GitHub release filenames.
+# check_system_deps
+#   Verifies that required system tools are present before we start.
+#   The tarball ships NO toolchain — we rely entirely on the system.
 # ---------------------------------------------------------------------------
-_sccache_arch() {
-    case "${_host_arch}" in
-        x64)   echo "x86_64-unknown-linux-musl" ;;
-        arm64) echo "aarch64-unknown-linux-musl" ;;
-        *)     echo "x86_64-unknown-linux-musl" ;;  # best-effort fallback
-    esac
+check_system_deps() {
+    local missing=()
+
+    # clang is mandatory — gcc is NOT supported by Chromium's build system
+    if ! command -v clang &>/dev/null; then
+        missing+=("clang (install: apt-get install clang)")
+    fi
+    if ! command -v clang++ &>/dev/null; then
+        missing+=("clang++ (install: apt-get install clang)")
+    fi
+
+    # lld is the only supported linker for Chromium
+    if ! command -v ld.lld &>/dev/null; then
+        missing+=("lld (install: apt-get install lld)")
+    fi
+
+    # ninja for the actual build
+    if ! command -v ninja &>/dev/null && ! command -v ninja-build &>/dev/null; then
+        missing+=("ninja (install: apt-get install ninja-build)")
+    fi
+
+    # python3 for GN scripts
+    if ! command -v python3 &>/dev/null; then
+        missing+=("python3 (install: apt-get install python3)")
+    fi
+
+    # node for JS build steps
+    if ! command -v node &>/dev/null && ! command -v nodejs &>/dev/null; then
+        missing+=("nodejs (install: apt-get install nodejs)")
+    fi
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo "ERROR: missing required build dependencies:" >&2
+        for dep in "${missing[@]}"; do
+            echo "  - ${dep}" >&2
+        done
+        echo "" >&2
+        echo "On Debian/Ubuntu you can install everything with:" >&2
+        echo "  sudo apt-get install clang lld ninja-build python3 nodejs" >&2
+        exit 1
+    fi
 }
 
 # ---------------------------------------------------------------------------
 # setup_sccache
-#   Installs sccache if missing (to a user-writable path so it works under
-#   non-root Docker users), verifies the B2 connection, and sets the
-#   compiler wrapper env vars that Chromium's build system will pick up.
+#   Installs sccache if SCCACHE_BUCKET is configured, starts the server,
+#   and sets CC_wrapper / CXX_wrapper for use later in setup_toolchain.
 # ---------------------------------------------------------------------------
 setup_sccache() {
     if [ -z "${SCCACHE_BUCKET:-}" ]; then
@@ -78,8 +118,6 @@ setup_sccache() {
         return 0
     fi
 
-    # Install sccache to a user-writable directory so non-root Docker users
-    # don't get "permission denied" writing to /usr/local/bin.
     local sccache_bin_dir="${HOME}/.local/bin"
     local sccache_bin="${sccache_bin_dir}/sccache"
     mkdir -p "${sccache_bin_dir}"
@@ -90,11 +128,12 @@ setup_sccache() {
         if command -v cargo &>/dev/null; then
             cargo install sccache --root "${HOME}/.local"
         else
-            # Download the correct prebuilt binary for the host architecture.
-            # Previously this was hardcoded to x86_64, which caused exec-format
-            # errors (reported as "permission denied") on arm64 hosts.
             local sccache_triple
-            sccache_triple="$(_sccache_arch)"
+            case "${_host_arch}" in
+                x64)   sccache_triple="x86_64-unknown-linux-musl"  ;;
+                arm64) sccache_triple="aarch64-unknown-linux-musl" ;;
+                *)     sccache_triple="x86_64-unknown-linux-musl"  ;;
+            esac
 
             local sccache_ver
             sccache_ver=$(curl -fsSL \
@@ -102,28 +141,20 @@ setup_sccache() {
                 | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
 
             echo "Downloading sccache ${sccache_ver} (${sccache_triple})..."
-            local sccache_url="https://github.com/mozilla/sccache/releases/download/${sccache_ver}/sccache-${sccache_ver}-${sccache_triple}.tar.gz"
-            curl -fsSL "${sccache_url}" \
+            curl -fsSL \
+                "https://github.com/mozilla/sccache/releases/download/${sccache_ver}/sccache-${sccache_ver}-${sccache_triple}.tar.gz" \
                 | tar -xz -C "${sccache_bin_dir}" --strip-components=1 \
                     "sccache-${sccache_ver}-${sccache_triple}/sccache"
             chmod +x "${sccache_bin}"
         fi
     fi
 
-    # Set the sccache disk-cache and socket dir to somewhere the current user
-    # definitely owns. When the container uid doesn't match the image's default
-    # home, the default path (~/.cache/sccache) may not be writable, which
-    # causes "permission denied" on --start-server.
     local sccache_cache_dir="${_chrome_dir}/.sccache"
     mkdir -p "${sccache_cache_dir}"
     export SCCACHE_DIR="${sccache_cache_dir}"
 
-    # stop any existing sccache server so we start fresh with B2 config
     sccache --stop-server 2>/dev/null || true
 
-    # these vars tell sccache to use B2 as its storage backend.
-    # they must be exported before --start-server so the server
-    # process inherits them and knows where to save/fetch cache entries.
     export SCCACHE_BUCKET="${SCCACHE_BUCKET}"
     export SCCACHE_ENDPOINT="${SCCACHE_ENDPOINT}"
     export SCCACHE_S3_USE_SSL="${SCCACHE_S3_USE_SSL:-true}"
@@ -133,25 +164,19 @@ setup_sccache() {
 
     echo "Starting sccache server with Backblaze B2 backend..."
     sccache --start-server
-
-    # Give the server a moment to finish initialising its B2 connection
-    # before querying stats to avoid spurious errors.
     sleep 1
 
     echo "sccache version: $(sccache --version)"
-    echo "sccache stats (should show B2 as backend):"
-    sccache --show-stats || echo "Warning: sccache stats unavailable (server may still be starting)"
+    sccache --show-stats || echo "Warning: sccache stats unavailable"
 
-    # tell Chromium's build to use sccache as the compiler wrapper
     export CC_wrapper="sccache"
     export CXX_wrapper="sccache"
 }
 
 # ---------------------------------------------------------------------------
 # fetch_chromium
-#   Queries the Chrome release API for the latest stable version, then
-#   downloads and unpacks the official Chromium source tarball from the
-#   Google Storage bucket.  A stamp file prevents re-downloading.
+#   Downloads the latest stable Chromium tarball and unpacks it.
+#   A stamp file prevents re-downloading on subsequent runs.
 # ---------------------------------------------------------------------------
 fetch_chromium() {
     local stamp="${_src_dir}/.downloaded.stamp"
@@ -162,8 +187,6 @@ fetch_chromium() {
     fi
 
     echo "Querying latest stable Chromium version..."
-
-    # ChromiumDash returns a JSON array; grab the first element's version field.
     local version
     version=$(curl -fsSL \
         "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1" \
@@ -186,16 +209,14 @@ fetch_chromium() {
     mkdir -p "${_src_dir}"
     tar -xf "${dest}" -C "${_src_dir}" --strip-components=1
 
-    # ensure parent directory exists before writing stamp
     mkdir -p "$(dirname "${stamp}")"
     touch "${stamp}"
 }
 
 # ---------------------------------------------------------------------------
 # apply_blutvine_patches
-#   Reads BlutVine/series (one patch filename per line, '#' lines ignored)
-#   and applies each patch to the source tree with `patch -p1`.
-#   A stamp file prevents re-applying on subsequent runs.
+#   Applies patches listed in BlutVine/series (one filename per line).
+#   Skips blank lines and '#' comments.
 # ---------------------------------------------------------------------------
 apply_blutvine_patches() {
     local stamp="${_src_dir}/.patched.stamp"
@@ -215,7 +236,6 @@ apply_blutvine_patches() {
 
     local patch_file
     while IFS= read -r patch_file || [ -n "${patch_file}" ]; do
-        # skip blank lines and comments
         [[ -z "${patch_file}" || "${patch_file}" =~ ^[[:space:]]*# ]] && continue
 
         local full_path="${_patches_dir}/${patch_file}"
@@ -232,131 +252,180 @@ apply_blutvine_patches() {
     echo "All BlutVine patches applied successfully."
 }
 
+# ---------------------------------------------------------------------------
+# write_gn_args
+#   Writes args.gn telling GN to use the system (unbundled) toolchain.
+#   This is the key difference from the old approach: instead of trying to
+#   download/bootstrap Chromium's own clang+rust, we hand GN our system
+#   clang and let it drive the build directly.
+# ---------------------------------------------------------------------------
 write_gn_args() {
     mkdir -p "${_out_dir}"
+    cat "${_patches_dir}/flags.linux.gn" > "${_out_dir}/args.gn"
 
-    # Use only your own flags file; ungoogled-chromium flags.gn is gone.
-    cat "${_patches_dir}/flags.linux.gn" | tee "${_out_dir}/args.gn"
-    echo "target_cpu = \"$_build_arch\"" | tee -a "${_out_dir}/args.gn"
-    echo "v8_target_cpu = \"$_build_arch\"" | tee -a "${_out_dir}/args.gn"
+    # Tell GN to use whatever CC/CXX are set in the environment
+    # (the unbundle toolchain reads AR, CC, CXX, NM from the env)
+    cat >> "${_out_dir}/args.gn" <<EOF
+
+# --- added by shared.sh ---
+target_cpu = "${_build_arch}"
+v8_target_cpu = "${_build_arch}"
+EOF
+
+    echo "args.gn written to ${_out_dir}/args.gn"
 }
 
-# fix downloading of prebuilt tools and sysroot files
-# (https://github.com/ungoogled-software/ungoogled-chromium/issues/1846)
+# ---------------------------------------------------------------------------
+# fix_tool_downloading
+#   Restores real Google hostnames that ungoogled-chromium domain-substitutes.
+#   Needed so that any remaining download scripts (sysroot, etc.) can reach
+#   the actual servers.
+# ---------------------------------------------------------------------------
 fix_tool_downloading() {
     sed -i 's/commondatastorage.9oo91eapis.qjz9zk/commondatastorage.googleapis.com/g' \
         "${_src_dir}/build/linux/sysroot_scripts/sysroots.json" \
-        "${_src_dir}/tools/clang/scripts/update.py" \
-        "${_src_dir}/tools/clang/scripts/build.py"
+        2>/dev/null || true
 
-    sed -i 's/chromium.9oo91esource.qjz9zk/chromium.googlesource.com/g' \
-        "${_src_dir}/tools/clang/scripts/build.py" \
-        "${_src_dir}/tools/rust/build_rust.py" \
-        "${_src_dir}/tools/rust/build_bindgen.py"
-
-    sed -i 's/chrome-infra-packages.8pp2p8t.qjz9zk/chrome-infra-packages.appspot.com/g' \
-        "${_src_dir}/tools/rust/build_rust.py"
+    # no-op if the file doesn't exist (vanilla tarball keeps real hostnames)
 }
 
+# ---------------------------------------------------------------------------
+# install_sysroot
+#   Downloads the Debian sysroot matching the target arch.
+#   Only needed when use_sysroot=true is in args.gn (it usually is for
+#   portable/distro-agnostic builds).  Safe to skip for local builds where
+#   you just want to run on the build machine.
+# ---------------------------------------------------------------------------
+install_sysroot() {
+    if ! grep -q "use_sysroot\s*=\s*true" "${_out_dir}/args.gn" 2>/dev/null; then
+        echo "use_sysroot not set, skipping sysroot install"
+        return 0
+    fi
+
+    local install_script="${_src_dir}/build/linux/sysroot_scripts/install-sysroot.py"
+    if [ ! -f "${install_script}" ]; then
+        echo "WARNING: sysroot install script not found, skipping" >&2
+        return 0
+    fi
+
+    echo "Installing sysroot for ${_host_arch}..."
+    python3 "${install_script}" --arch="${_host_arch}"
+
+    if [ "${_build_arch}" != "${_host_arch}" ]; then
+        echo "Installing sysroot for cross-compile target ${_build_arch}..."
+        python3 "${install_script}" --arch="${_build_arch}"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# setup_toolchain
+#   Sets CC, CXX, AR, NM to the system clang binaries.
+#   Wraps them with sccache if CC_wrapper is set.
+#   Also symlinks node into the path Chromium's build scripts expect.
+# ---------------------------------------------------------------------------
 setup_toolchain() {
-    # Chromium currently has no non-x86 llvm/rust builds on
-    # Linux, so we have to build it ourselves.
-    if [ "$_host_arch" = x64 ]; then
-        "${_src_dir}/tools/rust/update_rust.py"
-        "${_src_dir}/tools/clang/scripts/update.py"
+    # Resolve clang path — prefer clang from PATH, fail loudly if missing
+    local clang_bin
+    clang_bin=$(command -v clang)
+    local clangxx_bin
+    clangxx_bin=$(command -v clang++)
+
+    # Wrap with sccache if configured
+    if [ -n "${CC_wrapper:-}" ]; then
+        export CC="${CC_wrapper} ${clang_bin}"
+        export CXX="${CXX_wrapper} ${clangxx_bin}"
     else
-        "${_src_dir}/tools/clang/scripts/build.py" \
-            --without-fuchsia --without-android --disable-asserts \
-            --host-cc=clang --host-cxx=clang++ --use-system-cmake \
-            --with-ml-inliner-model=
-
-        export CARGO_HOME="${_src_dir}/third_party/rust-src/cargo-home"
-        "${_src_dir}/tools/rust/build_rust.py" \
-            --skip-test
-
-        "${_src_dir}/tools/rust/build_bindgen.py"
+        export CC="${clang_bin}"
+        export CXX="${clangxx_bin}"
     fi
 
-    if grep -q -F "use_sysroot=true" "${_out_dir}/args.gn"; then
-        "${_src_dir}/build/linux/sysroot_scripts/install-sysroot.py" --arch="$_host_arch" &
-        if [ "$_build_arch" != "$_host_arch" ]; then
-            "${_src_dir}/build/linux/sysroot_scripts/install-sysroot.py" --arch="$_build_arch" &
-        fi
-        wait
-    fi
+    # lld-based tools (llvm-ar / llvm-nm are preferred; fall back to system ar/nm)
+    export AR="${AR:-$(command -v llvm-ar 2>/dev/null || command -v ar)}"
+    export NM="${NM:-$(command -v llvm-nm 2>/dev/null || command -v nm)}"
 
-    # --- Node.js Installation & Symlinking ---
+    # LLVM_BIN is used by GN's unbundle toolchain to find lld, llvm-ar, etc.
+    # Point it at wherever clang lives.
+    export LLVM_BIN
+    LLVM_BIN="$(dirname "${clang_bin}")"
+
+    # Compiler resource dir — always query raw clang, never the sccache wrapper
+    local resource_dir
+    resource_dir="$("${clang_bin}" --print-resource-dir)"
+    export CFLAGS="${CFLAGS:-}  -resource-dir=${resource_dir}"
+    export CXXFLAGS="${CXXFLAGS:-} -resource-dir=${resource_dir}"
+    export CPPFLAGS="${CPPFLAGS:-} -resource-dir=${resource_dir}"
+
+    # Symlink node into the location Chromium's build scripts expect
     local node_target_dir="${_src_dir}/third_party/node/linux/node-linux-x64/bin"
-    mkdir -p "$node_target_dir"
+    mkdir -p "${node_target_dir}"
 
-    # Install nodejs if it is missing from the system
-    if ! command -v node &>/dev/null; then
-        echo "Node.js not found. Installing nodejs..."
-        sudo apt-get update && sudo apt-get install -y nodejs
-    fi
-
-    # Create the symlink using the discovered path
     local node_path
-    node_path=$(which node 2>/dev/null || true)
-
-    if [ -n "$node_path" ]; then
-        echo "Linking node ($node_path) -> $node_target_dir/node"
-        ln -sf "$node_path" "$node_target_dir/node"
-    else
-        echo "ERROR: Node.js installation failed or 'node' not found in PATH." >&2
+    node_path=$(command -v node 2>/dev/null || command -v nodejs 2>/dev/null || true)
+    if [ -z "${node_path}" ]; then
+        echo "ERROR: node/nodejs not found in PATH" >&2
         exit 1
     fi
-    # -----------------------------------------
+    ln -sf "${node_path}" "${node_target_dir}/node"
+    echo "Node.js symlinked: ${node_path} -> ${node_target_dir}/node"
 
-    local clang_bin="${_src_dir}/third_party/llvm-build/Release+Asserts/bin"
-    # wrap clang with sccache if it was configured
-    if [ -n "${CC_wrapper:-}" ]; then
-        export CC="${CC_wrapper} ${clang_bin}/clang"
-        export CXX="${CXX_wrapper} ${clang_bin}/clang++"
-    else
-        export CC="${clang_bin}/clang"
-        export CXX="${clang_bin}/clang++"
-    fi
-    export AR="${clang_bin}/llvm-ar"
-    export NM="${clang_bin}/llvm-nm"
-    export LLVM_BIN="${clang_bin}"
-
-    local resource_dir
-    # Always query clang directly for the resource dir — never sccache.
-    # When CC_wrapper is set, $CC is "sccache /path/clang" and ${CC%% *}
-    # strips to "sccache", which doesn't understand --print-resource-dir.
-    resource_dir="$("${clang_bin}/clang" --print-resource-dir)"
-    export CXXFLAGS+=" -resource-dir=${resource_dir} -B${LLVM_BIN}"
-    export CPPFLAGS+=" -resource-dir=${resource_dir} -B${LLVM_BIN}"
-    export CFLAGS+=" -resource-dir=${resource_dir} -B${LLVM_BIN}"
+    echo "Toolchain:"
+    echo "  CC  = ${CC}"
+    echo "  CXX = ${CXX}"
+    echo "  AR  = ${AR}"
+    echo "  NM  = ${NM}"
+    echo "  LLVM_BIN = ${LLVM_BIN}"
 }
 
+# ---------------------------------------------------------------------------
+# gn_gen
+#   Bootstraps gn (if not already present) then runs gn gen.
+#
+#   bootstrap.py compiles gn itself from source using the HOST compiler.
+#   We must pass it the raw clang path (never sccache-wrapped) otherwise
+#   the internal ninja invocation inside bootstrap.py will fail.
+# ---------------------------------------------------------------------------
 gn_gen() {
     cd "${_src_dir}"
 
-    local clang_bin="${_src_dir}/third_party/llvm-build/Release+Asserts/bin"
-    local clang_lib="${_src_dir}/third_party/llvm-build/Release+Asserts/lib"
-    local clang_ver
-    clang_ver="$("${clang_bin}/clang" --version | grep -oP '\d+\.\d+\.\d+' | head -1)"
+    local gn_bin="${_out_dir}/gn"
 
-    # bootstrap.py compiles GN from source with its own ninja invocation.
-    # Without guidance it picks up system GCC 12 headers (stl_tempbuf.h),
-    # which mark get_temporary_buffer as deprecated and fail under -Werror.
-    # Force it to use the bundled clang + libc++ so we never touch system
-    # GCC headers at all.
-    CC="${clang_bin}/clang" \
-    CXX="${clang_bin}/clang++" \
-    CXXFLAGS="-stdlib=libc++ -nostdinc++ \
-        -isystem ${clang_lib}/clang/${clang_ver}/include \
-        -isystem ${clang_lib}/x86_64-unknown-linux-gnu/c++/v1 \
-        -isystem ${clang_lib}/c++/v1" \
-    LDFLAGS="-stdlib=libc++ -L${clang_lib}" \
-        ./tools/gn/bootstrap/bootstrap.py -o out/Default/gn --skip-generate-buildfiles
+    if [ ! -f "${gn_bin}" ]; then
+        echo "Bootstrapping gn..."
 
-    ./out/Default/gn gen out/Default --fail-on-unused-args
+        # bootstrap.py builds gn using CC/CXX from the environment.
+        # Forcibly use raw clang here — sccache wrapping breaks the bootstrap.
+        local raw_clang
+        raw_clang=$(command -v clang)
+        local raw_clangxx
+        raw_clangxx=$(command -v clang++)
+
+        CC="${raw_clang}" CXX="${raw_clangxx}" \
+        python3 tools/gn/bootstrap/bootstrap.py \
+            --skip-generate-buildfiles \
+            -o "${gn_bin}"
+    else
+        echo "gn already built at ${gn_bin}, skipping bootstrap"
+    fi
+
+    echo "Running gn gen..."
+    "${gn_bin}" gen out/Default --fail-on-unused-args
 }
 
+# ---------------------------------------------------------------------------
+# maybe_build
+#   Runs ninja to compile chrome and chromedriver.
+# ---------------------------------------------------------------------------
 maybe_build() {
+    if [ -n "${_prepare_only:-}" ]; then
+        echo "_prepare_only is set — skipping ninja build"
+        return 0
+    fi
+
     cd "${_src_dir}"
-    ninja -C out/Default chrome chromedriver
+
+    local ninja_bin
+    ninja_bin=$(command -v ninja 2>/dev/null || command -v ninja-build 2>/dev/null)
+
+    echo "Building chrome and chromedriver with ninja..."
+    "${ninja_bin}" -C out/Default chrome chromedriver
 }
