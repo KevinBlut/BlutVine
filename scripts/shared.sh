@@ -333,7 +333,25 @@ setup_toolchain() {
 
 gn_gen() {
     cd "${_src_dir}"
-    ./tools/gn/bootstrap/bootstrap.py -o out/Default/gn --skip-generate-buildfiles
+
+    local clang_bin="${_src_dir}/third_party/llvm-build/Release+Asserts/bin"
+    local clang_lib="${_src_dir}/third_party/llvm-build/Release+Asserts/lib"
+    local clang_ver
+    clang_ver="$("${clang_bin}/clang" --version | grep -oP '\d+\.\d+\.\d+' | head -1)"
+
+    # bootstrap.py compiles GN from source with its own ninja invocation.
+    # Without guidance it picks up system GCC 12 headers (stl_tempbuf.h),
+    # which mark get_temporary_buffer as deprecated and fail under -Werror.
+    # Force it to use the bundled clang + libc++ so we never touch system
+    # GCC headers at all.
+    CC="${clang_bin}/clang" \
+    CXX="${clang_bin}/clang++" \
+    CXXFLAGS="-stdlib=libc++ -nostdinc++ \
+        -isystem ${clang_lib}/clang/${clang_ver}/include \
+        -isystem ${clang_lib}/x86_64-unknown-linux-gnu/c++/v1 \
+        -isystem ${clang_lib}/c++/v1" \
+    LDFLAGS="-stdlib=libc++ -L${clang_lib}" \
+        ./tools/gn/bootstrap/bootstrap.py -o out/Default/gn --skip-generate-buildfiles
 
     ./out/Default/gn gen out/Default --fail-on-unused-args
 }
