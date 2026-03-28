@@ -246,8 +246,28 @@ setup_toolchain() {
         wait
     fi
 
-    mkdir -p "${_src_dir}/third_party/node/linux/node-linux-x64/bin"
-    ln -sf "$(which node)" "${_src_dir}/third_party/node/linux/node-linux-x64/bin/node"
+    # --- Node.js Installation & Symlinking ---
+    local node_target_dir="${_src_dir}/third_party/node/linux/node-linux-x64/bin"
+    mkdir -p "$node_target_dir"
+
+    # Install nodejs if it is missing from the system
+    if ! command -v node &>/dev/null; then
+        echo "Node.js not found. Installing nodejs..."
+        sudo apt-get update && sudo apt-get install -y nodejs
+    fi
+
+    # Create the symlink using the discovered path
+    local node_path
+    node_path=$(which node 2>/dev/null || true)
+    
+    if [ -n "$node_path" ]; then
+        echo "Linking node ($node_path) -> $node_target_dir/node"
+        ln -sf "$node_path" "$node_target_dir/node"
+    else
+        echo "ERROR: Node.js installation failed or 'node' not found in PATH." >&2
+        exit 1
+    fi
+    # -----------------------------------------
 
     local clang_bin="${_src_dir}/third_party/llvm-build/Release+Asserts/bin"
     # wrap clang with sccache if it was configured
