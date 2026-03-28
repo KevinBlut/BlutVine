@@ -399,7 +399,13 @@ gn_gen() {
         local raw_clangxx
         raw_clangxx=$(command -v clang++)
 
-        CC="${raw_clang}" CXX="${raw_clangxx}" \
+        # Force libc++ instead of libstdc++ — clang + GCC 12's libstdc++ headers
+        # have a known bug with std::ranges::subrange that causes 4 compile errors
+        # in gn's rust_project_writer.cc. libc++ doesn't have this issue.
+        CC="${raw_clang}" \
+        CXX="${raw_clangxx}" \
+        CXXFLAGS="-stdlib=libc++" \
+        LDFLAGS="-stdlib=libc++ -lc++abi" \
         python3 tools/gn/bootstrap/bootstrap.py \
             --skip-generate-buildfiles \
             -o "${gn_bin}"
