@@ -322,7 +322,10 @@ setup_toolchain() {
     export LLVM_BIN="${clang_bin}"
 
     local resource_dir
-    resource_dir="$(${CC%% *} --print-resource-dir)"
+    # Always query clang directly for the resource dir — never sccache.
+    # When CC_wrapper is set, $CC is "sccache /path/clang" and ${CC%% *}
+    # strips to "sccache", which doesn't understand --print-resource-dir.
+    resource_dir="$("${clang_bin}/clang" --print-resource-dir)"
     export CXXFLAGS+=" -resource-dir=${resource_dir} -B${LLVM_BIN}"
     export CPPFLAGS+=" -resource-dir=${resource_dir} -B${LLVM_BIN}"
     export CFLAGS+=" -resource-dir=${resource_dir} -B${LLVM_BIN}"
