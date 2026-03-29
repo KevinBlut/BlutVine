@@ -62,8 +62,8 @@ setup_depot_tools() {
 
 # ---------------------------------------------------------------------------
 # fetch_chromium
-#   Uses fetch + gclient runhooks to get source AND all prebuilt binaries:
-#   gn, clang, rust, node, sysroot. No manual toolchain setup needed.
+#   Uses depot_tools fetch + gclient runhooks to get the Chromium source and
+#   all prebuilt binaries: gn, clang, rust, node, sysroot.
 # ---------------------------------------------------------------------------
 fetch_chromium() {
     local stamp="${_src_dir}/.downloaded.stamp"
@@ -73,34 +73,18 @@ fetch_chromium() {
         return 0
     fi
 
-    echo "Querying latest stable Chromium version..."
-    local version
-    version=$(curl -fsSL \
-        "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1" \
-        | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
-    echo "Fetching Chromium ${version}..."
+    # Wipe any partial previous fetch before starting clean
+    rm -rf "${_src_dir}"
 
     cd "${_chrome_dir}"
 
-    # Write .gclient file
-    cat > "${_chrome_dir}/.gclient" <<GCLIENT
-solutions = [
-  {
-    "name": "src",
-    "url": "https://chromium.googlesource.com/chromium/src.git@${version}",
-    "managed": False,
-    "custom_deps": {},
-    "custom_vars": {},
-  },
-]
-GCLIENT
-
-    # Wipe any partial previous fetch (e.g. from a failed run) before starting clean
-    rm -rf "${_src_dir}"
-
+    # fetch handles .gclient creation and source checkout.
+    # --nohooks: skip hooks for now, we run them explicitly below.
+    # --no-history: skip git history, saves ~15GB and a lot of time.
+    echo "Fetching Chromium source (latest stable)..."
     fetch --nohooks --no-history chromium
 
-    # install-build-deps.sh installs required system packages
+    # Install required system packages from the source tree itself
     echo "Installing Chromium system build dependencies..."
     sudo "${_src_dir}/build/install-build-deps.sh" --no-prompt
 
