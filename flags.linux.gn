@@ -1,0 +1,45 @@
+# flags.linux.gn
+# Chromium build flags for Linux.
+# Assumes gclient runhooks has already downloaded the bundled clang toolchain.
+
+# Build type
+is_official_build = false
+is_component_build = true
+is_debug = false
+
+# Clang — uses Chromium's bundled clang downloaded by gclient runhooks
+is_clang = true
+
+# Linker
+use_lld = true
+
+# Proprietary codecs
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+
+# Widevine DRM
+enable_widevine = true
+
+# VA-API hardware video acceleration
+use_vaapi = true
+
+# Wayland and X11
+use_ozone = true
+ozone_platform_wayland = true
+ozone_platform_x11 = true
+
+# Sysroot — gclient runhooks downloads this too
+use_sysroot = true
+
+# No debug symbols — keeps binary small
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+
+# NaCl is deprecated
+enable_nacl = false
+
+# Google API keys
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
