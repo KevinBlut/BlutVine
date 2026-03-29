@@ -78,11 +78,21 @@ fetch_chromium() {
 
     cd "${_chrome_dir}"
 
-    # fetch handles .gclient creation and source checkout.
-    # --nohooks: skip hooks for now, we run them explicitly below.
-    # --no-history: skip git history, saves ~15GB and a lot of time.
-    echo "Fetching Chromium source (latest stable)..."
+    # Query the latest stable version that users are actually running
+    echo "Querying latest stable Chromium version..."
+    local version
+    version=$(curl -fsSL         "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1"         | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
+    echo "Latest stable: ${version}"
+
+    # fetch first to get .gclient and repo set up, then reset to stable tag
+    echo "Fetching Chromium source..."
     fetch --nohooks --no-history chromium
+
+    # Reset to the exact stable version tag instead of HEAD
+    echo "Checking out stable tag ${version}..."
+    cd "${_src_dir}"
+    git checkout "refs/tags/${version}" --
+    cd "${_chrome_dir}"
 
     # Install required system packages from the source tree itself
     echo "Installing Chromium system build dependencies..."
@@ -101,27 +111,33 @@ fetch_chromium() {
 # ---------------------------------------------------------------------------
 apply_blutvine_patches() {
     local stamp="${_src_dir}/.patched.stamp"
+
     if [ -f "${stamp}" ]; then
         echo "Patches already applied, skipping"
         return 0
     fi
+
     local series="${_patches_dir}/series"
     if [ ! -f "${series}" ]; then
         echo "ERROR: patch series file not found at ${series}" >&2
         exit 1
     fi
+
     echo "Applying BlutVine patches..."
     local patch_file
     while IFS= read -r patch_file || [ -n "${patch_file}" ]; do
         [[ -z "${patch_file}" || "${patch_file}" =~ ^[[:space:]]*# ]] && continue
+
         local full_path="${_patches_dir}/${patch_file}"
         if [ ! -f "${full_path}" ]; then
             echo "ERROR: patch not found: ${full_path}" >&2
             exit 1
         fi
+
         echo "  applying ${patch_file}"
-        patch -p1 --ignore-whitespace --ignore-space-change -d "${_src_dir}" < "${full_path}"
+        patch -Np1 -d "${_src_dir}" < "${full_path}"
     done < "${series}"
+
     touch "${stamp}"
     echo "All patches applied."
 }
