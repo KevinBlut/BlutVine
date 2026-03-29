@@ -101,33 +101,27 @@ fetch_chromium() {
 # ---------------------------------------------------------------------------
 apply_blutvine_patches() {
     local stamp="${_src_dir}/.patched.stamp"
-
     if [ -f "${stamp}" ]; then
         echo "Patches already applied, skipping"
         return 0
     fi
-
     local series="${_patches_dir}/series"
     if [ ! -f "${series}" ]; then
         echo "ERROR: patch series file not found at ${series}" >&2
         exit 1
     fi
-
     echo "Applying BlutVine patches..."
     local patch_file
     while IFS= read -r patch_file || [ -n "${patch_file}" ]; do
         [[ -z "${patch_file}" || "${patch_file}" =~ ^[[:space:]]*# ]] && continue
-
         local full_path="${_patches_dir}/${patch_file}"
         if [ ! -f "${full_path}" ]; then
             echo "ERROR: patch not found: ${full_path}" >&2
             exit 1
         fi
-
         echo "  applying ${patch_file}"
-        patch -p1 -d "${_src_dir}" < "${full_path}"
+        patch -p1 --ignore-whitespace --ignore-space-change -d "${_src_dir}" < "${full_path}"
     done < "${series}"
-
     touch "${stamp}"
     echo "All patches applied."
 }
