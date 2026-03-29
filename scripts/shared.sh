@@ -29,7 +29,7 @@ setup_paths() {
     _scripts_dir="${_patches_dir}/scripts"
     _src_dir="${_chrome_dir}/src"
     _out_dir="${_src_dir}/out/Default"
-    _depot_tools_dir="${_chrome_dir}/depot_tools"
+    _depot_tools_dir="${_root}/depot_tools"
 
     setup_arch
     mkdir -p "${_chrome_dir}"
