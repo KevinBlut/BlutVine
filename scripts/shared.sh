@@ -70,7 +70,6 @@ fetch_chromium() {
 
     if [ -f "${stamp}" ]; then
         echo "Chromium sources already present, skipping fetch"
-        export PATH="${_depot_tools_dir}:${PATH}"
         return 0
     fi
 
@@ -83,22 +82,22 @@ fetch_chromium() {
 
     cd "${_chrome_dir}"
 
-    # Write a .gclient file pinned to stable
-    python3 -c "
-content = '''solutions = [
+    # Write .gclient file
+    cat > "${_chrome_dir}/.gclient" <<GCLIENT
+solutions = [
   {
-    \"name\": \"src\",
-    \"url\": \"https://chromium.googlesource.com/chromium/src.git@${version}\",
-    \"managed\": False,
-    \"custom_deps\": {},
-    \"custom_vars\": {},
+    "name": "src",
+    "url": "https://chromium.googlesource.com/chromium/src.git@${version}",
+    "managed": False,
+    "custom_deps": {},
+    "custom_vars": {},
   },
 ]
-'''
-open('${_chrome_dir}/.gclient', 'w').write(content)
-"
+GCLIENT
 
-    # fetch --nohooks gets the source tree without running hooks yet
+    # Wipe any partial previous fetch (e.g. from a failed run) before starting clean
+    rm -rf "${_src_dir}"
+
     fetch --nohooks --no-history chromium
 
     # install-build-deps.sh installs required system packages
