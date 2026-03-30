@@ -86,13 +86,15 @@ fetch_chromium() {
         | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
     echo "Latest stable Chromium: ${version}"
 
-    # fetch at the specific stable version tag directly — no HEAD, no all-tags fetch
-    echo "Fetching Chromium ${version}..."
-    fetch --nohooks --no-history --revision "${version}" chromium
+    # fetch creates .gclient and does initial clone
+    echo "Fetching Chromium source..."
+    fetch --nohooks --no-history chromium
 
-    # Sync all deps to exactly this version
+    # Now sync to the exact stable version tag — this is what pins it to
+    # the user version instead of whatever HEAD fetch landed on
+    echo "Syncing to stable version ${version}..."
     cd "${_chrome_dir}"
-    gclient sync --nohooks --no-history
+    gclient sync --nohooks --no-history --revision "src@refs/tags/${version}"
 
     # Install required system packages from the source tree
     echo "Installing Chromium system build dependencies..."
