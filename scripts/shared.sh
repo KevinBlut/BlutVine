@@ -75,8 +75,7 @@ fetch_chromium() {
 
     # Wipe any partial state before starting clean
     rm -rf "${_src_dir}" "${_chrome_dir}/.gclient" "${_chrome_dir}/.gclient_entries"
-
-    cd "${_chrome_dir}"
+    mkdir -p "${_chrome_dir}"
 
     # Query the latest stable version users are actually running
     echo "Querying latest stable Chromium version..."
@@ -86,15 +85,24 @@ fetch_chromium() {
         | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
     echo "Latest stable Chromium: ${version}"
 
-    # fetch creates .gclient and does initial clone
-    echo "Fetching Chromium source..."
-    fetch --nohooks --no-history chromium
+    # Write .gclient pinned directly to the stable tag — gclient sync will
+    # clone ONLY this version, never touching HEAD at all
+    cat > "${_chrome_dir}/.gclient" <<GCLIENT
+solutions = [
+  {
+    "name": "src",
+    "url": "https://chromium.googlesource.com/chromium/src.git@refs/tags/${version}",
+    "managed": False,
+    "custom_deps": {},
+    "custom_vars": {},
+  },
+]
+GCLIENT
 
-    # Now sync to the exact stable version tag — this is what pins it to
-    # the user version instead of whatever HEAD fetch landed on
-    echo "Syncing to stable version ${version}..."
+    # This clones directly at the stable tag — no HEAD fetch, no wasted space
+    echo "Cloning Chromium ${version} (no history)..."
     cd "${_chrome_dir}"
-    gclient sync --nohooks --no-history --revision "src@refs/tags/${version}"
+    gclient sync --nohooks --no-history
 
     # Install required system packages from the source tree
     echo "Installing Chromium system build dependencies..."
