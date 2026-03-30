@@ -100,9 +100,23 @@ fetch_chromium() {
     echo "Installing Chromium system build dependencies..."
     sudo "${_src_dir}/build/install-build-deps.sh" --no-prompt
 
+    # gclient needs a .gclient config file to know what project this is.
+    # The tarball doesn't include one so we write it ourselves.
+    cat > "${_chrome_dir}/.gclient" <<GCLIENT
+solutions = [
+  {
+    "name": "src",
+    "url": "https://chromium.googlesource.com/chromium/src.git",
+    "managed": False,
+    "custom_deps": {},
+    "custom_vars": {},
+  },
+]
+GCLIENT
+
     # gclient runhooks downloads prebuilt clang, gn, rust, node, sysroot
     echo "Running gclient runhooks (downloads prebuilt toolchain)..."
-    cd "${_src_dir}"
+    cd "${_chrome_dir}"
     gclient runhooks
 
     touch "${stamp}"
