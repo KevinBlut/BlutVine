@@ -55,7 +55,12 @@ setup_depot_tools() {
     fi
 
     export PATH="${_depot_tools_dir}:${PATH}"
-    export DEPOT_TOOLS_UPDATE=0
+
+    # ✅ CRITICAL FIX: allow depot_tools to bootstrap itself
+    unset DEPOT_TOOLS_UPDATE
+
+    echo "Bootstrapping depot_tools (Python, CIPD, etc)..."
+    "${_depot_tools_dir}/update_depot_tools" || true
 }
 
 # ---------------------------------------------------------------------------
@@ -98,19 +103,14 @@ GCLIENT
     echo "Installing Chromium system build dependencies..."
     sudo "${_src_dir}/build/install-build-deps.sh" --no-prompt
 
-    echo "Running gclient runhooks (downloads prebuilt toolchain)..."
+    echo "Running gclient runhooks (downloads toolchain)..."
     cd "${_chrome_dir}"
     gclient runhooks
 
-    # ✅ FIX: Ensure Python toolchain exists (prevents python3_bin_reldir.txt error)
-    echo "Ensuring python3 toolchain exists..."
-    if [ ! -f "${_src_dir}/buildtools/python3/python3_bin_reldir.txt" ]; then
-        echo "Python toolchain missing — retrying gclient runhooks..."
-        gclient runhooks
-    fi
-
-    if [ ! -f "${_src_dir}/buildtools/python3/python3_bin_reldir.txt" ]; then
-        echo "ERROR: python3 toolchain still missing after retry!" >&2
+    # ✅ VERIFY depot_tools Python is now available
+    if [ ! -f "${_depot_tools_dir}/python3_bin_reldir.txt" ] && \
+       [ ! -f "${_src_dir}/buildtools/python3/python3_bin_reldir.txt" ]; then
+        echo "ERROR: depot_tools Python bootstrap failed!" >&2
         exit 1
     fi
 
@@ -189,9 +189,9 @@ setup_sccache() {
         echo "Installing sccache..."
         local triple
         case "${_host_arch}" in
-            x64)   triple="x86_64-unknown-linux-musl"  ;;
+            x64)   triple="x86_64-unknown-linux-musl" ;;
             arm64) triple="aarch64-unknown-linux-musl" ;;
-            *)     triple="x86_64-unknown-linux-musl"  ;;
+            *)     triple="x86_64-unknown-linux-musl" ;;
         esac
         local ver
         ver=$(curl -fsSL https://api.github.com/repos/mozilla/sccache/releases/latest \
