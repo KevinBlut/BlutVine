@@ -32,8 +32,7 @@ setup_paths() {
     _depot_tools_dir="${_root}/depot_tools"
 
     setup_arch
-    _dl_cache="${_chrome_dir}/download_cache"
-    mkdir -p "${_chrome_dir}" "${_dl_cache}"
+    mkdir -p "${_chrome_dir}"
 
     local sccache_cfg="${_scripts_dir}/sccache.sh"
     if [ -f "${sccache_cfg}" ]; then
@@ -70,49 +69,24 @@ fetch_chromium() {
     local stamp="${_src_dir}/.downloaded.stamp"
 
     if [ -f "${stamp}" ]; then
-        echo "Chromium sources already present, skipping download/unpack"
+        echo "Chromium sources already present, skipping fetch"
         return 0
     fi
 
-    echo "Querying latest stable Chromium version..."
-    local version
-    version=$(curl -fsSL \
-        "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1" \
-        | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
-    echo "Latest stable Chromium: ${version}"
+    # Wipe any partial state before starting clean
+    rm -rf "${_src_dir}" "${_chrome_dir}/.gclient" "${_chrome_dir}/.gclient_entries"
 
-    local tarball="chromium-${version}.tar.xz"
-    local url="https://commondatastorage.googleapis.com/chromium-browser-official/${tarball}"
-    local dest="${_dl_cache}/${tarball}"
+    cd "${_chrome_dir}"
 
-    if [ ! -f "${dest}" ]; then
-        echo "Downloading ${url} ..."
-        curl -fL --retry 5 --retry-delay 10 -o "${dest}" "${url}"
-    else
-        echo "Tarball already cached at ${dest}"
-    fi
-
-    echo "Unpacking ${tarball} into ${_src_dir} ..."
-    mkdir -p "${_src_dir}"
-    tar -xf "${dest}" -C "${_src_dir}" --strip-components=1
+    # fetch chromium creates a proper git repo + .gclient file, which is what
+    # gclient runhooks requires. The tarball approach cannot be used with
+    # gclient runhooks because tarballs have no .git directory.
+    echo "Fetching Chromium source (latest stable, no history)..."
+    fetch --nohooks --no-history chromium
 
     # Install required system packages from the source tree
     echo "Installing Chromium system build dependencies..."
     sudo "${_src_dir}/build/install-build-deps.sh" --no-prompt
-
-    # gclient needs a .gclient config file to know what project this is.
-    # The tarball doesn't include one so we write it ourselves.
-    cat > "${_chrome_dir}/.gclient" <<GCLIENT
-solutions = [
-  {
-    "name": "src",
-    "url": "https://chromium.googlesource.com/chromium/src.git",
-    "managed": False,
-    "custom_deps": {},
-    "custom_vars": {},
-  },
-]
-GCLIENT
 
     # gclient runhooks downloads prebuilt clang, gn, rust, node, sysroot
     echo "Running gclient runhooks (downloads prebuilt toolchain)..."
