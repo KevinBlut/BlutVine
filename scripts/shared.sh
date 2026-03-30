@@ -42,8 +42,6 @@ setup_paths() {
 
 # ---------------------------------------------------------------------------
 # setup_depot_tools
-#   Clones depot_tools if not present and puts it on PATH.
-#   This gives us fetch, gclient, gn, autoninja — the official tools.
 # ---------------------------------------------------------------------------
 setup_depot_tools() {
     if [ ! -d "${_depot_tools_dir}" ]; then
@@ -58,12 +56,15 @@ setup_depot_tools() {
 
     export PATH="${_depot_tools_dir}:${PATH}"
     export DEPOT_TOOLS_UPDATE=0
+
+    # ✅ FIX: bootstrap depot_tools Python environment
+    # This creates buildtools/python3/python3_bin_reldir.txt
+    echo "Bootstrapping depot_tools..."
+    gclient >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
 # fetch_chromium
-#   Uses depot_tools fetch + gclient runhooks to get the Chromium source and
-#   all prebuilt binaries: gn, clang, rust, node, sysroot.
 # ---------------------------------------------------------------------------
 fetch_chromium() {
     local stamp="${_src_dir}/.downloaded.stamp"
@@ -73,11 +74,9 @@ fetch_chromium() {
         return 0
     fi
 
-    # Wipe any partial state before starting clean
     rm -rf "${_src_dir}" "${_chrome_dir}/.gclient" "${_chrome_dir}/.gclient_entries"
     mkdir -p "${_chrome_dir}"
 
-    # Query the latest stable version users are actually running
     echo "Querying latest stable Chromium version..."
     local version
     version=$(curl -fsSL \
@@ -85,8 +84,6 @@ fetch_chromium() {
         | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
     echo "Latest stable Chromium: ${version}"
 
-    # Write .gclient pinned directly to the stable tag — gclient sync will
-    # clone ONLY this version, never touching HEAD at all
     cat > "${_chrome_dir}/.gclient" <<GCLIENT
 solutions = [
   {
@@ -99,16 +96,13 @@ solutions = [
 ]
 GCLIENT
 
-    # This clones directly at the stable tag — no HEAD fetch, no wasted space
     echo "Cloning Chromium ${version} (no history)..."
     cd "${_chrome_dir}"
     gclient sync --nohooks --no-history
 
-    # Install required system packages from the source tree
     echo "Installing Chromium system build dependencies..."
     sudo "${_src_dir}/build/install-build-deps.sh" --no-prompt
 
-    # gclient runhooks downloads prebuilt clang, gn, rust, node, sysroot
     echo "Running gclient runhooks (downloads prebuilt toolchain)..."
     cd "${_chrome_dir}"
     gclient runhooks
@@ -154,13 +148,10 @@ apply_blutvine_patches() {
 
 # ---------------------------------------------------------------------------
 # write_gn_args
-#   gclient runhooks downloaded Chromium's own clang, so we do NOT use the
-#   unbundle toolchain. Remove those lines from flags.linux.gn if present.
 # ---------------------------------------------------------------------------
 write_gn_args() {
     mkdir -p "${_out_dir}"
 
-    # Strip any unbundle toolchain lines — not needed with gclient clang
     grep -v "custom_toolchain\|host_toolchain" \
         "${_patches_dir}/flags.linux.gn" > "${_out_dir}/args.gn"
 
@@ -215,14 +206,11 @@ setup_sccache() {
     sleep 1
     sccache --show-stats || true
 
-    # cc_wrapper tells Chromium's bundled clang to use sccache
     echo "cc_wrapper = \"sccache\"" >> "${_out_dir}/args.gn"
 }
 
 # ---------------------------------------------------------------------------
 # gn_gen
-#   gclient runhooks placed gn at buildtools/linux64/gn — just use it.
-#   No bootstrap.py, no downloading, nothing to compile.
 # ---------------------------------------------------------------------------
 gn_gen() {
     cd "${_src_dir}"
