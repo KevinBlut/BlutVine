@@ -32,7 +32,8 @@ setup_paths() {
     _depot_tools_dir="${_root}/depot_tools"
 
     setup_arch
-    mkdir -p "${_chrome_dir}"
+    _dl_cache="${_chrome_dir}/download_cache"
+    mkdir -p "${_chrome_dir}" "${_dl_cache}"
 
     local sccache_cfg="${_scripts_dir}/sccache.sh"
     if [ -f "${sccache_cfg}" ]; then
@@ -69,32 +70,33 @@ fetch_chromium() {
     local stamp="${_src_dir}/.downloaded.stamp"
 
     if [ -f "${stamp}" ]; then
-        echo "Chromium sources already present, skipping fetch"
+        echo "Chromium sources already present, skipping download/unpack"
         return 0
     fi
 
-    # Wipe any partial previous fetch before starting clean
-    rm -rf "${_src_dir}"
-
-    cd "${_chrome_dir}"
-
-    # Query the latest stable version that users are actually running
     echo "Querying latest stable Chromium version..."
     local version
-    version=$(curl -fsSL         "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1"         | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
-    echo "Latest stable: ${version}"
+    version=$(curl -fsSL \
+        "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
+    echo "Latest stable Chromium: ${version}"
 
-    # fetch first to get .gclient and repo set up, then reset to stable tag
-    echo "Fetching Chromium source..."
-    fetch --nohooks --no-history chromium
+    local tarball="chromium-${version}.tar.xz"
+    local url="https://commondatastorage.googleapis.com/chromium-browser-official/${tarball}"
+    local dest="${_dl_cache}/${tarball}"
 
-    # Reset to the exact stable version tag instead of HEAD
-    echo "Checking out stable tag ${version}..."
-    cd "${_src_dir}"
-    git checkout "refs/tags/${version}" --
-    cd "${_chrome_dir}"
+    if [ ! -f "${dest}" ]; then
+        echo "Downloading ${url} ..."
+        curl -fL --retry 5 --retry-delay 10 -o "${dest}" "${url}"
+    else
+        echo "Tarball already cached at ${dest}"
+    fi
 
-    # Install required system packages from the source tree itself
+    echo "Unpacking ${tarball} into ${_src_dir} ..."
+    mkdir -p "${_src_dir}"
+    tar -xf "${dest}" -C "${_src_dir}" --strip-components=1
+
+    # Install required system packages from the source tree
     echo "Installing Chromium system build dependencies..."
     sudo "${_src_dir}/build/install-build-deps.sh" --no-prompt
 
