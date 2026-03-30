@@ -78,11 +78,21 @@ fetch_chromium() {
 
     cd "${_chrome_dir}"
 
-    # fetch chromium creates a proper git repo + .gclient file, which is what
-    # gclient runhooks requires. The tarball approach cannot be used with
-    # gclient runhooks because tarballs have no .git directory.
-    echo "Fetching Chromium source (latest stable, no history)..."
-    fetch --nohooks --no-history chromium
+    # Query the latest stable version users are actually running
+    echo "Querying latest stable Chromium version..."
+    local version
+    version=$(curl -fsSL \
+        "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1" \
+        | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
+    echo "Latest stable Chromium: ${version}"
+
+    # fetch at the specific stable version tag directly — no HEAD, no all-tags fetch
+    echo "Fetching Chromium ${version}..."
+    fetch --nohooks --no-history --revision "${version}" chromium
+
+    # Sync all deps to exactly this version
+    cd "${_chrome_dir}"
+    gclient sync --nohooks --no-history
 
     # Install required system packages from the source tree
     echo "Installing Chromium system build dependencies..."
