@@ -56,11 +56,6 @@ setup_depot_tools() {
 
     export PATH="${_depot_tools_dir}:${PATH}"
     export DEPOT_TOOLS_UPDATE=0
-
-    # ✅ FIX: bootstrap depot_tools Python environment
-    # This creates buildtools/python3/python3_bin_reldir.txt
-    echo "Bootstrapping depot_tools..."
-    gclient >/dev/null 2>&1 || true
 }
 
 # ---------------------------------------------------------------------------
@@ -106,6 +101,20 @@ GCLIENT
     echo "Running gclient runhooks (downloads prebuilt toolchain)..."
     cd "${_chrome_dir}"
     gclient runhooks
+
+    # ✅ FIX: Ensure Python toolchain exists (prevents python3_bin_reldir.txt error)
+    echo "Ensuring python3 toolchain exists..."
+    if [ ! -f "${_src_dir}/buildtools/python3/python3_bin_reldir.txt" ]; then
+        echo "Python toolchain missing — retrying gclient runhooks..."
+        gclient runhooks
+    fi
+
+    if [ ! -f "${_src_dir}/buildtools/python3/python3_bin_reldir.txt" ]; then
+        echo "ERROR: python3 toolchain still missing after retry!" >&2
+        exit 1
+    fi
+
+    echo "Python toolchain verified."
 
     touch "${stamp}"
 }
