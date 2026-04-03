@@ -1,0 +1,55 @@
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 021fc52836..ad17c17034 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -12,6 +12,11 @@
+ #include <utility>
+ 
+ #include "third_party/skia/src/core/SkFingerprintSeed.h"
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "third_party/blink/renderer/core/style/computed_style.h"
++#include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ 
+ #include "base/check.h"
+ #include "base/check_op.h"
+@@ -1167,9 +1172,37 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
+   TextDirection direction =
+       ToTextDirection(state.GetDirection(), host, computed_style);
+ 
+-  return MakeGarbageCollected<TextMetrics>(
++  TextMetrics* text_metrics = MakeGarbageCollected<TextMetrics>(
+       font, direction, state.GetTextBaseline(), state.GetTextAlign(), text,
+       host->GetPlainTextPainter());
++  
++  // Scale text metrics if enabled
++  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++  if (command_line->HasSwitch(switches::kFingerprint)) {
++    std::string seed_str = command_line->GetSwitchValueASCII(switches::kFingerprint);
++    if (const ComputedStyle* style = GetComputedStyle()) {
++      font_family = style->GetFontDescription()
++                        .Family()
++                        .FamilyName()
++                        .Utf8();
++    }
++
++    std::string combined_x = seed_str + font_family + "clientrects_noise_x";
++    uint32_t hash_val_x = std::hash<std::string>{}(combined_x);
++    double norm_x = (hash_val_x & 0xFFFFFFFF) / 4294967295.0 - 0.5;
++    double noise_x = norm_x * 0.00001;
++
++    if (HostAsOffscreenCanvas()) {
++      if (auto* window = DynamicTo<LocalDOMWindow>(GetTopExecutionContext())) {
++        if (window->GetFrame() && window->GetFrame()->GetDocument() && text.length() > 0) {
++          text_metrics->Shuffle(noise_x);
++        }
++      }
++    } else if (canvas && text.length() > 0) {
++      text_metrics->Shuffle(noise_x);
++    }
++  }
++  return text_metrics;
+ }
+ 
+ String BaseRenderingContext2D::lang() const {
