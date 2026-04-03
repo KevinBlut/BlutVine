@@ -124,37 +124,37 @@ GCLIENT
 # ---------------------------------------------------------------------------
 apply_blutvine_patches() {
     local stamp="${_src_dir}/.patched.stamp"
-
+ 
     if [ -f "${stamp}" ]; then
         echo "Patches already applied, skipping"
         return 0
     fi
-
+ 
     local series="${_patches_dir}/series"
     if [ ! -f "${series}" ]; then
         echo "ERROR: patch series file not found at ${series}" >&2
         exit 1
     fi
-
+ 
     echo "Applying BlutVine patches..."
     local patch_file
     while IFS= read -r patch_file || [ -n "${patch_file}" ]; do
         [[ -z "${patch_file}" || "${patch_file}" =~ ^[[:space:]]*# ]] && continue
-
+ 
         local full_path="${_patches_dir}/${patch_file}"
         if [ ! -f "${full_path}" ]; then
             echo "ERROR: patch not found: ${full_path}" >&2
             exit 1
         fi
-
+ 
         echo "  applying ${patch_file}"
         if [ "${patch_file}" = "012-canvas-fingerprint-skia.patch" ]; then
-            patch -Np1 -d "${_src_dir}/third_party/skia" < "${full_path}"
+            git -C "${_src_dir}/third_party/skia" apply -p2 "${full_path}"
         else
             patch -Np1 -d "${_src_dir}" < "${full_path}"
         fi
     done < "${series}"
-
+ 
     touch "${stamp}"
     echo "All patches applied."
 }
