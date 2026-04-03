@@ -1,8 +1,8 @@
-diff --git a/third_party/skia/src/core/SkFingerprintSeed.h b/third_party/skia/src/core/SkFingerprintSeed.h
+diff --git a/src/core/SkFingerprintSeed.h bsrc/core/SkFingerprintSeed.h
 new file mode 100644
 index 0000000..4ab77e2
 --- /dev/null
-+++ b/third_party/skia/src/core/SkFingerprintSeed.h
++++ b/src/core/SkFingerprintSeed.h
 @@ -0,0 +1,56 @@
 +#ifndef SK_FINGERPRINT_SEED_H
 +#define SK_FINGERPRINT_SEED_H
@@ -61,10 +61,10 @@ index 0000000..4ab77e2
 +
 +#endif  // SK_FINGERPRINT_SEED_H
 \ No newline at end of file
-diff --git a/third_party/skia/src/core/SkScan_AAAPath.cpp b/third_party/skia/src/core/SkScan_AAAPath.cpp
+diff --git a/src/core/SkScan_AAAPath.cpp b/src/core/SkScan_AAAPath.cpp
 index a1e389f..d940604 100644
---- a/third_party/skia/src/core/SkScan_AAAPath.cpp
-+++ b/third_party/skia/src/core/SkScan_AAAPath.cpp
+--- a/src/core/SkScan_AAAPath.cpp
++++ b/src/core/SkScan_AAAPath.cpp
 @@ -26,6 +26,8 @@
  #include "src/core/SkScan.h"
  #include "src/core/SkScanPriv.h"
