@@ -147,8 +147,18 @@ apply_blutvine_patches() {
             exit 1
         fi
 
-        echo "  applying ${patch_file}"
-        patch -Np1 -d "${_src_dir}" < "${full_path}"
+        # Determine the correct directory to apply the patch
+        local target_dir="${_src_dir}"
+        if [[ "${patch_file}" == "012-canvas-fingerprint-skia.patch" ]]; then
+            target_dir="${_src_dir}/third_party/skia"
+            echo "  applying ${patch_file} (targeting Skia)"
+        else
+            echo "  applying ${patch_file}"
+        fi
+
+        # Apply the patch using -d to specify the directory
+        patch -Np1 -d "${target_dir}" < "${full_path}"
+        
     done < "${series}"
 
     touch "${stamp}"
