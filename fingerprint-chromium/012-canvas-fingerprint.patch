@@ -1,0 +1,500 @@
+diff --git a/third_party/skia/src/core/SkFingerprintSeed.h b/third_party/skia/src/core/SkFingerprintSeed.h
+new file mode 100644
+index 0000000..4ab77e2
+--- /dev/null
++++ b/third_party/skia/src/core/SkFingerprintSeed.h
+@@ -0,0 +1,56 @@
++#ifndef SK_FINGERPRINT_SEED_H
++#define SK_FINGERPRINT_SEED_H
++
++#include <cstdint>
++#include <vector>
++
++// GPU class constants
++constexpr uint8_t kSkFingerprintGpuClassNvidia = 0;
++constexpr uint8_t kSkFingerprintGpuClassIntel  = 1;
++constexpr uint8_t kSkFingerprintGpuClassApple  = 2;
++
++// Stores one AA pixel's position and our seed-modified coverage value
++struct SkFingerprintPixel {
++    int     x;
++    int     y;
++    uint8_t coverage;  // our modified coverage from blitAntiH
++};
++
++inline thread_local uint32_t gSkFingerprintSeed                        = 0;
++inline thread_local uint8_t  gSkFingerprintGpuClass                    = kSkFingerprintGpuClassNvidia;
++inline thread_local std::vector<SkFingerprintPixel> gSkFingerprintPixels;
++
++inline void SkSetFingerprintSeed(uint32_t seed, uint8_t gpu_class) {
++    gSkFingerprintSeed     = seed;
++    gSkFingerprintGpuClass = gpu_class;
++    gSkFingerprintPixels.clear();
++}
++
++inline uint32_t SkGetFingerprintSeed() {
++    return gSkFingerprintSeed;
++}
++
++inline uint8_t SkGetFingerprintGpuClass() {
++    return gSkFingerprintGpuClass;
++}
++
++inline void SkStoreFingerprintPixel(int x, int y, uint8_t coverage) {
++    gSkFingerprintPixels.push_back({x, y, coverage});
++}
++
++inline const std::vector<SkFingerprintPixel>& SkGetFingerprintPixels() {
++    return gSkFingerprintPixels;
++}
++
++inline void SkClearFingerprintSeed() {
++    gSkFingerprintSeed     = 0;
++    gSkFingerprintGpuClass = kSkFingerprintGpuClassNvidia;
++    // do NOT clear gSkFingerprintPixels here — it must persist until
++    // getImageDataInternal reads and corrects the pixel buffer
++}
++
++inline void SkClearFingerprintPixels() {
++    gSkFingerprintPixels.clear();
++}
++
++#endif  // SK_FINGERPRINT_SEED_H
+\ No newline at end of file
+diff --git a/third_party/skia/src/core/SkScan_AAAPath.cpp b/third_party/skia/src/core/SkScan_AAAPath.cpp
+index a1e389f..d940604 100644
+--- a/third_party/skia/src/core/SkScan_AAAPath.cpp
++++ b/third_party/skia/src/core/SkScan_AAAPath.cpp
+@@ -26,6 +26,8 @@
+ #include "src/core/SkScan.h"
+ #include "src/core/SkScanPriv.h"
+ 
++#include "src/core/SkFingerprintSeed.h"
++
+ #include <algorithm>
+ #include <cstdint>
+ #include <cstring>
+@@ -232,14 +234,121 @@ void MaskAdditiveBlitter::blitAntiH(int x, int y, const SkAlpha antialias[], int
+ 
+ void MaskAdditiveBlitter::blitAntiH(int x, int y, SkAlpha alpha) {
+     SkASSERT(x >= fMask.fBounds.fLeft - 1);
++
++    uint32_t seed = SkGetFingerprintSeed();
++    if (seed != 0 && alpha > 0 && alpha < 255) {
++        uint32_t h = seed;
++        h ^= static_cast<uint32_t>(x) * 2654435761u;
++        h ^= static_cast<uint32_t>(y) * 2246822519u;
++        h ^= h >> 16;
++        h *= 0x45d9f3bu;
++        h ^= h >> 16;
++
++        uint8_t gpu_class = SkGetFingerprintGpuClass();
++        uint32_t mag_roll = h & 0xFF;
++        uint8_t mag = 0;
++
++        if (gpu_class == kSkFingerprintGpuClassIntel) {
++            if (mag_roll >= 80) {
++                mag = 1;
++            }
++        } else if (gpu_class == kSkFingerprintGpuClassApple) {
++            if (mag_roll < 180) {
++                mag = 1;
++            } else if (mag_roll < 248) {
++                mag = 2;
++            } else {
++                mag = 3;
++            }
++        } else {
++            // NVIDIA/AMD discrete: 82% ±1, 18% ±2
++            if (mag_roll < 210) {
++                mag = 1;
++            } else {
++                mag = 2;
++            }
++        }
++
++        if (mag > 0) {
++            bool add = (h >> 8) & 1;
++            int new_alpha = add
++                ? static_cast<int>(alpha) + mag
++                : static_cast<int>(alpha) - mag;
++
++            if (new_alpha < 1)   new_alpha = 1;
++            if (new_alpha > 254) new_alpha = 254;
++
++            alpha = static_cast<SkAlpha>(new_alpha);
++        }
++
++        // Store position and our modified coverage for later RGBA correction
++        SkStoreFingerprintPixel(x, y, alpha);
++    }
++
+     add_alpha(&this->getRow(y)[x], alpha);
+ }
+ 
+ void MaskAdditiveBlitter::blitAntiH(int x, int y, int width, SkAlpha alpha) {
+     SkASSERT(x >= fMask.fBounds.fLeft - 1);
+     uint8_t* row = this->getRow(y);
+-    for (int i = 0; i < width; ++i) {
+-        add_alpha(&row[x + i], alpha);
++
++    uint32_t seed = SkGetFingerprintSeed();
++    if (seed != 0 && alpha > 0 && alpha < 255) {
++        uint8_t gpu_class = SkGetFingerprintGpuClass();
++
++        for (int i = 0; i < width; ++i) {
++            uint32_t h = seed;
++            h ^= static_cast<uint32_t>(x + i) * 2654435761u;
++            h ^= static_cast<uint32_t>(y)      * 2246822519u;
++            h ^= h >> 16;
++            h *= 0x45d9f3bu;
++            h ^= h >> 16;
++
++            uint32_t mag_roll = h & 0xFF;
++            uint8_t mag = 0;
++
++            if (gpu_class == kSkFingerprintGpuClassIntel) {
++                if (mag_roll >= 80) {
++                    mag = 1;
++                }
++            } else if (gpu_class == kSkFingerprintGpuClassApple) {
++                if (mag_roll < 180) {
++                    mag = 1;
++                } else if (mag_roll < 248) {
++                    mag = 2;
++                } else {
++                    mag = 3;
++                }
++            } else {
++                if (mag_roll < 210) {
++                    mag = 1;
++                } else {
++                    mag = 2;
++                }
++            }
++
++            SkAlpha modified = alpha;
++            if (mag > 0) {
++                bool add = (h >> 8) & 1;
++                int new_alpha = add
++                    ? static_cast<int>(alpha) + mag
++                    : static_cast<int>(alpha) - mag;
++
++                if (new_alpha < 1)   new_alpha = 1;
++                if (new_alpha > 254) new_alpha = 254;
++
++                modified = static_cast<SkAlpha>(new_alpha);
++            }
++
++            // Store position and modified coverage for RGBA correction
++            SkStoreFingerprintPixel(x + i, y, modified);
++
++            add_alpha(&row[x + i], modified);
++        }
++    } else {
++        for (int i = 0; i < width; ++i) {
++            add_alpha(&row[x + i], alpha);
++        }
+     }
+ }
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 07df84ea52..f0551b3353 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -11,6 +11,8 @@
+ #include <optional>
+ #include <utility>
+ 
++#include "third_party/skia/src/core/SkFingerprintSeed.h"
++
+ #include "base/check.h"
+ #include "base/check_op.h"
+ #include "base/location.h"
+@@ -507,8 +509,6 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+   if (snapshot) {
+     gfx::Rect snapshot_rect{snapshot->Size()};
+     if (!snapshot_rect.Intersects(image_data_rect)) {
+-      // If the readback area is completely out of bounds just return a zero
+-      // initialized buffer. No point in trying to perform out of bounds read.
+       CHECK(validate_and_create_params.zero_initialize);
+       return image_data;
+     }
+@@ -523,6 +523,77 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+           snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
+       DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
+     }
++
++    // Correct AA pixels to match our seed-modified coverage values exactly.
++    // This removes the GPU's own natural variance which was layered on top
++    // of our coverage offset, ensuring the reported output is purely our
++    // seed-modified result with no double modification.
++    const std::vector<SkFingerprintPixel>& fp_pixels = SkGetFingerprintPixels();
++    if (!fp_pixels.empty() && read_pixels_successful) {
++      uint8_t* rgba = static_cast<uint8_t*>(image_data_pixmap.writable_addr());
++      const size_t row_bytes = image_data_pixmap.rowBytes();
++      const int canvas_w = image_data_pixmap.width();
++      const int canvas_h = image_data_pixmap.height();
++
++      for (const SkFingerprintPixel& fp : fp_pixels) {
++        // Adjust for the readback origin (sx, sy)
++        int px = fp.x - sx;
++        int py = fp.y - sy;
++
++        // Skip pixels outside the readback region
++        if (px < 0 || py < 0 || px >= canvas_w || py >= canvas_h)
++          continue;
++
++        uint8_t* pixel = rgba + py * row_bytes + px * 4;
++
++        // Current GPU-rendered RGBA for this pixel
++        uint8_t gpu_r = pixel[0];
++        uint8_t gpu_g = pixel[1];
++        uint8_t gpu_b = pixel[2];
++        uint8_t gpu_a = pixel[3];
++
++        // Our coverage value — what the pixel SHOULD represent
++        uint8_t our_cov = fp.coverage;  // 1-254, genuine AA range
++
++        // Find the paint color and background color by examining neighbors.
++        // The nearest fully opaque pixel gives paint color.
++        // The nearest fully transparent pixel gives background color.
++        // For the correction we use a simpler approximation:
++        // Since GPU variance on coverage is only ±1-2 units and our coverage
++        // is already close to the GPU's input, the RGBA difference is minimal.
++        // We scale the GPU's RGB proportionally to our coverage vs what the
++        // GPU likely used, which corrects the variance contribution cleanly.
++
++        // Estimate GPU's actual coverage from its RGBA output.
++        // Use the alpha channel as the proxy for coverage since in standard
++        // canvas 2D rendering, alpha directly reflects coverage for AA pixels.
++        if (gpu_a == 0 || gpu_a == 255) {
++          // Solid or fully transparent — not an AA pixel we should touch
++          continue;
++        }
++
++        // gpu_a is the GPU's rendered alpha which directly encodes coverage.
++        // Scale RGB channels proportionally from gpu_a to our_cov.
++        // This removes the GPU variance and replaces with our exact coverage.
++        float scale = static_cast<float>(our_cov) /
++                      static_cast<float>(gpu_a);
++
++        auto clamp8 = [](float v) -> uint8_t {
++          int i = static_cast<int>(v + 0.5f);
++          if (i < 0)   return 0;
++          if (i > 255) return 255;
++          return static_cast<uint8_t>(i);
++        };
++
++        pixel[0] = clamp8(gpu_r * scale);
++        pixel[1] = clamp8(gpu_g * scale);
++        pixel[2] = clamp8(gpu_b * scale);
++        pixel[3] = our_cov;  // replace alpha directly with our coverage
++      }
++
++      // Done — clear stored pixels so next readback starts fresh
++      SkClearFingerprintPixels();
++    }
+   }
+ 
+   return image_data;
+diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.cc b/third_party/blink/renderer/platform/graphics/graphics_context.cc
+index 362b5ab4a0..672220d377 100644
+--- a/third_party/blink/renderer/platform/graphics/graphics_context.cc
++++ b/third_party/blink/renderer/platform/graphics/graphics_context.cc
+@@ -29,6 +29,11 @@
+ #include <memory>
+ #include <optional>
+ 
++#include "base/command_line.h"
++#include "base/strings/string_number_conversions.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "third_party/skia/src/core/SkFingerprintSeed.h"
++
+ #include "base/logging.h"
+ #include "build/build_config.h"
+ #include "cc/paint/color_filter.h"
+@@ -627,6 +632,33 @@ cc::PaintFlags::FilterQuality GraphicsContext::ComputeFilterQuality(
+       std::min(resampling, ImageInterpolationQuality()));
+ }
+ 
++void SetupCanvasFingerprintSeed() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprint))
++        return;
++
++    uint32_t seed = 0;
++    base::StringToUint(
++        cmd->GetSwitchValueASCII(switches::kFingerprint), &seed);
++    if (seed == 0)
++        return;
++
++    // Derive GPU class from renderer string
++    uint8_t gpu_class = kSkFingerprintGpuClassNvidia;
++    if (cmd->HasSwitch(switches::kFingerprintGpuRenderer)) {
++        std::string renderer = cmd->GetSwitchValueASCII(
++            switches::kFingerprintGpuRenderer);
++        if (renderer.find("Intel") != std::string::npos) {
++            gpu_class = kSkFingerprintGpuClassIntel;
++        } else if (renderer.find("Apple") != std::string::npos) {
++            gpu_class = kSkFingerprintGpuClassApple;
++        }
++        // NVIDIA, AMD, or anything else defaults to kSkFingerprintGpuClassNvidia
++    }
++
++    SkSetFingerprintSeed(seed, gpu_class);
++}
++
+ void GraphicsContext::DrawImageTiled(
+     Image& image,
+     const gfx::RectF& dest_rect,
+@@ -664,29 +696,36 @@ void GraphicsContext::DrawLine(const gfx::PointF& from,
+ void GraphicsContext::DrawOval(const SkRect& oval,
+                                const cc::PaintFlags& flags,
+                                const AutoDarkMode& auto_dark_mode) {
+-  DCHECK(canvas_);
+-  canvas_->drawOval(oval, DarkModeFlags(this, auto_dark_mode, flags));
++    DCHECK(canvas_);
++    SetupCanvasFingerprintSeed();
++    canvas_->drawOval(oval, DarkModeFlags(this, auto_dark_mode, flags));
++    SkClearFingerprintSeed();
+ }
+ 
+ void GraphicsContext::DrawPath(const SkPath& path,
+                                const cc::PaintFlags& flags,
+                                const AutoDarkMode& auto_dark_mode) {
+-  DCHECK(canvas_);
+-  canvas_->drawPath(path, DarkModeFlags(this, auto_dark_mode, flags));
++    DCHECK(canvas_);
++    SetupCanvasFingerprintSeed();
++    canvas_->drawPath(path, DarkModeFlags(this, auto_dark_mode, flags));
++    SkClearFingerprintSeed();
+ }
+ 
+ void GraphicsContext::DrawRect(const SkRect& rect,
+                                const cc::PaintFlags& flags,
+                                const AutoDarkMode& auto_dark_mode) {
+-  DCHECK(canvas_);
+-  canvas_->drawRect(rect, DarkModeFlags(this, auto_dark_mode, flags));
++    DCHECK(canvas_);
++    SetupCanvasFingerprintSeed();
++    canvas_->drawRect(rect, DarkModeFlags(this, auto_dark_mode, flags));
++    SkClearFingerprintSeed();
+ }
+-
+ void GraphicsContext::DrawRRect(const SkRRect& rrect,
+                                 const cc::PaintFlags& flags,
+                                 const AutoDarkMode& auto_dark_mode) {
+-  DCHECK(canvas_);
+-  canvas_->drawRRect(rrect, DarkModeFlags(this, auto_dark_mode, flags));
++    DCHECK(canvas_);
++    SetupCanvasFingerprintSeed();
++    canvas_->drawRRect(rrect, DarkModeFlags(this, auto_dark_mode, flags));
++    SkClearFingerprintSeed();
+ }
+ 
+ void GraphicsContext::FillPath(const Path& path_to_fill,
+@@ -826,35 +865,40 @@ void GraphicsContext::FillDRRect(const FloatRoundedRect& outer,
+                                  const FloatRoundedRect& inner,
+                                  const Color& color,
+                                  const AutoDarkMode& auto_dark_mode) {
+-  DCHECK(canvas_);
+-
+-  const cc::PaintFlags& fill_flags = ImmutableState()->FillFlags();
+-  const SkColor4f sk_color = color.toSkColor4f();
+-  if (!IsSimpleDRRect(outer, inner)) {
+-    if (sk_color == fill_flags.getColor4f()) {
+-      canvas_->drawDRRect(SkRRect(outer), SkRRect(inner),
+-                          DarkModeFlags(this, auto_dark_mode, fill_flags));
+-    } else {
+-      cc::PaintFlags flags(fill_flags);
+-      flags.setColor(sk_color);
+-      canvas_->drawDRRect(SkRRect(outer), SkRRect(inner),
+-                          DarkModeFlags(this, auto_dark_mode, flags));
++    DCHECK(canvas_);
++
++    const cc::PaintFlags& fill_flags = ImmutableState()->FillFlags();
++    const SkColor4f sk_color = color.toSkColor4f();
++    if (!IsSimpleDRRect(outer, inner)) {
++        if (sk_color == fill_flags.getColor4f()) {
++            SetupCanvasFingerprintSeed();
++            canvas_->drawDRRect(SkRRect(outer), SkRRect(inner),
++                                DarkModeFlags(this, auto_dark_mode, fill_flags));
++            SkClearFingerprintSeed();
++        } else {
++            cc::PaintFlags flags(fill_flags);
++            flags.setColor(sk_color);
++            SetupCanvasFingerprintSeed();
++            canvas_->drawDRRect(SkRRect(outer), SkRRect(inner),
++                                DarkModeFlags(this, auto_dark_mode, flags));
++            SkClearFingerprintSeed();
++        }
++        return;
+     }
+-    return;
+-  }
+ 
+-  // We can draw this as a stroked rrect.
+-  float stroke_width = inner.Rect().x() - outer.Rect().x();
+-  SkRRect stroke_r_rect(outer);
+-  stroke_r_rect.inset(stroke_width / 2, stroke_width / 2);
++    float stroke_width = inner.Rect().x() - outer.Rect().x();
++    SkRRect stroke_r_rect(outer);
++    stroke_r_rect.inset(stroke_width / 2, stroke_width / 2);
+ 
+-  cc::PaintFlags stroke_flags(fill_flags);
+-  stroke_flags.setColor(sk_color);
+-  stroke_flags.setStyle(cc::PaintFlags::kStroke_Style);
+-  stroke_flags.setStrokeWidth(stroke_width);
++    cc::PaintFlags stroke_flags(fill_flags);
++    stroke_flags.setColor(sk_color);
++    stroke_flags.setStyle(cc::PaintFlags::kStroke_Style);
++    stroke_flags.setStrokeWidth(stroke_width);
+ 
+-  canvas_->drawRRect(stroke_r_rect,
+-                     DarkModeFlags(this, auto_dark_mode, stroke_flags));
++    SetupCanvasFingerprintSeed();
++    canvas_->drawRRect(stroke_r_rect,
++                       DarkModeFlags(this, auto_dark_mode, stroke_flags));
++    SkClearFingerprintSeed();
+ }
+ 
+ void GraphicsContext::FillRectWithContouredHole(
+@@ -862,20 +906,24 @@ void GraphicsContext::FillRectWithContouredHole(
+     const ContouredRect& contoured_hole_rect,
+     const Color& color,
+     const AutoDarkMode& auto_dark_mode) {
+-  cc::PaintFlags flags(ImmutableState()->FillFlags());
+-  flags.setColor(color.toSkColor4f());
+-  const DarkModeFlags dark_mode_flags(this, auto_dark_mode, flags);
+-  if (contoured_hole_rect.HasRoundCurvature()) {
+-    canvas_->drawDRRect(SkRRect::MakeRect(gfx::RectFToSkRect(rect)),
+-                        SkRRect(contoured_hole_rect.AsRoundedRect()),
+-                        dark_mode_flags);
+-  } else {
+-    SkPath path;
+-    CHECK(Op(SkPath::Rect(gfx::RectFToSkRect(rect)),
+-             contoured_hole_rect.GetPath().GetSkPath(), kDifference_SkPathOp,
+-             &path));
+-    canvas_->drawPath(path, dark_mode_flags);
+-  }
++    cc::PaintFlags flags(ImmutableState()->FillFlags());
++    flags.setColor(color.toSkColor4f());
++    const DarkModeFlags dark_mode_flags(this, auto_dark_mode, flags);
++    if (contoured_hole_rect.HasRoundCurvature()) {
++        SetupCanvasFingerprintSeed();
++        canvas_->drawDRRect(SkRRect::MakeRect(gfx::RectFToSkRect(rect)),
++                            SkRRect(contoured_hole_rect.AsRoundedRect()),
++                            dark_mode_flags);
++        SkClearFingerprintSeed();
++    } else {
++        SkPath path;
++        CHECK(Op(SkPath::Rect(gfx::RectFToSkRect(rect)),
++                 contoured_hole_rect.GetPath().GetSkPath(), kDifference_SkPathOp,
++                 &path));
++        SetupCanvasFingerprintSeed();
++        canvas_->drawPath(path, dark_mode_flags);
++        SkClearFingerprintSeed();
++    }
+ }
+ 
+ void GraphicsContext::FillEllipse(const gfx::RectF& ellipse,
