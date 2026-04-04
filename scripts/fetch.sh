@@ -12,7 +12,7 @@ sudo systemctl daemon-reexec 2>/dev/null || true
 setup_paths
 setup_depot_tools
 fetch_chromium
-apply_blutvine_patches
+#apply_blutvine_patches
 
 echo ""
 echo "Done. Source is at: ${_src_dir}"
