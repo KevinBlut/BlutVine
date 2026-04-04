@@ -149,7 +149,7 @@ apply_blutvine_patches() {
  
         echo "  applying ${patch_file}"
         if [ "${patch_file}" = "012-canvas-fingerprint-skia.patch" ]; then
-            patch -Np1 -d "${_src_dir}/third_party/skia" < "${full_path}"
+            patch -Np1 -F3 --ignore-whitespace -d "${_src_dir}/third_party/skia" < "${full_path}"
         else
             patch -Np1 -d "${_src_dir}" < "${full_path}"
         fi
