@@ -1,4 +1,4 @@
-diff --git a/src/core/SkFingerprintSeed.h bsrc/core/SkFingerprintSeed.h
+diff --git a/src/core/SkFingerprintSeed.h b/src/core/SkFingerprintSeed.h
 new file mode 100644
 index 0000000..4ab77e2
 --- /dev/null
