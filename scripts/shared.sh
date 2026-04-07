@@ -70,52 +70,70 @@ fetch_chromium() {
     local stamp="${_src_dir}/.downloaded.stamp"
 
     if [ -f "${stamp}" ]; then
-        echo "Chromium sources already present, skipping fetch"
+        echo "Chromium sources already present, skipping fetch."
         return 0
     fi
 
-    rm -rf "${_src_dir}" "${_chrome_dir}/.gclient" "${_chrome_dir}/.gclient_entries"
+    # Allow overriding the version via env variable (e.g., CHROMIUM_VERSION=145.0.0.0)
+    local target_version="${CHROMIUM_VERSION:-}"
+
+    if [ -z "${target_version}" ]; then
+        echo "Querying latest stable Chromium version..."
+        target_version=$(curl -fsSL \
+            "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
+    fi
+
+    echo "Target Chromium version: ${target_version}"
+
+    # Clean previous incomplete states
+    if [ -d "${_src_dir}" ]; then
+        echo "Removing old src directory to ensure a clean fetch..."
+        rm -rf "${_src_dir}" "${_chrome_dir}/.gclient"*
+    fi
+    
     mkdir -p "${_chrome_dir}"
+    cd "${_chrome_dir}"
 
-    echo "Querying latest stable Chromium version..."
-    local version
-    version=$(curl -fsSL \
-        "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1" \
-        | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
-    echo "Latest stable Chromium: ${version}"
-
-    cat > "${_chrome_dir}/.gclient" <<GCLIENT
+    cat > ".gclient" <<EOF
 solutions = [
   {
     "name": "src",
-    "url": "https://chromium.googlesource.com/chromium/src.git@refs/tags/${version}",
+    "url": "https://chromium.googlesource.com/chromium/src.git@refs/tags/${target_version}",
     "managed": False,
     "custom_deps": {},
     "custom_vars": {},
   },
 ]
-GCLIENT
+EOF
 
-    echo "Cloning Chromium ${version} (no history)..."
-    cd "${_chrome_dir}"
-    gclient sync --nohooks --no-history
-
-    echo "Installing Chromium system build dependencies..."
-    sudo "${_src_dir}/build/install-build-deps.sh" --no-prompt
-
-    echo "Running gclient runhooks (downloads toolchain)..."
-    cd "${_chrome_dir}"
-    gclient runhooks
-
-    # ✅ VERIFY depot_tools Python is now available
-    if [ ! -f "${_depot_tools_dir}/python3_bin_reldir.txt" ] && \
-       [ ! -f "${_src_dir}/buildtools/python3/python3_bin_reldir.txt" ]; then
-        echo "ERROR: depot_tools Python bootstrap failed!" >&2
+    echo "Syncing Chromium ${target_version} (shallow clone)..."
+    if ! gclient sync --nohooks --no-history; then
+        echo "ERROR: gclient sync failed." >&2
         exit 1
     fi
 
-    echo "Python toolchain verified."
+    echo "Installing Chromium system build dependencies..."
+    if [ -f "${_src_dir}/build/install-build-deps.sh" ]; then
+        sudo "${_src_dir}/build/install-build-deps.sh" --no-prompt
+    else
+        echo "WARNING: install-build-deps.sh not found." >&2
+    fi
 
+    echo "Running gclient runhooks to download toolchains..."
+    if ! gclient runhooks; then
+        echo "ERROR: gclient runhooks failed." >&2
+        exit 1
+    fi
+
+    # Verify depot_tools Python bootstrap
+    if [ ! -f "${_depot_tools_dir}/python3_bin_reldir.txt" ] && \
+       [ ! -f "${_src_dir}/buildtools/python3/python3_bin_reldir.txt" ]; then
+        echo "ERROR: depot_tools Python bootstrap failed! Check depot_tools installation." >&2
+        exit 1
+    fi
+
+    echo "Chromium ${target_version} fetch and toolchain verification complete."
     touch "${stamp}"
 }
 
