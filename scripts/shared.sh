@@ -90,9 +90,7 @@ solutions = [
     "name": "src",
     "url": "https://chromium.googlesource.com/chromium/src.git@refs/tags/${version}",
     "managed": False,
-    "custom_deps": {
-        "src/third_party/freetype/src": None,
-    },
+    "custom_deps": {},
     "custom_vars": {},
   },
 ]
