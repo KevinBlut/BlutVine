@@ -88,11 +88,9 @@ fetch_chromium() {
 solutions = [
   {
     "name": "src",
-    "url": "https://github.com/chromium/chromium.git@refs/tags/${version}",
+    "url": "https://chromium.googlesource.com/chromium/src.git@refs/tags/${version}",
     "managed": False,
-    "custom_deps": {
-        "src/third_party/freetype/src": None,
-    },
+    "custom_deps": {},
     "custom_vars": {},
   },
 ]
@@ -109,6 +107,7 @@ GCLIENT
     cd "${_chrome_dir}"
     gclient runhooks
 
+    # ✅ VERIFY depot_tools Python is now available
     if [ ! -f "${_depot_tools_dir}/python3_bin_reldir.txt" ] && \
        [ ! -f "${_src_dir}/buildtools/python3/python3_bin_reldir.txt" ]; then
         echo "ERROR: depot_tools Python bootstrap failed!" >&2
