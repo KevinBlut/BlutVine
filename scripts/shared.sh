@@ -142,39 +142,36 @@ EOF
 # ---------------------------------------------------------------------------
 apply_blutvine_patches() {
     local stamp="${_src_dir}/.patched.stamp"
- 
-    if [ -f "${stamp}" ]; then
-        echo "Patches already applied, skipping"
-        return 0
-    fi
- 
+    [ -f "${stamp}" ] && { echo "Patches already applied"; return 0; }
+
     local series="${_patches_dir}/series"
-    if [ ! -f "${series}" ]; then
-        echo "ERROR: patch series file not found at ${series}" >&2
-        exit 1
-    fi
- 
     echo "Applying BlutVine patches..."
-    local patch_file
-    while IFS= read -r patch_file || [ -n "${patch_file}" ]; do
+
+    while IFS= read -u 3 -r patch_file || [ -n "${patch_file}" ]; do
         [[ -z "${patch_file}" || "${patch_file}" =~ ^[[:space:]]*# ]] && continue
-    
         local full_path="${_patches_dir}/${patch_file}"
-        if [ ! -f "${full_path}" ]; then
-            echo "ERROR: patch not found: ${full_path}" >&2
-            exit 1
-        fi
-    
+        
         echo "  applying ${patch_file}"
-        if [ "${patch_file}" = "012-canvas-fingerprint-skia.patch" ]; then
-            (cd "${_src_dir}/third_party/skia" && patch -Np1 -F3 --ignore-whitespace --force --no-backup-if-mismatch < "${full_path}") <&3
+
+        if [[ "${patch_file}" == *"skia.patch" ]]; then
+            # Navigate to skia, apply, then jump back to src
+            cd "${_src_dir}/third_party/skia"
+            if ! patch -p1 -F3 --ignore-whitespace < "${full_path}"; then
+                echo "FAILED: Skia patch ${patch_file}" >&2
+                exit 1
+            fi
+            cd "${_src_dir}"
         else
-            patch -Np1 -d "${_src_dir}" < "${full_path}" <&3
+            # Standard patches applied from src root
+            if ! patch -p1 -d "${_src_dir}" -F3 --ignore-whitespace < "${full_path}"; then
+                echo "FAILED: Standard patch ${patch_file}" >&2
+                exit 1
+            fi
         fi
-    done 3</dev/null < "${series}"
- 
+    done 3< "${series}"
+
     touch "${stamp}"
-    echo "All patches applied."
+    echo "All patches applied successfully."
 }
 
 # ---------------------------------------------------------------------------
