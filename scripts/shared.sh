@@ -84,11 +84,9 @@ fetch_chromium() {
         | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
     echo "Latest stable Chromium: ${version}"
 
-    # Redirect googlesource URLs to GitHub mirror to avoid 403 blocks
-    git config --global url."https://github.com/chromium/".insteadOf \
-        "https://chromium.googlesource.com/chromium/"
-    git config --global url."https://github.com/".insteadOf \
-        "https://chromium.googlesource.com/"
+    # Redirect Chromium subrepo fetches to GitHub AFTER depot_tools is set up
+    git config --global url."https://github.com/chromium/chromium/".insteadOf \
+        "https://chromium.googlesource.com/chromium/src/"
 
     cat > "${_chrome_dir}/.gclient" <<GCLIENT
 solutions = [
