@@ -1,0 +1,240 @@
+diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
+index a84e205303..c8a926ec05 100644
+--- a/components/ungoogled/fingerprint_data.h
++++ b/components/ungoogled/fingerprint_data.h
+@@ -180,6 +180,44 @@ constexpr GpuModelInfo kGpuModels[] = {
+ 
+ constexpr size_t kGpuModelCount = sizeof(kGpuModels) / sizeof(kGpuModels[0]);
+ 
++// =============================================================================
++// WebGL GPU Limits
++// =============================================================================
++
++struct GpuLimits {
++    int   max_texture_size;
++    int   max_viewport_dims[2];
++    int   max_varying_vectors;
++    int   max_vertex_uniform_vectors;
++    float aliased_line_width_range[2];
++};
++
++// NVIDIA/AMD discrete on Windows ANGLE/D3D11
++constexpr GpuLimits kGpuLimitsNvidia = {
++    32768,          // MAX_TEXTURE_SIZE
++    {32768, 32768}, // MAX_VIEWPORT_DIMS
++    30,             // MAX_VARYING_VECTORS
++    4096,           // MAX_VERTEX_UNIFORM_VECTORS
++    {1.0f, 1.0f}   // ALIASED_LINE_WIDTH_RANGE — Windows ANGLE always [1,1]
++};
++
++// Intel integrated on Windows ANGLE/D3D11
++constexpr GpuLimits kGpuLimitsIntel = {
++    16384,          // MAX_TEXTURE_SIZE
++    {16384, 16384}, // MAX_VIEWPORT_DIMS
++    30,             // MAX_VARYING_VECTORS
++    4096,           // MAX_VERTEX_UNIFORM_VECTORS
++    {1.0f, 1.0f}   // ALIASED_LINE_WIDTH_RANGE — Windows ANGLE always [1,1]
++};
++
++// Apple Silicon via Metal — same limits as Intel for WebGL
++constexpr GpuLimits kGpuLimitsApple = {
++    16384,          // MAX_TEXTURE_SIZE
++    {16384, 16384}, // MAX_VIEWPORT_DIMS
++    31,             // MAX_VARYING_VECTORS — Metal reports 31
++    4096,           // MAX_VERTEX_UNIFORM_VECTORS
++    {1.0f, 1.0f}   // ALIASED_LINE_WIDTH_RANGE
++};
+ 
+ }  // namespace fingerprint
+ }  // namespace ungoogled
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+index 350d464598..14e95e96cb 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -29,6 +29,10 @@
+ #include <utility>
+ 
+ #include "third_party/blink/renderer/modules/webgl/gpu_fingerprint.h"
++#include "base/command_line.h"
++#include "base/strings/string_util.h"
++#include "components/ungoogled/fingerprint_data.h"
++#include "components/ungoogled/ungoogled_switches.h"
+ 
+ #include "base/bit_cast.h"
+ #include "base/byte_size.h"
+@@ -3858,16 +3862,31 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+       return GetIntParameter(script_state, pname);
+     case GL_MAX_TEXTURE_IMAGE_UNITS:
+       return GetIntParameter(script_state, pname);
+-    case GL_MAX_TEXTURE_SIZE:
+-      return GetIntParameter(script_state, pname);
+-    case GL_MAX_VARYING_VECTORS:
+-      return GetIntParameter(script_state, pname);
++    case GL_MAX_TEXTURE_SIZE: 
++    {
++    const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
++    if (limits)
++        return WebGLAny(script_state, limits->max_texture_size);
++    return GetIntParameter(script_state, pname);
++    }
++    case GL_MAX_VARYING_VECTORS: 
++    {
++    const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
++    if (limits)
++        return WebGLAny(script_state, limits->max_varying_vectors);
++    return GetIntParameter(script_state, pname);
++    }
+     case GL_MAX_VERTEX_ATTRIBS:
+       return GetIntParameter(script_state, pname);
+     case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:
+       return GetIntParameter(script_state, pname);
+-    case GL_MAX_VERTEX_UNIFORM_VECTORS:
+-      return GetIntParameter(script_state, pname);
++    case GL_MAX_VERTEX_UNIFORM_VECTORS: 
++    {
++    const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
++    if (limits)
++        return WebGLAny(script_state, limits->max_vertex_uniform_vectors);
++    return GetIntParameter(script_state, pname);
++    }
+     case GL_MAX_VIEWPORT_DIMS:
+       return GetWebGLIntArrayParameter(script_state, pname);
+     case GL_PACK_ALIGNMENT:
+@@ -7757,50 +7776,94 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
+   return WebGLAny(script_state, static_cast<unsigned>(value));
+ }
+ 
++namespace {
++
++const ungoogled::fingerprint::GpuLimits* GetFingerprintGpuLimits() {
++    using namespace ungoogled::fingerprint;
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprint))
++        return nullptr;
++    if (!cmd->HasSwitch(switches::kFingerprintGpuRenderer))
++        return nullptr;
++
++    std::string renderer = cmd->GetSwitchValueASCII(switches::kFingerprintGpuRenderer);
++
++    if (renderer.find("Intel") != std::string::npos)
++        return &kGpuLimitsIntel;
++    if (renderer.find("Apple") != std::string::npos)
++        return &kGpuLimitsApple;
++
++    return &kGpuLimitsNvidia;
++}
++
++}  // namespace
++
+ ScriptValue WebGLRenderingContextBase::GetWebGLFloatArrayParameter(
+     ScriptState* script_state,
+     GLenum pname) {
+-  std::array<GLfloat, 4> value = {0};
+-  if (!isContextLost())
+-    ContextGL()->GetFloatv(pname, value.data());
+-  unsigned length = 0;
+-  switch (pname) {
+-    case GL_ALIASED_POINT_SIZE_RANGE:
+-    case GL_ALIASED_LINE_WIDTH_RANGE:
+-    case GL_DEPTH_RANGE:
+-      length = 2;
+-      break;
+-    case GL_BLEND_COLOR:
+-    case GL_COLOR_CLEAR_VALUE:
+-      length = 4;
+-      break;
+-    default:
+-      NOTIMPLEMENTED();
+-  }
+-  return WebGLAny(script_state,
+-                  DOMFloat32Array::Create(base::span(value).first(length)));
++    std::array<GLfloat, 4> value = {0};
++    if (!isContextLost())
++        ContextGL()->GetFloatv(pname, value.data());
++
++    unsigned length = 0;
++    switch (pname) {
++        case GL_ALIASED_POINT_SIZE_RANGE:
++        case GL_ALIASED_LINE_WIDTH_RANGE:
++        case GL_DEPTH_RANGE:
++            length = 2;
++            break;
++        case GL_BLEND_COLOR:
++        case GL_COLOR_CLEAR_VALUE:
++            length = 4;
++            break;
++        default:
++            NOTIMPLEMENTED();
++    }
++
++    // Spoof ALIASED_LINE_WIDTH_RANGE to match claimed platform/GPU
++    if (pname == GL_ALIASED_LINE_WIDTH_RANGE) {
++        const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
++        if (limits) {
++            value[0] = limits->aliased_line_width_range[0];
++            value[1] = limits->aliased_line_width_range[1];
++        }
++    }
++
++    return WebGLAny(script_state,
++                    DOMFloat32Array::Create(base::span(value).first(length)));
+ }
+ 
+ ScriptValue WebGLRenderingContextBase::GetWebGLIntArrayParameter(
+     ScriptState* script_state,
+     GLenum pname) {
+-  std::array<GLint, 4> value = {0};
+-  if (!isContextLost())
+-    ContextGL()->GetIntegerv(pname, value.data());
+-  unsigned length = 0;
+-  switch (pname) {
+-    case GL_MAX_VIEWPORT_DIMS:
+-      length = 2;
+-      break;
+-    case GL_SCISSOR_BOX:
+-    case GL_VIEWPORT:
+-      length = 4;
+-      break;
+-    default:
+-      NOTIMPLEMENTED();
+-  }
+-  return WebGLAny(script_state,
+-                  DOMInt32Array::Create(base::span(value).first(length)));
++    std::array<GLint, 4> value = {0};
++    if (!isContextLost())
++        ContextGL()->GetIntegerv(pname, value.data());
++
++    unsigned length = 0;
++    switch (pname) {
++        case GL_MAX_VIEWPORT_DIMS:
++            length = 2;
++            break;
++        case GL_SCISSOR_BOX:
++        case GL_VIEWPORT:
++            length = 4;
++            break;
++        default:
++            NOTIMPLEMENTED();
++    }
++
++    // Spoof MAX_VIEWPORT_DIMS to match claimed GPU class
++    if (pname == GL_MAX_VIEWPORT_DIMS) {
++        const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
++        if (limits) {
++            value[0] = limits->max_viewport_dims[0];
++            value[1] = limits->max_viewport_dims[1];
++        }
++    }
++
++    return WebGLAny(script_state,
++                    DOMInt32Array::Create(base::span(value).first(length)));
+ }
+ 
+ WebGLTexture* WebGLRenderingContextBase::ValidateTexture2DBinding(
+diff --git a/third_party/skia b/third_party/skia
+index abbe599fb3..835b6c0b61 160000
+--- a/third_party/skia
++++ b/third_party/skia
+@@ -1 +1 @@
+-Subproject commit abbe599fb3c0ef2fa82bfadbb0ddcd321f22faf0
++Subproject commit 835b6c0b61410573d42f0d0f4a0184543bbaaebb
