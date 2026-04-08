@@ -1,5 +1,5 @@
 diff --git a/rlz/lib/machine_id.cc b/rlz/lib/machine_id.cc
-index 3dae38a602..01b6eaccd4 100644
+index 161bc09cb0..c9bc9d237b 100644
 --- a/rlz/lib/machine_id.cc
 +++ b/rlz/lib/machine_id.cc
 @@ -8,6 +8,9 @@
@@ -12,7 +12,7 @@ index 3dae38a602..01b6eaccd4 100644
  #include "base/hash/sha1.h"
  #include "base/rand_util.h"
  #include "base/strings/stringprintf.h"
-@@ -22,48 +25,71 @@ bool GetMachineId(std::string* machine_id) {
+@@ -22,48 +25,70 @@ bool GetMachineId(std::string* machine_id) {
    if (!machine_id)
      return false;
  
@@ -35,7 +35,7 @@ index 3dae38a602..01b6eaccd4 100644
 -  unsigned char bytes[23];
 -  std::string str_bytes;
 -  base::RandBytes(bytes);
--  rlz_lib::BytesToString(bytes, sizeof(bytes), &str_bytes);
+-  rlz_lib::BytesToString(bytes, &str_bytes);
 -  str_bytes.resize(45);
 -  machine_id->clear();
 -  base::StringAppendF(machine_id, "NONCE%s", str_bytes.c_str());
@@ -115,7 +115,6 @@ index 3dae38a602..01b6eaccd4 100644
    return true;
 -
 -#endif  // BUILDFLAG(IS_CHROMEOS)
-+  
  }
  
  namespace testing {
