@@ -58,6 +58,11 @@ setup_depot_tools() {
 
     unset DEPOT_TOOLS_UPDATE
 
+    echo "Downloading CIPD packages..."
+    "${_depot_tools_dir}/cipd" ensure \
+        -ensure-file "${_depot_tools_dir}/cipd_manifest.txt" \
+        -root "${_depot_tools_dir}"
+
     echo "Bootstrapping depot_tools (Python, CIPD, etc)..."
     "${_depot_tools_dir}/ensure_bootstrap" || true
 }
