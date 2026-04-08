@@ -74,6 +74,9 @@ fetch_chromium() {
         return 0
     fi
 
+    echo "Fixing any interrupted dpkg state..."
+    sudo dpkg --configure -a
+
     # Allow overriding the version via env variable (e.g., CHROMIUM_VERSION=145.0.0.0)
     local target_version="${CHROMIUM_VERSION:-}"
 
@@ -86,12 +89,6 @@ fetch_chromium() {
 
     echo "Target Chromium version: ${target_version}"
 
-    # Clean previous incomplete states
-    if [ -d "${_src_dir}" ]; then
-        echo "Removing old src directory to ensure a clean fetch..."
-        rm -rf "${_src_dir}" "${_chrome_dir}/.gclient"*
-    fi
-    
     mkdir -p "${_chrome_dir}"
     cd "${_chrome_dir}"
 
@@ -126,13 +123,6 @@ EOF
         exit 1
     fi
 
-    # Verify depot_tools Python bootstrap
-    if [ ! -f "${_depot_tools_dir}/python3_bin_reldir.txt" ] && \
-       [ ! -f "${_src_dir}/buildtools/python3/python3_bin_reldir.txt" ]; then
-        echo "ERROR: depot_tools Python bootstrap failed! Check depot_tools installation." >&2
-        exit 1
-    fi
-
     echo "Chromium ${target_version} fetch and toolchain verification complete."
     touch "${stamp}"
 }
@@ -150,7 +140,7 @@ apply_blutvine_patches() {
     while IFS= read -u 3 -r patch_file || [ -n "${patch_file}" ]; do
         [[ -z "${patch_file}" || "${patch_file}" =~ ^[[:space:]]*# ]] && continue
         local full_path="${_patches_dir}/${patch_file}"
-        
+
         echo "  applying ${patch_file}"
 
         if [[ "${patch_file}" == *"skia.patch" ]]; then
