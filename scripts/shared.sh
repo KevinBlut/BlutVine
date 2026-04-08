@@ -80,8 +80,13 @@ fetch_chromium() {
     if [ -z "${target_version}" ]; then
         echo "Querying latest stable Chromium version..."
         target_version=$(curl -fsSL \
-            "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1" \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['version'])")
+        "https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=Linux&num=1" \
+        | python3 -c "
+        import sys, json
+        releases = json.load(sys.stdin)
+        stable = next(r for r in releases if r['channel'] == 'Stable')
+        print(stable['version'])
+        ")
     fi
 
     echo "Target Chromium version: ${target_version}"
