@@ -10,6 +10,7 @@ sudo systemctl daemon-reexec 2>/dev/null || true
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)/shared.sh"
 
 setup_paths
+export PATH="${_depot_tools_dir}:${PATH}"
 write_gn_args
 setup_sccache
 gn_gen
