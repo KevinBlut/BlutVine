@@ -231,10 +231,3 @@ index 350d464598..14e95e96cb 100644
  }
  
  WebGLTexture* WebGLRenderingContextBase::ValidateTexture2DBinding(
-diff --git a/third_party/skia b/third_party/skia
-index abbe599fb3..835b6c0b61 160000
---- a/third_party/skia
-+++ b/third_party/skia
-@@ -1 +1 @@
--Subproject commit abbe599fb3c0ef2fa82bfadbb0ddcd321f22faf0
-+Subproject commit 835b6c0b61410573d42f0d0f4a0184543bbaaebb
