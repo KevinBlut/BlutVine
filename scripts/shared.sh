@@ -54,13 +54,12 @@ setup_depot_tools() {
         git -C "${_depot_tools_dir}" pull --ff-only || true
     fi
 
-    export PATH="${_depot_tools_dir}:${PATH}"
+    export PATH="${_depot_tools_dir}:${_depot_tools_dir}/.cipd_bin:${PATH}"
 
-    # ✅ CRITICAL FIX: allow depot_tools to bootstrap itself
     unset DEPOT_TOOLS_UPDATE
 
     echo "Bootstrapping depot_tools (Python, CIPD, etc)..."
-    "${_depot_tools_dir}/update_depot_tools" || true
+    "${_depot_tools_dir}/ensure_bootstrap" || true
 }
 
 # ---------------------------------------------------------------------------
