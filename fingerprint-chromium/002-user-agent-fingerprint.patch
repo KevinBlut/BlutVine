@@ -467,9 +467,9 @@ index fda7b49c11..ffed713f49 100644
  bool BLINK_COMMON_EXPORT operator==(const UserAgentOverride& a,
                                      const UserAgentOverride& b);
  
-+void UpdateUserAgentMetadataFingerprint(UserAgentMetadata* metadata);
++void BLINK_COMMON_EXPORT UpdateUserAgentMetadataFingerprint(UserAgentMetadata* metadata);
 +
-+std::string GetUserAgentFingerprintBrandInfo();
++std::string BLINK_COMMON_EXPORT GetUserAgentFingerprintBrandInfo();
 +
  }  // namespace blink
  
