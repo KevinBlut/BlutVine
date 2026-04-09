@@ -185,7 +185,7 @@ index 8246d97469..3efb9f96cf 100644
      if (!ua_metadata.has_value())
        ua_metadata = delegate->GetUserAgentMetadata();
  
-+      UpdateUserAgentMetadataFingerprint(&ua_metadata.value());
++    UpdateUserAgentMetadataFingerprint(&ua_metadata.value());
 +
      // The `Sec-CH-UA` client hint is attached to all outgoing requests. This is
      // (intentionally) different than other client hints.
