@@ -2,7 +2,7 @@ diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.c
 index 6b51eee83a..0fc0b487e7 100644
 --- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
 +++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
-@@ -25,6 +25,10 @@
+@@ -25,6 +25,13 @@
  
  #include "third_party/blink/renderer/modules/webaudio/offline_audio_context.h"
  
@@ -23,7 +23,10 @@ index 6b51eee83a..0fc0b487e7 100644
 +// and keeping totalUniqueSamples well below bufferLen.
 +static float getAudioSampleNoise(uint32_t base_seed, float quantized) {
 +    uint32_t q_bits;
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wunsafe-buffer-usage-in-libc-call"
 +    memcpy(&q_bits, &quantized, sizeof(q_bits));
++#pragma clang diagnostic pop
 +    uint32_t seed = base_seed ^ q_bits;
 +    seed = seed * 1664525u + 1013904223u;
 +    // Magnitude ±2.80e-08 per sample matches natural Blink hardware spread.
@@ -35,7 +38,7 @@ index 6b51eee83a..0fc0b487e7 100644
  OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
                                           unsigned number_of_channels,
                                           uint32_t number_of_frames,
-@@ -411,6 +430,34 @@ void OfflineAudioContext::FireCompletionEvent() {
+@@ -411,6 +430,36 @@ void OfflineAudioContext::FireCompletionEvent() {
        return;
      }
  
@@ -54,6 +57,7 @@ index 6b51eee83a..0fc0b487e7 100644
 +          NotShared<DOMFloat32Array> array = rendered_buffer->getChannelData(ch);
 +          float* data = array->Data();
 +          size_t len = array->length();
++          UNSAFE_BUFFERS(
 +          for (size_t i = 0; i < len; ++i) {
 +            // Skip true-zero samples — preserves hasFakeAudio() check:
 +            // a zero-frequency oscillator must produce all-zero output.
@@ -63,6 +67,7 @@ index 6b51eee83a..0fc0b487e7 100644
 +            if (quantized == 0.0f) continue;
 +            data[i] = quantized + getAudioSampleNoise(base_seed, quantized);
 +          }
++          );
 +        }
 +      }
 +    }
