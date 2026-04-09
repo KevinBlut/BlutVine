@@ -148,7 +148,7 @@ index 362b5ab4a0..962232e311 100644
 -                    DarkModeFlags(this, auto_dark_mode, flags));
 +    DCHECK(canvas_);
 +    SetupCanvasFingerprintSeed();
-+    canvas_->drawOval(oval, DarkModeFlags(this, auto_dark_mode, flags));
++    canvas_->drawLine(from.x(), from.y(), to.x(), to.y(), DarkModeFlags(this, auto_dark_mode, flags));
 +    SkClearFingerprintSeed();
  }
  
