@@ -136,7 +136,7 @@ index 7344fa93eb..042e05f678 100644
 +  for (const char* f : kBasicFonts) {
 +     if (font_family == f) return true;
 +  }
-+  return basic_fonts.count(font_family) > 0;
++  return false;
 +}
 +
  const FontPlatformData* FontCache::GetFontPlatformData(
