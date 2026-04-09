@@ -62,6 +62,11 @@ index 350d464598..14e95e96cb 100644
  
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
++// Forward declaration
++namespace {
++const ungoogled::fingerprint::GpuLimits* GetFingerprintGpuLimits();
++}  // namespace
++
 @@ -3858,16 +3862,31 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
        return GetIntParameter(script_state, pname);
      case GL_MAX_TEXTURE_IMAGE_UNITS:
