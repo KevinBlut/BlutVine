@@ -308,7 +308,7 @@ index 0000000000..8ca954515e
 +    index = kGpuModelCount - 1;
 +  }
 +
-+  const GpuModelInfo& model = kGpuModels[index];
++  const GpuModelInfo& model = UNSAFE_BUFFERS(kGpuModels[index]);
 +  GpuInfo info;
 +  info.model_name = model.model_name;
 +  info.device_id = model.device_id;
@@ -370,7 +370,7 @@ index 0000000000..8ca954515e
 +  }
 +
 +  return base::StringPrintf("ANGLE (Apple, ANGLE Metal Renderer: Apple %s, Unspecified Version)",
-+                         kMacosGpuModels[index]);
++                         UNSAFE_BUFFERS(kMacosGpuModels[index]));
 +}
 +
 +// Helper function to get a Linux GPU renderer string
