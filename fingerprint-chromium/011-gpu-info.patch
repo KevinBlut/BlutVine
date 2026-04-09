@@ -451,8 +451,8 @@ index 469fc4dd30..c6a8b61c0b 100644
 +          return WebGLAny(script_state, String(fingerprint_renderer));
 +        }
 +
-+        if (base::FeatureList::IsEnabled(blink::features::kSpoofWebGLInfo))
-+          return WebGLAny(script_state, String(blink::features::kSpoofWebGLRendererParam.Get()));
++
++
          return WebGLAny(script_state,
                          String(ContextGL()->GetString(GL_RENDERER)));
        }
@@ -465,9 +465,9 @@ index 469fc4dd30..c6a8b61c0b 100644
 +        if (!fingerprint_vendor.empty()) {
 +          return WebGLAny(script_state, String(fingerprint_vendor));
 +        }
-+     
-+        if (base::FeatureList::IsEnabled(blink::features::kSpoofWebGLInfo))
-+          return WebGLAny(script_state, String(blink::features::kSpoofWebGLVendorParam.Get()));
++
++
++
          return WebGLAny(script_state,
                          String(ContextGL()->GetString(GL_VENDOR)));
        }
