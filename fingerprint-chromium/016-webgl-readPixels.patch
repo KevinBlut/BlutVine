@@ -48,7 +48,7 @@ index 1aa4bf77a2..a514e6bc74 100644
 +                    uint8_t r = pixel[0];
 +                    uint8_t g = pixel[1];
 +                    uint8_t b = pixel[2];
-+                    uint8_t a = pixel[3];
++                    [[maybe_unused]] uint8_t a = pixel[3];
 +
 +                    // Only modify interpolated pixels — not solid fills
 +                    // Solid pixels have all channels either 0 or 255
