@@ -36,13 +36,13 @@ index 3006cad0fb..1f259a7037 100644
 +        if (px < 0 || py < 0 || px >= canvas_w || py >= canvas_h)
 +          continue;
 +
-+        uint8_t* pixel = rgba + py * row_bytes + px * 4;
++        uint8_t* pixel = UNSAFE_BUFFERS(rgba + py * row_bytes + px * 4);
 +
 +        // Current GPU-rendered RGBA for this pixel
-+        uint8_t gpu_r = pixel[0];
-+        uint8_t gpu_g = pixel[1];
-+        uint8_t gpu_b = pixel[2];
-+        uint8_t gpu_a = pixel[3];
++        uint8_t gpu_r = UNSAFE_BUFFERS(pixel[0]);
++        uint8_t gpu_g = UNSAFE_BUFFERS(pixel[1]);
++        uint8_t gpu_b = UNSAFE_BUFFERS(pixel[2]);
++        uint8_t gpu_a = UNSAFE_BUFFERS(pixel[3]);
 +
 +        // Our coverage value — what the pixel SHOULD represent
 +        uint8_t our_cov = fp.coverage;  // 1-254, genuine AA range
@@ -77,10 +77,10 @@ index 3006cad0fb..1f259a7037 100644
 +          return static_cast<uint8_t>(i);
 +        };
 +
-+        pixel[0] = clamp8(gpu_r * scale);
-+        pixel[1] = clamp8(gpu_g * scale);
-+        pixel[2] = clamp8(gpu_b * scale);
-+        pixel[3] = our_cov;  // replace alpha directly with our coverage
++        UNSAFE_BUFFERS(pixel[0]) = clamp8(gpu_r * scale);
++        UNSAFE_BUFFERS(pixel[1]) = clamp8(gpu_g * scale);
++        UNSAFE_BUFFERS(pixel[2]) = clamp8(gpu_b * scale);
++        UNSAFE_BUFFERS(pixel[3]) = our_cov;  // replace alpha directly with our coverage
 +      }
 +
 +      // Done — clear stored pixels so next readback starts fresh
