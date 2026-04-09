@@ -3,7 +3,7 @@ new file mode 100644
 index 0000000..4ab77e2
 --- /dev/null
 +++ b/src/core/SkFingerprintSeed.h
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,60 @@
 +#ifndef SK_FINGERPRINT_SEED_H
 +#define SK_FINGERPRINT_SEED_H
 +
@@ -24,7 +24,11 @@ index 0000000..4ab77e2
 +
 +inline thread_local uint32_t gSkFingerprintSeed                        = 0;
 +inline thread_local uint8_t  gSkFingerprintGpuClass                    = kSkFingerprintGpuClassNvidia;
++#pragma clang diagnostic push
++#pragma clang diagnostic ignored "-Wexit-time-destructors"
++#pragma clang diagnostic ignored "-Wglobal-constructors"
 +inline thread_local std::vector<SkFingerprintPixel> gSkFingerprintPixels;
++#pragma clang diagnostic pop
 +
 +inline void SkSetFingerprintSeed(uint32_t seed, uint8_t gpu_class) {
 +    gSkFingerprintSeed     = seed;
