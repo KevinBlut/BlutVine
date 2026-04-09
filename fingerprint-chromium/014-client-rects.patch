@@ -46,7 +46,7 @@ index b517acf0b7..e53e086df3 100644
    return MakeGarbageCollected<DOMRectList>(rects);
  }
  
-+static bool ElementHasTransform(const Element& element) {
++bool Element::ElementHasTransform(const Element& element) {
 +  const LayoutObject* layout = element.GetLayoutObject();
 +  if (!layout) return false;
 +  const ComputedStyle* style = layout->Style();
