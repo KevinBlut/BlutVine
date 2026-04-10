@@ -1,0 +1,93 @@
+diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
+index 4abe687249..caa11e5604 100644
+--- a/content/browser/renderer_host/render_process_host_impl.cc
++++ b/content/browser/renderer_host/render_process_host_impl.cc
+@@ -17,6 +17,8 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "components/ungoogled/ungoogled_switches.h"
++
+ #include "base/base_switches.h"
+ #include "base/clang_profiling_buildflags.h"
+ #include "base/command_line.h"
+diff --git a/content/child/runtime_features.cc b/content/child/runtime_features.cc
+index 578c7f9e2a..a9c9d83584 100644
+--- a/content/child/runtime_features.cc
++++ b/content/child/runtime_features.cc
+@@ -7,6 +7,8 @@
+ #include <string>
+ #include <vector>
+ 
++#include "components/ungoogled/ungoogled_switches.h"
++
+ #include "base/base_switches.h"
+ #include "base/command_line.h"
+ #include "base/feature_list.h"
+@@ -461,6 +463,10 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
+        true},
+       {wrf::EnableWebAudioBypassOutputBufferingOptOut,
+        blink::switches::kWebAudioBypassOutputBufferingOptOut, true},
++      {wrf::EnableFingerprintingClientRectsNoise,
++       switches::kFingerprintingClientRectsNoise, true},
++      {wrf::EnableFingerprintingCanvasMeasureTextNoise,
++       switches::kFingerprintingCanvasMeasureTextNoise, true},
+   };
+ 
+   for (const auto& mapping : switchToFeatureMapping) {
+diff --git a/third_party/blink/public/platform/web_runtime_features.h b/third_party/blink/public/platform/web_runtime_features.h
+index 99a7637957..8d060ac456 100644
+--- a/third_party/blink/public/platform/web_runtime_features.h
++++ b/third_party/blink/public/platform/web_runtime_features.h
+@@ -71,6 +71,9 @@ class BLINK_PLATFORM_EXPORT WebRuntimeFeatures : public WebRuntimeFeaturesBase {
+ 
+   static void EnableLocalNetworkAccessWebRTC(bool);
+ 
++  static void EnableFingerprintingClientRectsNoise(bool);
++  static void EnableFingerprintingCanvasMeasureTextNoise(bool);
++
+   WebRuntimeFeatures() = delete;
+ };
+ 
+diff --git a/third_party/blink/renderer/core/html/canvas/text_metrics.cc b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+index 2cb886e53a..5ddc877d7d 100644
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.cc
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+@@ -90,6 +90,24 @@ TextMetrics::TextMetrics(const Font* font,
+   Update(font, direction, baseline, align, text, text_painter);
+ }
+ 
++void TextMetrics::Shuffle(const double factor) {
++  // x-direction
++  width_ *= factor;
++  actual_bounding_box_left_ *= factor;
++  actual_bounding_box_right_ *= factor;
++
++  // y-direction
++  font_bounding_box_ascent_ *= factor;
++  font_bounding_box_descent_ *= factor;
++  actual_bounding_box_ascent_ *= factor;
++  actual_bounding_box_descent_ *= factor;
++  em_height_ascent_ *= factor;
++  em_height_descent_ *= factor;
++  baselines_->setAlphabetic(baselines_->alphabetic() * factor);
++  baselines_->setHanging(baselines_->hanging() * factor);
++  baselines_->setIdeographic(baselines_->ideographic() * factor);
++}
++
+ void TextMetrics::Update(const Font* font,
+                          const TextDirection& direction,
+                          const V8CanvasTextBaseline::Enum baseline,
+diff --git a/third_party/blink/renderer/core/html/canvas/text_metrics.h b/third_party/blink/renderer/core/html/canvas/text_metrics.h
+index 3d2c354897..7b3147047c 100644
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.h
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.h
+@@ -110,6 +110,8 @@ class CORE_EXPORT TextMetrics final : public ScriptWrappable {
+     float x_position_;
+   };
+ 
++  void Shuffle(const double factor);
++
+  private:
+   void Update(const Font*,
+               const TextDirection& direction,
