@@ -1,45 +1,62 @@
-# flags.linux.gn
-# Chromium build flags for Linux.
-# Assumes gclient runhooks has already downloaded the bundled clang toolchain.
-
+# =========================
 # Build type
+# =========================
 is_official_build = false
-is_component_build = true
+is_component_build = true   # set true if you want faster incremental builds
 is_debug = false
 
-# Clang — uses Chromium's bundled clang downloaded by gclient runhooks
+# =========================
+# Toolchain
+# =========================
 is_clang = true
-
-# Linker
 use_lld = true
+use_sysroot = true
 
-# Proprietary codecs
+# =========================
+# Performance / build speed
+# =========================
+symbol_level = 0
+blink_symbol_level = 0
+v8_symbol_level = 0
+use_debug_fission = false
+treat_warnings_as_errors = false
+
+# Optional: faster builds (slightly less optimized binary)
+use_thin_lto = false
+
+# =========================
+# Media (Chrome-like)
+# =========================
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
-
-# Widevine DRM
 enable_widevine = true
 
-# VA-API hardware video acceleration
+# =========================
+# Hardware acceleration
+# =========================
 use_vaapi = true
 
-# Wayland and X11
+# =========================
+# Display (Linux modern stack)
+# =========================
 use_ozone = true
 ozone_platform_wayland = true
 ozone_platform_x11 = true
 
-# Sysroot — gclient runhooks downloads this too
-use_sysroot = true
+# =========================
+# Chrome-like behavior
+# =========================
+disable_fieldtrial_testing_config = false
+use_kerberos = true
 
-# No debug symbols — keeps binary small
-symbol_level = 0
-blink_symbol_level = 0
-v8_symbol_level = 0
+# =========================
+# Cleanup / deprecated
+# =========================
+enable_nacl = false
 
-# Disable Clang modules to allow sccache caching
-use_clang_modules = false
-
-# Google API keys
+# =========================
+# Google API keys (still not full Chrome)
+# =========================
 google_api_key = ""
 google_default_client_id = ""
 google_default_client_secret = ""
