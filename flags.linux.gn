@@ -50,11 +50,6 @@ disable_fieldtrial_testing_config = false
 use_kerberos = true
 
 # =========================
-# Cleanup / deprecated
-# =========================
-enable_nacl = false
-
-# =========================
 # Google API keys (still not full Chrome)
 # =========================
 google_api_key = ""
