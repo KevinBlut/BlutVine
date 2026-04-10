@@ -186,52 +186,6 @@ write_gn_args() {
 }
 
 # ---------------------------------------------------------------------------
-# setup_sccache
-# ---------------------------------------------------------------------------
-setup_sccache() {
-    if [ -z "${SCCACHE_BUCKET:-}" ]; then
-        echo "sccache not configured, skipping"
-        return 0
-    fi
-
-    local sccache_bin_dir="${HOME}/.local/bin"
-    mkdir -p "${sccache_bin_dir}"
-    export PATH="${sccache_bin_dir}:${PATH}"
-
-    if ! command -v sccache &>/dev/null; then
-        echo "Installing sccache..."
-        local triple
-        case "${_host_arch}" in
-            x64)   triple="x86_64-unknown-linux-musl" ;;
-            arm64) triple="aarch64-unknown-linux-musl" ;;
-            *)     triple="x86_64-unknown-linux-musl" ;;
-        esac
-        local ver
-        ver=$(curl -fsSL https://api.github.com/repos/mozilla/sccache/releases/latest \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'])")
-        curl -fsSL \
-            "https://github.com/mozilla/sccache/releases/download/${ver}/sccache-${ver}-${triple}.tar.gz" \
-            | tar -xz -C "${sccache_bin_dir}" --strip-components=1 \
-                "sccache-${ver}-${triple}/sccache"
-        chmod +x "${sccache_bin_dir}/sccache"
-    fi
-
-    local cache_dir="${_chrome_dir}/.sccache"
-    mkdir -p "${cache_dir}"
-    export SCCACHE_DIR="${cache_dir}"
-
-    sccache --stop-server 2>/dev/null || true
-    export SCCACHE_BUCKET SCCACHE_ENDPOINT SCCACHE_S3_USE_SSL \
-           AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-    export SCCACHE_MAX_FRAME_LENGTH=104857600
-    sccache --start-server
-    sleep 1
-    sccache --show-stats || true
-
-    echo "cc_wrapper = \"sccache\"" >> "${_out_dir}/args.gn"
-}
-
-# ---------------------------------------------------------------------------
 # gn_gen
 # ---------------------------------------------------------------------------
 gn_gen() {
