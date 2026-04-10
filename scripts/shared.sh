@@ -33,11 +33,6 @@ setup_paths() {
 
     setup_arch
     mkdir -p "${_chrome_dir}"
-
-    local sccache_cfg="${_scripts_dir}/sccache.sh"
-    if [ -f "${sccache_cfg}" ]; then
-        . "${sccache_cfg}"
-    fi
 }
 
 # ---------------------------------------------------------------------------
