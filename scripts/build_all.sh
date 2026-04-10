@@ -16,6 +16,5 @@ apply_blutvine_patches
 export PATH="${_depot_tools_dir}:${PATH}"
 export PATH="${_depot_tools_dir}/.cipd_bin:${PATH}"
 write_gn_args
-setup_sccache
 gn_gen
 maybe_build
