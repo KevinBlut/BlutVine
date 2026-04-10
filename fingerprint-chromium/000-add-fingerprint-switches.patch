@@ -68,6 +68,9 @@ diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content
 index 4abe687249..ad25d0148b 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
+
++  #include "components/ungoogled/ungoogled_switches.h"
+
 @@ -3739,6 +3739,20 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
        switches::kEnableWebGLDraftExtensions,
        switches::kEnableWebGPUDeveloperFeatures,
@@ -89,12 +92,3 @@ index 4abe687249..ad25d0148b 100644
        switches::kForceDeviceScaleFactor,
        switches::kForceDisplayColorProfile,
        switches::kForceHighContrast,
-@@ -3859,7 +3873,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
-       switches::kSchedulerBoostUrgent,
- #endif
-   };
--  renderer_cmd->CopySwitchesFrom(browser_cmd, kSwitchNames);
-+  renderer_cmd->CopySwitchesFrom(browser_cmd, UNSAFE_BUFFERS(base::span<const char* const>(kSwitchNames, std::size(kSwitchNames))));
- 
-   // |switches::kGaiaConfig| can be set via browser command-line arguments,
-   // usually by developers working on signin code. The switch, however, cannot
