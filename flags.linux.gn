@@ -5,6 +5,7 @@ is_official_build = false
 is_component_build = true   # set true if you want faster incremental builds
 is_debug = false
 use_partition_alloc_as_malloc = false
+enable_backup_ref_ptr_support = false
 
 # =========================
 # Toolchain
