@@ -14,7 +14,7 @@ index 021fc52836..ad17c17034 100644
  
  #include "base/check.h"
  #include "base/check_op.h"
-@@ -1167,9 +1172,37 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
+@@ -1167,9 +1172,32 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
    TextDirection direction =
        ToTextDirection(state.GetDirection(), host, computed_style);
  
@@ -27,12 +27,7 @@ index 021fc52836..ad17c17034 100644
 +  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 +  if (command_line->HasSwitch(switches::kFingerprint)) {
 +    std::string seed_str = command_line->GetSwitchValueASCII(switches::kFingerprint);
-+    if (const ComputedStyle* style = GetComputedStyle()) {
-+      font_family = style->GetFontDescription()
-+                        .Family()
-+                        .FamilyName()
-+                        .Utf8();
-+    }
++    std::string font_family = font->GetFontDescription().Family().FamilyName().Utf8();
 +
 +    std::string combined_x = seed_str + font_family + "clientrects_noise_x";
 +    uint32_t hash_val_x = std::hash<std::string>{}(combined_x);
