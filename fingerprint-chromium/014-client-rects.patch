@@ -190,13 +190,6 @@ index a9e08db4dc..6f8187f9c7 100644
  }
  
  DOMRectList* Range::getClientRects() const {
--  // TODO(crbug.com/1499981): This should be removed once synchronized scrolling
--  // impact is understood.
--  SyncScrollAttemptHeuristic::DidAccessScrollOffset();
--  DisplayLockUtilities::ScopedForcedUpdate force_locks(
--      this, DisplayLockContext::ForcedPhase::kLayout);
--  owner_document_->UpdateStyleAndLayout(DocumentUpdateReason::kJavaScript);
--
    Vector<gfx::QuadF> quads;
    GetBorderAndTextQuads(quads);
  
