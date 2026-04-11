@@ -96,7 +96,7 @@ new file mode 100644
 index 0000000000..a9c0d177e3
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_data.h
-@@ -0,0 +1,79 @@
+@@ -0,0 +1,73 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -123,13 +123,7 @@ index 0000000000..a9c0d177e3
 +// =============================================================================
 +
 +// Chromium version list (for seed-based selection)
-+constexpr const char* kChromiumVersions[] = {
-+    "147.0.7727.55",
-+    "146.0.7680.177",
-+    "146.0.7680.164",
-+    "146.0.7680.153",
-+    "146.0.7680.116"
-+};
++constexpr const char* kChromiumVersions = "147.0.7727.55";
 +
 +// Default versions for Client Hints (Sec-CH-UA)
 +constexpr const char* kChromeDefaultVersion = "147.0.7727.55";
@@ -284,7 +278,7 @@ index 2ad7035348..b3f7c56292 100644
  }  // namespace
  
  UserAgentBrandVersion::UserAgentBrandVersion(const std::string& ua_brand,
-@@ -232,4 +307,174 @@ bool operator==(const UserAgentOverride& a, const UserAgentOverride& b) {
+@@ -232,4 +307,166 @@ bool operator==(const UserAgentOverride& a, const UserAgentOverride& b) {
           a.ua_metadata_override == b.ua_metadata_override;
  }
  
@@ -292,7 +286,7 @@ index 2ad7035348..b3f7c56292 100644
 +// Priority:
 +// 1. If brand is Chrome with custom version -> return custom version
 +// 2. If brand is not Chrome (Edge/Opera/Vivaldi) -> return latest version
-+// 3. If has fingerprint seed -> return kChromiumVersions[seed % size]
++// 3. If has fingerprint seed -> return kChromiumVersions
 +// 4. Otherwise -> return first version in array
 +std::string GetChromiumVersion() {
 +  using namespace ungoogled::fingerprint;
@@ -307,20 +301,12 @@ index 2ad7035348..b3f7c56292 100644
 +    }
 +    // 2. Non-Chrome brand (Edge/Opera/Vivaldi) -> use latest Chromium version
 +    if (brand != "chrome" && !brand.empty()) {
-+      return kChromiumVersions[0];
++      return kChromiumVersions;
 +    }
 +  }
 +
-+  // 3. Check if has fingerprint seed
-+  if (command_line->HasSwitch(switches::kFingerprint)) {
-+    int seed = 0;
-+    base::StringToInt(
-+        command_line->GetSwitchValueASCII(switches::kFingerprint), &seed);
-+    return kChromiumVersions[seed % std::size(kChromiumVersions)];
-+  }
-+
-+  // 4. Return first version
-+  return kChromiumVersions[0];
++  // 3. Return first version
++  return kChromiumVersions;
 +}
 +
 +// Helper to extract major version from full version string
