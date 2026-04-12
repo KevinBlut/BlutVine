@@ -68,9 +68,6 @@ diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content
 index 4abe687249..ad25d0148b 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
-
-+  #include "components/ungoogled/ungoogled_switches.h"
-
 @@ -3739,6 +3739,20 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
        switches::kEnableWebGLDraftExtensions,
        switches::kEnableWebGPUDeveloperFeatures,
