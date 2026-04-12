@@ -2,7 +2,7 @@ diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fing
 index a84e205303..c8a926ec05 100644
 --- a/components/ungoogled/fingerprint_data.h
 +++ b/components/ungoogled/fingerprint_data.h
-@@ -180,6 +180,44 @@ constexpr GpuModelInfo kGpuModels[] = {
+@@ -180,6 +180,53 @@ constexpr GpuModelInfo kGpuModels[] = {
  
  constexpr size_t kGpuModelCount = sizeof(kGpuModels) / sizeof(kGpuModels[0]);
  
@@ -34,6 +34,15 @@ index a84e205303..c8a926ec05 100644
 +    30,             // MAX_VARYING_VECTORS
 +    4096,           // MAX_VERTEX_UNIFORM_VECTORS
 +    {1.0f, 1.0f}   // ALIASED_LINE_WIDTH_RANGE — Windows ANGLE always [1,1]
++};
++
++// Linux ANGLE/OpenGL or raw Mesa — no D3D11 clamping
++constexpr GpuLimits kGpuLimitsLinux = {
++    32768,          // MAX_TEXTURE_SIZE
++    {32768, 32768}, // MAX_VIEWPORT_DIMS
++    30,             // MAX_VARYING_VECTORS
++    4096,           // MAX_VERTEX_UNIFORM_VECTORS
++    {1.0f, 7.375f}  // ALIASED_LINE_WIDTH_RANGE — Mesa default
 +};
 +
 +// Apple Silicon via Metal — same limits as Intel for WebGL
