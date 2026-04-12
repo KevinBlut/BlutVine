@@ -71,7 +71,7 @@ index ce63ffb5c8..219e3e383f 100644
  
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
-@@ -3766,6 +3770,28 @@ void WebGLRenderingContextBase::RecordANGLEImplementation() {
+@@ -3766,6 +3770,32 @@ void WebGLRenderingContextBase::RecordANGLEImplementation() {
                              webgl_angle_implementation);
  }
  
@@ -87,6 +87,10 @@ index ce63ffb5c8..219e3e383f 100644
 +
 +    std::string renderer = cmd->GetSwitchValueASCII(switches::kFingerprintGpuRenderer);
 +
++    if (renderer.find("ANGLE") == std::string::npos)
++        return &kGpuLimitsLinux;
++    if (renderer.find("OpenGL") != std::string::npos)
++        return &kGpuLimitsLinux;
 +    if (renderer.find("Intel") != std::string::npos)
 +        return &kGpuLimitsIntel;
 +    if (renderer.find("Apple") != std::string::npos)
@@ -100,7 +104,7 @@ index ce63ffb5c8..219e3e383f 100644
  ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
                                                      GLenum pname) {
    if (isContextLost())
-@@ -3858,16 +3884,31 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3858,16 +3888,31 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
        return GetIntParameter(script_state, pname);
      case GL_MAX_TEXTURE_IMAGE_UNITS:
        return GetIntParameter(script_state, pname);
@@ -138,7 +142,7 @@ index ce63ffb5c8..219e3e383f 100644
      case GL_MAX_VIEWPORT_DIMS:
        return GetWebGLIntArrayParameter(script_state, pname);
      case GL_PACK_ALIGNMENT:
-@@ -7760,47 +7801,69 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
+@@ -7760,47 +7805,69 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
  ScriptValue WebGLRenderingContextBase::GetWebGLFloatArrayParameter(
      ScriptState* script_state,
      GLenum pname) {
