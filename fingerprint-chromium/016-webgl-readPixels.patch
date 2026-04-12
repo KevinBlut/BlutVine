@@ -1,8 +1,8 @@
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index 1aa4bf77a2..a514e6bc74 100644
+index 740061e455..3a3e4eee80 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-@@ -33,6 +33,9 @@
+@@ -34,6 +34,9 @@
  #include "components/ungoogled/fingerprint_data.h"
  #include "components/ungoogled/ungoogled_switches.h"
  
@@ -12,7 +12,7 @@ index 1aa4bf77a2..a514e6bc74 100644
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
  #include "base/compiler_specific.h"
-@@ -5149,6 +5152,89 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+@@ -5195,6 +5198,89 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
        return;
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
