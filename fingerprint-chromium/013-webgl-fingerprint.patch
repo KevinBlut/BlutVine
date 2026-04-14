@@ -94,7 +94,7 @@ index b0bba87aad..deeb4fab7c 100644
 +#include "base/strings/string_util.h"
 +#include "components/ungoogled/fingerprint_data.h"
 +#include "components/ungoogled/ungoogled_switches.h"
-+
++#include <random>
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
  #include "base/compiler_specific.h"
