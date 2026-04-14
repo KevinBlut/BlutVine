@@ -259,6 +259,9 @@ index 0000000000..5c3e2f3089
 +namespace blink {
 +
 +using ungoogled::fingerprint::kMacosGpuModelCount;
++using ungoogled::fingerprint::kMacosGpuModelCount;
++using ungoogled::fingerprint::kGpuModels;
++using ungoogled::fingerprint::kGpuModelCount;
 +
 +namespace {
 +
