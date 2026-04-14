@@ -19,10 +19,10 @@ index 15e63407e1..2874f50252 100644
 +//const char kDisableGpuFingerprint[] = "disable-gpu-fingerprint";
 +
 +// Specify the GPU VENDOR (explicit override, takes priority over gpu-model) (DISABLED)
-+//const char kFingerprintGpuVendor[] = "fingerprint-gpu-vendor";
++const char kFingerprintGpuVendor[] = "fingerprint-gpu-vendor";
 +
 +// Specify the GPU RENDERER (explicit override, takes priority over gpu-model) (DISABLED)
-+//const char kFingerprintGpuRenderer[] = "fingerprint-gpu-renderer";
++const char kFingerprintGpuRenderer[] = "fingerprint-gpu-renderer";
 +
 +// Specify GPU model name for auto-derivation of vendor/renderer/limits
 +// e.g. "RTX 3060", "GTX 1660 Ti", "RTX 4090"
@@ -63,8 +63,8 @@ index b7a6a75e04..8e08669e1f 100644
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintBrand[];
 +//COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintBrandVersion[];
 +//COMPONENT_EXPORT(UNGOOGLED) extern const char kDisableGpuFingerprint[];
-+//COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuVendor[];
-+//COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuRenderer[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuVendor[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuRenderer[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuModel[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintLaptop[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintHardwareConcurrency[];
@@ -91,8 +91,8 @@ index bd954af691..113778891f 100644
 +      switches::kFingerprintBrand,
 +      //switches::kFingerprintBrandVersion,
 +      //switches::kDisableGpuFingerprint,
-+      //switches::kFingerprintGpuVendor,
-+      //switches::kFingerprintGpuRenderer,
++      switches::kFingerprintGpuVendor,
++      switches::kFingerprintGpuRenderer,
 +      switches::kFingerprintGpuModel,
 +      switches::kFingerprintLaptop,
 +      switches::kFingerprintHardwareConcurrency,
