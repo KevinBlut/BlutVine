@@ -1,8 +1,8 @@
 diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
-index a9c0d177e3..1f7f4b9caa 100644
+index 0fbf669ac3..0037a13bba 100644
 --- a/components/ungoogled/fingerprint_data.h
 +++ b/components/ungoogled/fingerprint_data.h
-@@ -73,6 +73,114 @@ constexpr const char* kMacOSVersions[] = {
+@@ -67,6 +67,214 @@ constexpr const char* kMacOSVersions[] = {
  constexpr const char* kX86Architecture = "x86";
  constexpr const char* kArmArchitecture = "arm";
  
@@ -43,76 +43,176 @@ index a9c0d177e3..1f7f4b9caa 100644
 +
 +// Windows/Linux GPU models (RTX 30-50 series)
 +constexpr GpuModelInfo kGpuModels[] = {
++    // 1050
++    {"GeForce GTX 1050", "0x00001C81"},
++    {"GeForce GTX 1050 Ti", "0x00001C82"},
++    {"GeForce GTX 1050 3GB", "0x00001C83"},
++   
++    // GP104 1060
++    {"GeForce GTX 1060 6GB", "0x00001B83"},
++    {"GeForce GTX 1060 3GB", "0x00001B84"},
++    // GP106 1060
++    {"GeForce GTX 1060 3GB", "0x00001C02"},
++    {"GeForce GTX 1060 6GB", "0x00001C03"},
++    {"GeForce GTX 1060 5GB", "0x00001C04"},
++
++    // GP104 1070
++    {"GeForce GTX 1070", "0x00001B81"},
++    {"GeForce GTX 1070 Ti", "0x00001B82"},
++
++    // Gp104 1080
++    {"GeForce GTX 1080", "0x00001B80"},
++    // GP102 1080 Ti
++    {"GeForce GTX 1080 Ti", "0x00001B06"},
++
++    // TU106 1650
++    {"GeForce GTX 1650", "0x00001F0A"},
++    // TU117 1650
++    {"GeForce GTX 1650", "0x00001F82"},
++    // TU116 1650
++    {"GeForce GTX 1650", "0x00002188"},
++    {"GeForce GTX 1650 SUPER", "0x00002187"},
++
++    // TU106 1660
++    {"GeForce GTX 1660 SUPER", "0x00001F09"},
++    // TU116 1660
++    {"GeForce GTX 1660", "0x00002184"},
++    {"GeForce GTX 1660 Ti", "0x00002182"},
++    {"GeForce GTX 1660 SUPER", "0x000021C4"},
++
++    // TU104 2060
++    {"GeForce RTX 2060", "0x00001E89"},
++    // TU106 2060
++    {"GeForce RTX 2060 12GB", "0x00001F03"},
++    {"GeForce RTX 2060 SUPER", "0x00001F06"},
++    {"GeForce RTX 2060 SUPER", "0x00001F42"},
++    {"GeForce RTX 2060 SUPER", "0x00001F47"},
++
++    // TU104 2070
++    {"GeForce RTX 2070 SUPER", "0x00001E84"},
++    {"GeForce RTX 2070 SUPER", "0x00001EC2"},
++    {"GeForce RTX 2070 SUPER", "0x00001EC7"},
++    // TU106 2070
++    {"GeForce RTX 2070", "0x00001F02"},
++    {"GeForce RTX 2070", "0x00001F07"},
++
++    // TU102 2080
++    {"GeForce RTX 2080 Ti 12GB", "0x00001E03"},
++    {"GeForce RTX 2080 Ti", "0x00001E07"},
++    // TU104 2080
++    {"GeForce RTX 2080 SUPER", "0x00001E81"},
++    {"GeForce RTX 2080", "0x00001E87"},
++
++    // GA106 3050
 +    {"GeForce RTX 3050", "0x00002507"},
-+    {"GeForce RTX 3050", "0x00002582"},
++    // GA107 3050
++    {"GeForce RTX 3050 8GB", "0x00002582"},
++    // Laptop 3050
 +    {"GeForce RTX 3050 6GB Laptop GPU", "0x000025EC"},
 +    {"GeForce RTX 3050 Laptop GPU", "0x000025A2"},
 +    {"GeForce RTX 3050 Ti Laptop GPU", "0x000025A0"},
++
++    // GA103 3060
++    {"GeForce RTX 3060 Ti", "0x00002414"},
++    // GA104 3060
 +    {"GeForce RTX 3060", "0x00002487"},
-+    {"GeForce RTX 3060", "0x00002503"},
-+    {"GeForce RTX 3060", "0x00002504"},
-+    {"GeForce RTX 3060 Laptop GPU", "0x00002520"},
-+    {"GeForce RTX 3060 Laptop GPU", "0x00002560"},
 +    {"GeForce RTX 3060 Ti", "0x00002486"},
 +    {"GeForce RTX 3060 Ti", "0x00002489"},
-+    {"GeForce RTX 3060 Ti", "0x000024C9"},
++    {"GeForce RTX 3060 8GB", "0x000024C7"},
++    {"GeForce RTX 3060 Ti GDDR6X", "0x000024C9"},
++    // GA106 3060
++    {"GeForce RTX 3060", "0x00002501"},
++    {"GeForce RTX 3060", "0x00002503"},
++    {"GeForce RTX 3060", "0x00002544"},
++    {"GeForce RTX 3060 12GB Rev. 2", "0x00002509"},
++    {"GeForce RTX 3060", "0x00002504"},
++    // Laptop 3060
++    {"GeForce RTX 3060 Laptop GPU", "0x00002521"},
++    {"GeForce RTX 3060 Laptop GPU", "0x00002561"},
++
++    // GA102 3070
++    {"GeForce RTX 3070 Ti", "0x00002207"},
++    // GA104 3070
 +    {"GeForce RTX 3070", "0x00002484"},
 +    {"GeForce RTX 3070", "0x00002488"},
 +    {"GeForce RTX 3070 Ti", "0x00002482"},
++    {"GeForce RTX 3070 GDDR6X", "0x000024C8"},
++    // Laptop 3070
 +    {"GeForce RTX 3070 Ti Laptop GPU", "0x000024A0"},
++    {"GeForce RTX 3070 Ti Laptop GPU", "0x000024E0"},
++
++    // GA102 3080
 +    {"GeForce RTX 3080", "0x00002206"},
-+    {"GeForce RTX 3080", "0x0000220A"},
 +    {"GeForce RTX 3080", "0x00002216"},
-+    {"GeForce RTX 3080 Laptop GPU", "0x0000249C"},
-+    {"GeForce RTX 3080 Laptop GPU", "0x000024DC"},
 +    {"GeForce RTX 3080 Ti", "0x00002208"},
++    {"GeForce RTX 3080 12GB", "0x0000220A"},
++    // Laptop 3080
 +    {"GeForce RTX 3080 Ti Laptop GPU", "0x00002420"},
 +    {"GeForce RTX 3080 Ti Laptop GPU", "0x00002460"},
++    {"GeForce RTX 3080 Laptop GPU", "0x0000249C"},
++    {"GeForce RTX 3080 Laptop GPU", "0x000024DC"},
++
++    // GA102 3090
 +    {"GeForce RTX 3090", "0x00002204"},
 +    {"GeForce RTX 3090 Ti", "0x00002203"},
++
++    // Laptop 4050
 +    {"GeForce RTX 4050 Laptop GPU", "0x000028A1"},
 +    {"GeForce RTX 4050 Laptop GPU", "0x000028E1"},
++
++    // AD107 4060
 +    {"GeForce RTX 4060", "0x00002882"},
++    {"GeForce RTX 4060 Ti", "0x00002803"},
++    {"GeForce RTX 4060 Ti 16GB", "0x00002805"},
++    // Laptop 4060
 +    {"GeForce RTX 4060 Laptop GPU", "0x000028A0"},
 +    {"GeForce RTX 4060 Laptop GPU", "0x000028E0"},
-+    {"GeForce RTX 4060 Ti", "0x00002803"},
-+    {"GeForce RTX 4060 Ti", "0x00002805"},
++
++    // AD104 4070
 +    {"GeForce RTX 4070", "0x00002786"},
-+    {"GeForce RTX 4070 Laptop GPU", "0x00002820"},
-+    {"GeForce RTX 4070 Laptop GPU", "0x00002860"},
 +    {"GeForce RTX 4070 SUPER", "0x00002783"},
 +    {"GeForce RTX 4070 Ti", "0x00002782"},
 +    {"GeForce RTX 4070 Ti SUPER", "0x00002705"},
++    // Laptop 4070
++    {"GeForce RTX 4070 Laptop GPU", "0x00002820"},
++    {"GeForce RTX 4070 Laptop GPU", "0x00002860"},
++
++    // AD103 4080
 +    {"GeForce RTX 4080", "0x00002704"},
++    {"GeForce RTX 4080 SUPER", "0x00002702"},
++    {"GeForce RTX 4080 SUPER", "0x00002703"},
++    // Laptop 4080
 +    {"GeForce RTX 4080 Laptop GPU", "0x000027A0"},
 +    {"GeForce RTX 4080 Laptop GPU", "0x000027E0"},
-+    {"GeForce RTX 4080 SUPER", "0x00002702"},
++
++    // AD102 4090
 +    {"GeForce RTX 4090", "0x00002684"},
++    {"GeForce RTX 4090 D", "0x00002685"},
++    // Laptop 4090
 +    {"GeForce RTX 4090 Laptop GPU", "0x00002717"},
 +    {"GeForce RTX 4090 Laptop GPU", "0x00002757"},
++
++    // 5070
 +    {"GeForce RTX 5070", "0x00002F04"},
 +    {"GeForce RTX 5070 Ti", "0x00002C05"},
++    // Laptop 5070
 +    {"GeForce RTX 5070 Ti Laptop GPU", "0x00002F18"},
 +    {"GeForce RTX 5070 Ti Laptop GPU", "0x00002F58"},
++
++    // 5080
 +    {"GeForce RTX 5080", "0x00002C02"},
++    // Laptop 5080
 +    {"GeForce RTX 5080 Laptop GPU", "0x00002C19"},
 +    {"GeForce RTX 5080 Laptop GPU", "0x00002C59"},
++
++    // 5090
 +    {"GeForce RTX 5090", "0x00002B85"},
++    // Laptop 5090
 +    {"GeForce RTX 5090 Laptop GPU", "0x00002C18"},
 +    {"GeForce RTX 5090 Laptop GPU", "0x00002C58"},
-+    // RTX 5060 Ti (desktop) - April 2025
-+    {"GeForce RTX 5060 Ti", "0x00002D04"},
-+    // RTX 5060 (desktop) - May 2025
-+    {"GeForce RTX 5060", "0x00002D05"},
-+    // RTX 5060 Laptop GPU - confirmed from multiple OEM driver databases
-+    {"GeForce RTX 5060 Laptop GPU", "0x00002D19"},
-+    {"GeForce RTX 5060 Laptop GPU", "0x00002D59"},
-+    // RTX 5050 Laptop GPU
-+    {"GeForce RTX 5050 Laptop GPU", "0x00002D98"},
 +};
 +
 +constexpr size_t kGpuModelCount = sizeof(kGpuModels) / sizeof(kGpuModels[0]);
-+
 +
  }  // namespace fingerprint
  }  // namespace ungoogled
@@ -134,10 +234,10 @@ index d611207944..6dfe877682 100644
      "nv_shader_noperspective_interpolation.cc",
 diff --git a/third_party/blink/renderer/modules/webgl/gpu_fingerprint.cc b/third_party/blink/renderer/modules/webgl/gpu_fingerprint.cc
 new file mode 100644
-index 0000000000..b55edd406e
+index 0000000000..5c3e2f3089
 --- /dev/null
 +++ b/third_party/blink/renderer/modules/webgl/gpu_fingerprint.cc
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,197 @@
 +#include "third_party/blink/renderer/modules/webgl/gpu_fingerprint.h"
 +
 +#include "base/command_line.h"
@@ -146,6 +246,9 @@ index 0000000000..b55edd406e
 +#include "components/ungoogled/fingerprint_data.h"
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include "third_party/blink/renderer/modules/webgl/gpu_info.h"
++
++#include <vector>
++#include <string>
 +
 +// GPU deviceID信息可以在这里查询
 +// 570.144是驱动号，替换成最新的驱动号
@@ -159,105 +262,183 @@ index 0000000000..b55edd406e
 +
 +namespace {
 +
-+// Returns the appropriate GL_VENDOR string based on platform
-+std::string GetGLVendorString(const std::string& platform) {
-+  if (platform == "macos") {
-+    return "Google Inc. (Apple)";
-+  } else if (platform == "linux") {
-+    return "Google Inc. (NVIDIA Corporation)";
-+  } else {
-+    // Windows
-+    return "Google Inc. (NVIDIA)";
-+  }
++// Returns true if the model name looks like a laptop GPU variant
++bool IsLaptopModel(const std::string& model_name) {
++    return model_name.find("Laptop") != std::string::npos ||
++           model_name.find("laptop") != std::string::npos ||
++           model_name.find("Mobile") != std::string::npos;
 +}
 +
-+// Returns a GL_RENDERER string based on platform and fingerprint
-+std::string GetGLRendererString(const std::string& platform, uint32_t fingerprint) {
-+  if (platform == "macos") {
-+    // Use helper function to get macOS GPU string
-+    return GetMacosGpuString(fingerprint % kMacosGpuModelCount);
-+  } else if (platform == "linux") {
-+    // For Linux, get the basic GPU model but format for Linux
-+    size_t model_index = fingerprint % GetGpuCount();
-+    // Get the Windows GPU info to extract the model name
-+    const GpuInfo& gpu_info = GetGpuInfo(model_index);
-+    // Format for Linux (no device ID, different suffix)
-+    return GetLinuxGpuString(gpu_info.model_name);
-+  } else {
-+    // Default to Windows format
-+    return GetGpuInfo(fingerprint % GetGpuCount()).renderer_string;
-+  }
++// Normalize input for fuzzy matching:
++// strips spaces, lowercases, strips "geforce", "nvidia", "gtx", "rtx"
++std::string NormalizeModelInput(const std::string& input) {
++    std::string result = base::ToLowerASCII(input);
++    // Remove common prefix words users might or might not type
++    for (const auto& prefix : {"geforce ", "nvidia ", "gtx ", "rtx "}) {
++        auto pos = result.find(prefix);
++        while (pos != std::string::npos) {
++            result.erase(pos, strlen(prefix));
++            pos = result.find(prefix);
++        }
++    }
++    // Collapse multiple spaces
++    std::string out;
++    bool last_space = false;
++    for (char c : result) {
++        if (c == ' ') {
++            if (!last_space) out += c;
++            last_space = true;
++        } else {
++            out += c;
++            last_space = false;
++        }
++    }
++    // Trim trailing space
++    if (!out.empty() && out.back() == ' ')
++        out.pop_back();
++    return out;
++}
++
++// Selects a GPU model index from kGpuModels[] based on:
++//   - model_input: user-provided model hint e.g. "RTX 3060", "GTX 1660 Ti"
++//   - prefer_laptop: whether to prefer laptop GPU variants
++//   - seed: fingerprint seed for deterministic selection among matches
++// Returns kGpuModelCount if no match found.
++size_t SelectGpuModelIndex(const std::string& model_input,
++                            bool prefer_laptop,
++                            uint32_t seed) {
++    std::string normalized_input = NormalizeModelInput(model_input);
++
++    // Collect matching indices — split into laptop and desktop lists
++    std::vector<size_t> laptop_matches;
++    std::vector<size_t> desktop_matches;
++
++    for (size_t i = 0; i < kGpuModelCount; ++i) {
++        std::string model_lower = base::ToLowerASCII(
++            std::string(kGpuModels[i].model_name));
++        std::string normalized_model = NormalizeModelInput(model_lower);
++
++        // Check if the normalized input is a substring of the normalized model
++        if (normalized_model.find(normalized_input) != std::string::npos) {
++            if (IsLaptopModel(kGpuModels[i].model_name)) {
++                laptop_matches.push_back(i);
++            } else {
++                desktop_matches.push_back(i);
++            }
++        }
++    }
++
++    // Pick from preferred list first, fall back to other list if empty
++    const std::vector<size_t>* candidates =
++        prefer_laptop ? &laptop_matches : &desktop_matches;
++    if (candidates->empty())
++        candidates = prefer_laptop ? &desktop_matches : &laptop_matches;
++    if (candidates->empty())
++        return kGpuModelCount;  // no match at all
++
++    // Deterministic selection using seed
++    return (*candidates)[seed % candidates->size()];
++}
++
++// Returns the GL_VENDOR string for a given platform
++std::string BuildVendorString(const std::string& platform) {
++    if (platform.find("mac") != std::string::npos ||
++        platform.find("Mac") != std::string::npos)
++        return "Google Inc. (Apple)";
++    if (platform.find("Win") != std::string::npos ||
++        platform.find("win") != std::string::npos)
++        return "Google Inc. (NVIDIA)";
++    // Linux default
++    return "Google Inc. (NVIDIA Corporation)";
++}
++
++// Builds renderer string from a kGpuModels[] index and platform
++std::string BuildRendererString(size_t model_index,
++                                 const std::string& platform) {
++    if (model_index >= kGpuModelCount)
++        return "";
++
++    const std::string model_name(kGpuModels[model_index].model_name);
++
++    if (platform.find("mac") != std::string::npos ||
++        platform.find("Mac") != std::string::npos) {
++        // macOS: pick from Apple Silicon list via model_index mod
++        return GetMacosGpuString(model_index % kMacosGpuModelCount);
++    } else if (platform.find("Win") != std::string::npos ||
++               platform.find("win") != std::string::npos) {
++        // Windows: ANGLE D3D11 format with device ID
++        return GetWindowsGpuInfo(model_index).renderer_string;
++    } else {
++        // Linux: ANGLE OpenGL format without device ID
++        return GetLinuxGpuString(model_name);
++    }
 +}
 +
 +}  // namespace
 +
 +// Public functions that will be used in WebGL code
 +std::string GetGLVendorStringForFingerprint() {
-+  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +
-+  // 如果禁用GPU指纹，直接返回空字符串
-+  if (command_line->HasSwitch(switches::kDisableGpuFingerprint)) {
-+    return "";
-+  }
++    // Priority 1: explicit override
++    if (cmd->HasSwitch(switches::kFingerprintGpuVendor))
++        return cmd->GetSwitchValueASCII(switches::kFingerprintGpuVendor);
 +
-+  // 优先级1: 如果指定了 fingerprint-gpu-vendor，直接使用
-+  if (command_line->HasSwitch(switches::kFingerprintGpuVendor)) {
-+    return command_line->GetSwitchValueASCII(switches::kFingerprintGpuVendor);
-+  }
++    if (!cmd->HasSwitch(switches::kFingerprint))
++        return "";
 +
-+  // 优先级2: 如果指定了 fingerprint，根据平台生成
-+  if (command_line->HasSwitch(switches::kFingerprint)) {
-+    std::string platform = "windows";  // Default platform
-+    if (command_line->HasSwitch(switches::kFingerprintPlatform)) {
-+      platform = base::ToLowerASCII(
-+          command_line->GetSwitchValueASCII(switches::kFingerprintPlatform));
-+    }
-+    return GetGLVendorString(platform);
-+  }
++    std::string platform = cmd->HasSwitch(switches::kFingerprintPlatform)
++        ? cmd->GetSwitchValueASCII(switches::kFingerprintPlatform)
++        : "Linux x86_64";
 +
-+  // 优先级3: 都没有指定，返回空字符串（使用默认值）
-+  return "";
++    return BuildVendorString(platform);
 +}
 +
 +std::string GetGLRendererStringForFingerprint() {
-+  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +
-+  // 如果禁用GPU指纹，直接返回空字符串
-+  if (command_line->HasSwitch(switches::kDisableGpuFingerprint)) {
-+    return "";
-+  }
++    // Priority 1: explicit renderer override
++    if (cmd->HasSwitch(switches::kFingerprintGpuRenderer))
++        return cmd->GetSwitchValueASCII(switches::kFingerprintGpuRenderer);
 +
-+  // 优先级1: 如果指定了 fingerprint-gpu-renderer，直接使用
-+  if (command_line->HasSwitch(switches::kFingerprintGpuRenderer)) {
-+    return command_line->GetSwitchValueASCII(switches::kFingerprintGpuRenderer);
-+  }
++    if (!cmd->HasSwitch(switches::kFingerprint))
++        return "";
 +
-+  // 优先级2: 如果指定了 fingerprint，根据平台和fingerprint值生成
-+  if (command_line->HasSwitch(switches::kFingerprint)) {
-+    std::string platform = "windows";  // Default platform
-+    uint32_t fingerprint = 0;  // Default fingerprint
++    std::string platform = cmd->HasSwitch(switches::kFingerprintPlatform)
++        ? cmd->GetSwitchValueASCII(switches::kFingerprintPlatform)
++        : "Linux x86_64";
 +
-+    if (command_line->HasSwitch(switches::kFingerprintPlatform)) {
-+      platform = base::ToLowerASCII(
-+          command_line->GetSwitchValueASCII(switches::kFingerprintPlatform));
++    // Priority 2: model-based auto-derivation
++    if (cmd->HasSwitch(switches::kFingerprintGpuModel)) {
++        std::string model_input =
++            cmd->GetSwitchValueASCII(switches::kFingerprintGpuModel);
++        bool prefer_laptop = cmd->HasSwitch(switches::kFingerprintLaptop);
++
++        uint32_t seed = 0;
++        base::StringToUint(
++            cmd->GetSwitchValueASCII(switches::kFingerprint), &seed);
++
++        size_t idx = SelectGpuModelIndex(model_input, prefer_laptop, seed);
++        return BuildRendererString(idx, platform);
 +    }
 +
-+    std::string fingerprint_str =
-+        command_line->GetSwitchValueASCII(switches::kFingerprint);
-+    base::StringToUint(fingerprint_str, &fingerprint);
++    // Priority 3: fallback — pick from full list using seed + platform
++    uint32_t seed = 0;
++    base::StringToUint(
++        cmd->GetSwitchValueASCII(switches::kFingerprint), &seed);
 +
-+    return GetGLRendererString(platform, fingerprint);
-+  }
-+
-+  // 优先级3: 都没有指定，返回空字符串（使用默认值）
-+  return "";
++    if (platform.find("mac") != std::string::npos ||
++        platform.find("Mac") != std::string::npos) {
++        return GetMacosGpuString(seed % kMacosGpuModelCount);
++    }
++    return BuildRendererString(seed % kGpuModelCount, platform);
 +}
 +
 +}  // namespace blink
 \ No newline at end of file
 diff --git a/third_party/blink/renderer/modules/webgl/gpu_fingerprint.h b/third_party/blink/renderer/modules/webgl/gpu_fingerprint.h
 new file mode 100644
-index 0000000000..e4783b53e5
+index 0000000000..0abdbc9d97
 --- /dev/null
 +++ b/third_party/blink/renderer/modules/webgl/gpu_fingerprint.h
 @@ -0,0 +1,16 @@
@@ -280,7 +461,7 @@ index 0000000000..e4783b53e5
 \ No newline at end of file
 diff --git a/third_party/blink/renderer/modules/webgl/gpu_info.cc b/third_party/blink/renderer/modules/webgl/gpu_info.cc
 new file mode 100644
-index 0000000000..8ca954515e
+index 0000000000..7dcd7e4526
 --- /dev/null
 +++ b/third_party/blink/renderer/modules/webgl/gpu_info.cc
 @@ -0,0 +1,100 @@
@@ -429,45 +610,32 @@ index 0000000000..5817d537b2
 +#endif  // THIRD_PARTY_BLINK_RENDERER_MODULES_WEBGL_GPU_INFO_H_
 \ No newline at end of file
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index 469fc4dd30..c6a8b61c0b 100644
+index e6f8fef213..b0bba87aad 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-@@ -28,6 +28,8 @@
- #include <memory>
- #include <utility>
- 
-+#include "third_party/blink/renderer/modules/webgl/gpu_fingerprint.h"
-+
- #include "base/bit_cast.h"
- #include "base/byte_size.h"
- #include "base/compiler_specific.h"
-@@ -3977,6 +3979,14 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3977,6 +3977,12 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
        return ScriptValue::CreateNull(script_state->GetIsolate());
      case WebGLDebugRendererInfo::kUnmaskedRendererWebgl:
        if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
-+        
++
 +        std::string fingerprint_renderer = GetGLRendererStringForFingerprint();
 +        if (!fingerprint_renderer.empty()) {
 +          return WebGLAny(script_state, String(fingerprint_renderer));
 +        }
 +
-+
-+
          return WebGLAny(script_state,
                          String(ContextGL()->GetString(GL_RENDERER)));
        }
-@@ -3986,6 +3996,14 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3986,6 +3992,12 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
        return ScriptValue::CreateNull(script_state->GetIsolate());
      case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:
        if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
-+        
++
 +        std::string fingerprint_vendor = GetGLVendorStringForFingerprint();
 +        if (!fingerprint_vendor.empty()) {
 +          return WebGLAny(script_state, String(fingerprint_vendor));
 +        }
-+
-+
-+
++  
          return WebGLAny(script_state,
                          String(ContextGL()->GetString(GL_VENDOR)));
        }
