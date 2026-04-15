@@ -1,3 +1,45 @@
+diff --git a/third_party/blink/renderer/core/events/mouse_related_event.cc b/third_party/blink/renderer/core/events/mouse_related_event.cc
+index 00000000..00000000 100644
+--- a/third_party/blink/renderer/core/events/mouse_related_event.cc
++++ b/third_party/blink/renderer/core/events/mouse_related_event.cc
+@@ -28,6 +28,8 @@
+ 
+ #include "third_party/blink/renderer/core/events/mouse_related_event.h"
+ 
++#include "components/ungoogled/fingerprint_screen.h"
++
+ #include "third_party/blink/renderer/core/dom/document.h"
+ #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+@@ -155,10 +157,26 @@ double MouseRelatedEvent::pageY() const {
+   return PageLocation().Y();
+ }
+ 
+-double MouseRelatedEvent::screenX() const {
++double MouseRelatedEvent::screenX() const {  // NOLINT
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++    const gfx::Rect bounds = ungoogled::GetSpoofedScreenInfo().rect;
++    const double raw = screen_location_.X();
++    const double max = static_cast<double>(bounds.width() - 1);
++    if (raw < 0.0) return 0.0;
++    if (raw > max) return max;
++    return raw;
++  }
+   return screen_location_.X();
+ }
+ 
+-double MouseRelatedEvent::screenY() const {
++double MouseRelatedEvent::screenY() const {  // NOLINT
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++    const gfx::Rect bounds = ungoogled::GetSpoofedScreenInfo().rect;
++    const double raw = screen_location_.Y();
++    const double max = static_cast<double>(bounds.height() - 1);
++    if (raw < 0.0) return 0.0;
++    if (raw > max) return max;
++    return raw;
++  }
+   return screen_location_.Y();
+ }
 diff --git a/third_party/blink/renderer/core/input/mouse_event_manager.cc b/third_party/blink/renderer/core/input/mouse_event_manager.cc
 index b56f87be80..437e7d076b 100644
 --- a/third_party/blink/renderer/core/input/mouse_event_manager.cc
@@ -17,7 +59,8 @@ index b56f87be80..437e7d076b 100644
  void MouseEventManager::SetLastKnownMousePosition(const WebMouseEvent& event) {
 +  WebMouseEvent spoofed_event = event;
 +  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+    // Clamp screen position to spoofed screen bounds.
++    // Clamp screen position to spoofed screen bounds so the stored
++    // last-known position (contextmenu, drag, hover) is also consistent.
 +    gfx::Rect screen_rect = ungoogled::GetSpoofedScreenInfo().rect;
 +    gfx::PointF pos = event.PositionInScreen();
 +    pos.SetToMax(gfx::PointF(0, 0));
