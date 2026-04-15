@@ -11,125 +11,12 @@ index 5d330670e9..afa71870e6 100644
      "ungoogled_switches.h",
      "ungoogled_switches.cc",
    ]
-diff --git a/components/ungoogled/fingerprint_screen.cc b/components/ungoogled/fingerprint_screen.cc
-new file mode 100644
-index 0000000000..26098a4ffd
---- /dev/null
-+++ b/components/ungoogled/fingerprint_screen.cc
-@@ -0,0 +1,106 @@
-+#include "components/ungoogled/fingerprint_screen.h"
-+
-+#include "base/command_line.h"
-+#include "base/hash/hash.h"
-+#include "components/ungoogled/ungoogled_switches.h"
-+#include "ui/display/screen_info.h"
-+#include "ui/gfx/geometry/rect.h"
-+#include "ui/gfx/geometry/size.h"
-+
-+namespace ungoogled {
-+
-+bool IsFingerprintScreenSpoofingEnabled() {
-+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-+      switches::kFingerprint);
-+}
-+
-+uint32_t GetFingerprintSeed() {
-+  std::string seed_str =
-+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-+          switches::kFingerprint);
-+  return base::PersistentHash(seed_str);
-+}
-+
-+float GetSpoofedDevicePixelRatio() {
-+  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+  if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
-+    double dpr = 1.0;
-+    base::StringToDouble(cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio), &dpr);
-+    return static_cast<float>(dpr);
-+  }
-+
-+  uint32_t seed = GetFingerprintSeed();
-+  // 80% 1.0, 10% 1.25, 5% 1.5, 5% 2.0
-+  uint32_t r = (seed >> 8) % 100;
-+  if (r < 80) return 1.0f;
-+  if (r < 90) return 1.25f;
-+  if (r < 95) return 1.5f;
-+  return 2.0f;
-+}
-+
-+display::ScreenInfo GetSpoofedScreenInfo() {
-+  display::ScreenInfo info;
-+  std::string seed_str =
-+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-+          switches::kFingerprint);
-+  uint32_t seed = base::PersistentHash(seed_str);
-+
-+  int width = 0, height = 0, avail_width = 0, avail_height = 0;
-+  float dpr = 0.0f;
-+
-+  // Check explicit overrides
-+  if (cmd->HasSwitch(switches::kFingerprintScreenWidth))
-+    base::StringToInt(cmd->GetSwitchValueASCII(switches::kFingerprintScreenWidth), &width);
-+  if (cmd->HasSwitch(switches::kFingerprintScreenHeight))
-+    base::StringToInt(cmd->GetSwitchValueASCII(switches::kFingerprintScreenHeight), &height);
-+  if (cmd->HasSwitch(switches::kFingerprintScreenAvailWidth))
-+    base::StringToInt(cmd->GetSwitchValueASCII(switches::kFingerprintScreenAvailWidth), &avail_width);
-+  if (cmd->HasSwitch(switches::kFingerprintScreenAvailHeight))
-+    base::StringToInt(cmd->GetSwitchValueASCII(switches::kFingerprintScreenAvailHeight), &avail_height);
-+  if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio))
-+    base::StringToDouble(cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio), &dpr);
-+
-+  // Fallback to seed-based selection for missing values
-+  if (width <= 0 || height <= 0) {
-+    const struct {
-+      int w, h;
-+    } resolutions[] = {
-+        {1920, 1080}, {1366, 768}, {1536, 864}, {1440, 900}, {2560, 1440}, {3840, 2160}
-+    };
-+    int idx = seed % std::size(resolutions);
-+    width = resolutions[idx].w;
-+    height = resolutions[idx].h;
-+  }
-+  if (avail_width <= 0) avail_width = width;
-+  if (avail_height <= 0) avail_height = height - 40;  // typical taskbar
-+  if (dpr <= 0.0f) dpr = GetSpoofedDevicePixelRatio();  // seed-based fallback
-+
-+  info.rect = gfx::Rect(0, 0, width, height);
-+  info.available_rect = gfx::Rect(0, 0, avail_width, avail_height);
-+  info.device_scale_factor = dpr;
-+  info.depth = 24;
-+  info.depth_per_component = 8;
-+  info.is_monochrome = false;
-+  info.orientation_angle = 0;
-+  info.orientation_type = display::mojom::ScreenOrientation::kLandscapePrimary;
-+  info.display_id = static_cast<int64_t>(seed & 0x7FFFFFFF);
-+  info.is_extended = false;
-+  info.is_primary = true;
-+  info.is_internal = false;
-+  info.display_frequency = 60.0f;
-+  return info;
-+}
-+
-+gfx::Rect GetSpoofedWindowRect() {
-+  display::ScreenInfo info = GetSpoofedScreenInfo();
-+
-+  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+  
-+  // Assume browser window is positioned at (0,0) and takes most of screen.
-+  // outerWidth/Height are window including decorations, so slightly smaller.
-+  int width = info.rect.width() - 16;    // typical window border
-+  int height = info.rect.height() - 80;  // title bar + taskbar
-+  return gfx::Rect(0, 0, width, height);
-+}
-+
-+}  // namespace ungoogled
-\ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_screen.h b/components/ungoogled/fingerprint_screen.h
 new file mode 100644
-index 0000000000..8caee8dadd
+index 0000000000..00000000
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_screen.h
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,27 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -142,33 +29,185 @@ index 0000000000..8caee8dadd
 +
 +namespace ungoogled {
 +
-+// Returns true if screen spoofing is active.
++// Returns true if screen spoofing is active (i.e. --fingerprint is present).
 +bool IsFingerprintScreenSpoofingEnabled();
 +
-+// Returns a spoofed ScreenInfo based on the fingerprint seed.
++// Returns the spoofed device pixel ratio derived from the fingerprint seed,
++// or from --fingerprint-screen-device-pixel-ratio if explicitly set.
++float GetSpoofedDevicePixelRatio();
++
++// Returns a fully populated display::ScreenInfo with spoofed dimensions/DPR.
 +display::ScreenInfo GetSpoofedScreenInfo();
 +
-+// Returns the spoofed window rect (for outerWidth/Height, screenX/Y).
++// Returns the spoofed outer window rect (for outerWidth/Height, screenX/Y).
 +gfx::Rect GetSpoofedWindowRect();
 +
 +}  // namespace ungoogled
 +
 +#endif  // COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
-\ No newline at end of file
-diff --git a/third_party/blink/renderer/core/frame/local_dom_window.cc b/third_party/blink/renderer/core/frame/local_dom_window.cc
-index 06efc300ee..d25f215eaa 100644
---- a/third_party/blink/renderer/core/frame/local_dom_window.cc
-+++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
-@@ -30,6 +30,8 @@
- #include <optional>
- #include <utility>
+diff --git a/components/ungoogled/fingerprint_screen.cc b/components/ungoogled/fingerprint_screen.cc
+new file mode 100644
+index 0000000000..00000000
+--- /dev/null
++++ b/components/ungoogled/fingerprint_screen.cc
+@@ -0,0 +1,105 @@
++// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "components/ungoogled/fingerprint_screen.h"
++
++#include <array>
++#include <cstddef>
++
++#include "base/command_line.h"
++#include "base/hash/hash.h"
++#include "base/strings/string_number_conversions.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "ui/display/mojom/screen_orientation.mojom.h"
++#include "ui/display/screen_info.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace ungoogled {
++
++bool IsFingerprintScreenSpoofingEnabled() {
++  return base::CommandLine::ForCurrentProcess()->HasSwitch(
++      switches::kFingerprint);
++}
++
++static uint32_t GetFingerprintSeed() {
++  const std::string seed_str =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
++          switches::kFingerprint);
++  return base::PersistentHash(seed_str);
++}
++
++float GetSpoofedDevicePixelRatio() {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++
++  if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
++    double val = 0.0;
++    if (base::StringToDouble(
++            cmd->GetSwitchValueASCII(
++                switches::kFingerprintScreenDevicePixelRatio),
++            &val) &&
++        val > 0.0) {
++      return static_cast<float>(val);
++    }
++  }
++
++  // Seed-based fallback: 80% -> 1.0, 10% -> 1.25, 5% -> 1.5, 5% -> 2.0
++  const uint32_t r = (GetFingerprintSeed() >> 8) % 100;
++  if (r < 80) return 1.0f;
++  if (r < 90) return 1.25f;
++  if (r < 95) return 1.5f;
++  return 2.0f;
++}
++
++display::ScreenInfo GetSpoofedScreenInfo() {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  const uint32_t seed = GetFingerprintSeed();
++
++  int width = 0, height = 0, avail_width = 0, avail_height = 0;
++
++  // Explicit overrides take priority.
++  if (cmd->HasSwitch(switches::kFingerprintScreenWidth))
++    base::StringToInt(
++        cmd->GetSwitchValueASCII(switches::kFingerprintScreenWidth), &width);
++  if (cmd->HasSwitch(switches::kFingerprintScreenHeight))
++    base::StringToInt(
++        cmd->GetSwitchValueASCII(switches::kFingerprintScreenHeight), &height);
++  if (cmd->HasSwitch(switches::kFingerprintScreenAvailWidth))
++    base::StringToInt(
++        cmd->GetSwitchValueASCII(switches::kFingerprintScreenAvailWidth),
++        &avail_width);
++  if (cmd->HasSwitch(switches::kFingerprintScreenAvailHeight))
++    base::StringToInt(
++        cmd->GetSwitchValueASCII(switches::kFingerprintScreenAvailHeight),
++        &avail_height);
++
++  // Seed-based fallback for width/height.
++  if (width <= 0 || height <= 0) {
++    struct Resolution { int w, h; };
++    static constexpr std::array<Resolution, 6> kResolutions = {{
++        {1920, 1080}, {1366, 768}, {1536, 864},
++        {1440, 900},  {2560, 1440}, {3840, 2160},
++    }};
++    const auto& res = kResolutions[seed % kResolutions.size()];
++    width  = res.w;
++    height = res.h;
++  }
++  if (avail_width  <= 0) avail_width  = width;
++  if (avail_height <= 0) avail_height = height - 40;  // typical taskbar height
++
++  display::ScreenInfo info;
++  info.rect                = gfx::Rect(0, 0, width, height);
++  info.available_rect      = gfx::Rect(0, 0, avail_width, avail_height);
++  info.device_scale_factor = GetSpoofedDevicePixelRatio();
++  info.depth               = 24;
++  info.depth_per_component = 8;
++  info.is_monochrome       = false;
++  info.orientation_angle   = 0;
++  info.orientation_type    =
++      display::mojom::ScreenOrientation::kLandscapePrimary;
++  info.display_id          = static_cast<int64_t>(seed & 0x7FFFFFFF);
++  info.is_extended         = false;
++  info.is_primary          = true;
++  info.is_internal         = false;
++  info.display_frequency   = 60.0f;
++  return info;
++}
++
++gfx::Rect GetSpoofedWindowRect() {
++  const display::ScreenInfo info = GetSpoofedScreenInfo();
++  // Outer window includes decorations: subtract typical border + title/taskbar.
++  const int width  = info.rect.width()  - 16;
++  const int height = info.rect.height() - 80;
++  return gfx::Rect(0, 0, width, height);
++}
++
++}  // namespace ungoogled
+diff --git a/third_party/blink/renderer/core/frame/screen.cc b/third_party/blink/renderer/core/frame/screen.cc
+index 69ffc2b05f..00000000 100644
+--- a/third_party/blink/renderer/core/frame/screen.cc
++++ b/third_party/blink/renderer/core/frame/screen.cc
+@@ -28,6 +28,8 @@
+ 
+ #include "third_party/blink/renderer/core/frame/screen.h"
  
 +#include "components/ungoogled/fingerprint_screen.h"
 +
  #include "base/command_line.h"
+ #include "base/numerics/safe_conversions.h"
+ #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
+@@ -175,6 +177,12 @@ const display::ScreenInfo& Screen::GetScreenInfo() const {
+   DCHECK(DomWindow());
+   LocalFrame* frame = DomWindow()->GetFrame();
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++    static const display::ScreenInfo spoofed_info =
++        ungoogled::GetSpoofedScreenInfo();
++    return spoofed_info;
++  }
++
+   const auto& screen_infos = frame->GetChromeClient().GetScreenInfos(*frame);
+   for (const auto& screen : screen_infos.screen_infos) {
+     if (screen.display_id == display_id_)
+diff --git a/third_party/blink/renderer/core/frame/local_dom_window.cc b/third_party/blink/renderer/core/frame/local_dom_window.cc
+index 06efc300ee..00000000 100644
+--- a/third_party/blink/renderer/core/frame/local_dom_window.cc
++++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
+@@ -29,6 +29,8 @@
+ #include <memory>
+ #include <optional>
+ #include <utility>
++
++#include "components/ungoogled/fingerprint_screen.h"
+ 
+ #include "base/command_line.h"
  #include "base/metrics/histogram_macros.h"
- #include "base/task/single_thread_task_runner.h"
-@@ -1576,6 +1578,10 @@ int LocalDOMWindow::outerHeight() const {
+@@ -1575,6 +1577,10 @@ int LocalDOMWindow::outerHeight() const {
  
    LocalFrame* frame = GetFrame();
  
@@ -179,7 +218,7 @@ index 06efc300ee..d25f215eaa 100644
    // FencedFrames should return innerHeight to prevent passing
    // arbitrary data through the window height.
    if (frame->IsInFencedFrameTree()) {
-@@ -1601,6 +1607,10 @@ int LocalDOMWindow::outerWidth() const {
+@@ -1604,6 +1610,10 @@ int LocalDOMWindow::outerWidth() const {
  
    LocalFrame* frame = GetFrame();
  
@@ -190,7 +229,7 @@ index 06efc300ee..d25f215eaa 100644
    // FencedFrames should return innerWidth to prevent passing
    // arbitrary data through the window width.
    if (frame->IsInFencedFrameTree()) {
-@@ -1672,6 +1682,9 @@ int LocalDOMWindow::screenX() const {
+@@ -1680,6 +1690,9 @@ int LocalDOMWindow::screenX() const {
    if (!frame)
      return 0;
  
@@ -200,7 +239,7 @@ index 06efc300ee..d25f215eaa 100644
    Page* page = frame->GetPage();
    if (!page)
      return 0;
-@@ -1690,6 +1703,9 @@ int LocalDOMWindow::screenY() const {
+@@ -1701,6 +1714,9 @@ int LocalDOMWindow::screenY() const {
    if (!frame)
      return 0;
  
@@ -210,7 +249,7 @@ index 06efc300ee..d25f215eaa 100644
    Page* page = frame->GetPage();
    if (!page)
      return 0;
-@@ -1802,6 +1818,9 @@ double LocalDOMWindow::devicePixelRatio() const {
+@@ -1817,6 +1833,9 @@ double LocalDOMWindow::devicePixelRatio() const {
    if (!GetFrame())
      return 0.0;
  
@@ -219,30 +258,3 @@ index 06efc300ee..d25f215eaa 100644
 +
    return GetFrame()->DevicePixelRatio();
  }
- 
-diff --git a/third_party/blink/renderer/core/frame/screen.cc b/third_party/blink/renderer/core/frame/screen.cc
-index 69ffc2b05f..7f9d04c1d4 100644
---- a/third_party/blink/renderer/core/frame/screen.cc
-+++ b/third_party/blink/renderer/core/frame/screen.cc
-@@ -28,6 +28,8 @@
- 
- #include "third_party/blink/renderer/core/frame/screen.h"
- 
-+#include "base/command_line.h"
-+
- #include "base/numerics/safe_conversions.h"
- #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
- #include "third_party/blink/renderer/core/event_target_names.h"
-@@ -175,6 +177,12 @@ const display::ScreenInfo& Screen::GetScreenInfo() const {
-   DCHECK(DomWindow());
-   LocalFrame* frame = DomWindow()->GetFrame();
- 
-+  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+    static display::ScreenInfo spoofed_info =
-+        ungoogled::GetSpoofedScreenInfo();
-+    return spoofed_info;
-+  }
-+
-   const auto& screen_infos = frame->GetChromeClient().GetScreenInfos(*frame);
-   for (const auto& screen : screen_infos.screen_infos) {
-     if (screen.display_id == display_id_)
