@@ -16,7 +16,7 @@ new file mode 100644
 index 0000000000..26098a4ffd
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_screen.cc
-@@ -0,0 +1,99 @@
+@@ -0,0 +1,106 @@
 +#include "components/ungoogled/fingerprint_screen.h"
 +
 +#include "base/command_line.h"
@@ -41,6 +41,13 @@ index 0000000000..26098a4ffd
 +}
 +
 +float GetSpoofedDevicePixelRatio() {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
++    double dpr = 1.0;
++    base::StringToDouble(cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio), &dpr);
++    return static_cast<float>(dpr);
++  }
++
 +  uint32_t seed = GetFingerprintSeed();
 +  // 80% 1.0, 10% 1.25, 5% 1.5, 5% 2.0
 +  uint32_t r = (seed >> 8) % 100;
