@@ -1,0 +1,41 @@
+diff --git a/third_party/blink/renderer/core/input/mouse_event_manager.cc b/third_party/blink/renderer/core/input/mouse_event_manager.cc
+index b56f87be80..437e7d076b 100644
+--- a/third_party/blink/renderer/core/input/mouse_event_manager.cc
++++ b/third_party/blink/renderer/core/input/mouse_event_manager.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "third_party/blink/renderer/core/input/mouse_event_manager.h"
+ 
++#include "components/ungoogled/fingerprint_screen.h"
++
+ #include "base/metrics/histogram_functions.h"
+ #include "build/build_config.h"
+ #include "third_party/blink/public/platform/web_input_event_result.h"
+@@ -632,12 +634,23 @@ gfx::PointF MouseEventManager::LastKnownMouseScreenPosition() {
+ }
+ 
+ void MouseEventManager::SetLastKnownMousePosition(const WebMouseEvent& event) {
++  WebMouseEvent spoofed_event = event;
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++    // Clamp screen position to spoofed screen bounds.
++    gfx::Rect screen_rect = ungoogled::GetSpoofedScreenInfo().rect;
++    gfx::PointF pos = event.PositionInScreen();
++    pos.SetToMax(gfx::PointF(0, 0));
++    pos.SetToMin(gfx::PointF(screen_rect.width() - 1,
++                              screen_rect.height() - 1));
++    spoofed_event.SetPositionInScreen(pos);
++  }
++
+   is_mouse_position_unknown_ =
+-      event.GetType() == WebInputEvent::Type::kMouseLeave;
++      spoofed_event.GetType() == WebInputEvent::Type::kMouseLeave;
+   last_known_mouse_position_in_root_frame_ =
+-      PhysicalOffset(gfx::ToFlooredPoint(event.PositionInRootFrame()));
+-  last_known_mouse_position_ = event.PositionInWidget();
+-  last_known_mouse_screen_position_ = event.PositionInScreen();
++      PhysicalOffset(gfx::ToFlooredPoint(spoofed_event.PositionInRootFrame()));
++  last_known_mouse_position_ = spoofed_event.PositionInWidget();
++  last_known_mouse_screen_position_ = spoofed_event.PositionInScreen();
+ }
+ 
+ void MouseEventManager::SetLastMousePositionAsUnknown() {
