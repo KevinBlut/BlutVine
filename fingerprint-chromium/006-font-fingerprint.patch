@@ -1,13 +1,7 @@
 diff --git a/third_party/blink/renderer/platform/fonts/font_cache.cc b/third_party/blink/renderer/platform/fonts/font_cache.cc
-index 7344fa93eb..042e05f678 100644
+index 7344fa93eb..64e9048273 100644
 --- a/third_party/blink/renderer/platform/fonts/font_cache.cc
 +++ b/third_party/blink/renderer/platform/fonts/font_cache.cc
-@@ -1,4 +1,4 @@
--/*
-+ /*
-  * Copyright (C) 2006, 2008 Apple Inc. All rights reserved.
-  * Copyright (C) 2007 Nicholas Shanks <webkit@nickshanks.com>
-  *
 @@ -32,6 +32,10 @@
  #include <limits>
  #include <memory>
@@ -19,14 +13,15 @@ index 7344fa93eb..042e05f678 100644
  #include "base/debug/alias.h"
  #include "base/feature_list.h"
  #include "base/notreached.h"
-@@ -123,6 +127,122 @@ const FontPlatformData* FontCache::SystemFontPlatformData(
+@@ -123,6 +127,127 @@ const FontPlatformData* FontCache::SystemFontPlatformData(
  }
  #endif
  
 +// 获取平台特定的字体列表
-+static std::vector<std::string> GetPlatformFonts(const std::string& platform) {
++// Returns a reference to a static vector — zero heap allocation per call.
++static const std::vector<std::string>& GetPlatformFonts(const std::string& platform) {
 +  if (platform == "windows") {
-+    return {
++    static const std::vector<std::string> kWindowsFonts = {
 +      "Arial", "Arial Black",
 +      "Bahnschrift",
 +      "Calibri", "Cambria", "Cambria Math", "Candara", "Cascadia Code", "Cascadia Mono", "Comic Sans MS", "Consolas", "Constantia", "Corbel", "Courier New",
@@ -46,8 +41,9 @@ index 7344fa93eb..042e05f678 100644
 +      "Webdings", "Wingdings",
 +      "Yu Gothic"
 +    };
++    return kWindowsFonts;
 +  } else if (platform == "macos") {
-+    return {
++    static const std::vector<std::string> kMacFonts = {
 +      "Academy Engraved LET", "Adelle Sans Devanagari", "AkayaKanadaka", "AkayaTelivigala", "Al Bayan", "Al Firat", "Al Khalil", "Al Nile", "Al Rafidain", "Al Rafidain Al Fanni", "Al Tarikh", "Algiers", "American Typewriter", "Andale Mono", "Annai MN", "Apple Braille", "Apple Chancery", "Apple Color Emoji", "Apple LiGothic", "Apple LiSung", "Apple SD Gothic Neo", "Apple Symbols", "AppleGothic", "AppleMyungjo", "Arial", "Arial Hebrew", "Arial Narrow", "Arial Rounded MT", "Arial Unicode MS", "Arima Koshi", "Arima Madurai", "Asphalt", "Athelas", "Avenir", "Avenir Next", "Ayuthaya",
 +      "Baghdad", "Bai Jamjuree", "Balega", "Baloo 2", "Baloo Bhai 2", "Baloo Bhaijaan", "Baloo Bhaina 2", "Baloo Chettan 2", "Baloo Da 2", "Baloo Paaji 2", "Baloo Tamma 2", "Baloo Tammudu 2", "Baloo Thambi 2", "Bangla MN", "Bangla Sangam MN", "Bank Gothic", "Baoli SC", "Baoli TC", "Baskerville", "Basra", "Bebas Neue", "Beirut", "BiauKaiHK", "BiauKaiTC", "Big Caslon", "BIZ UDGothic", "BIZ UDMincho", "Blackmoor LET", "BlairMdITC TT", "BM DoHyeon OTF", "BM HANNA 11yrs old OTF", "BM HANNA Air OTF", "BM HANNA Pro OTF", "BM JUA OTF", "BM KIRANGHAERANG OTF", "BM YEONSUNG OTF", "Bodoni 72", "Bodoni 72 Oldstyle", "Bodoni 72 Smallcaps", "Bodoni Ornaments", "Book Antiqua", "Bookman Old Style", "Bordeaux Roman Bold LET", "Bradley Hand", "Braganza", "Brill Italic", "Brill Roman", "Brush Script MT",
 +      "Cambay Devanagari", "Canela", "Canela Deck", "Canela Text", "Capitals", "Carlito", "Catamaran", "Century Gothic", "Century Schoolbook", "Chakra Petch", "Chalkboard", "Chalkboard SE", "Chalkduster", "Charcoal CY", "Charm", "Charmonman", "Charter", "Cochin", "Comic Sans MS", "Copperplate", "Corsiva Hebrew", "Courier", "Courier New",
@@ -74,8 +70,9 @@ index 7344fa93eb..042e05f678 100644
 +      "Yaziji", "Yuanti SC", "Yuanti TC", "YuGothic", "YuKyokasho", "YuKyokasho Yoko", "YuMincho", "YuMincho +36p Kana", "Yuppy SC", "Yuppy TC",
 +      "Zapf Dingbats", "Zapfino", "Zawra"
 +    };
++    return kMacFonts;
 +  } else if (platform == "linux") {
-+    return {
++    static const std::vector<std::string> kLinuxFonts = {
 +      // Ubuntu Font Family
 +      "Ubuntu", "Ubuntu Condensed", "Ubuntu Light", "Ubuntu Mono", "Ubuntu Sans", "Ubuntu Sans Mono",
 +      // DejaVu Family
@@ -92,8 +89,10 @@ index 7344fa93eb..042e05f678 100644
 +      // FreeFont Family
 +      "FreeSans", "FreeSerif", "FreeMono"
 +    };
++    return kLinuxFonts;
 +  }
-+  return {};
++  static const std::vector<std::string> kEmpty;
++  return kEmpty;
 +}
 +
 +// 判断是否为基础字体（不应被处理）
@@ -142,7 +141,7 @@ index 7344fa93eb..042e05f678 100644
  const FontPlatformData* FontCache::GetFontPlatformData(
      const FontDescription& font_description,
      const FontFaceCreationParams& creation_params,
-@@ -141,6 +261,71 @@ const FontPlatformData* FontCache::GetFontPlatformData(
+@@ -141,6 +266,71 @@ const FontPlatformData* FontCache::GetFontPlatformData(
    }
  #endif
  
@@ -178,8 +177,8 @@ index 7344fa93eb..042e05f678 100644
 +      spoofed_platform = current_os;
 +    }
 +
-+    std::vector<std::string> current_os_fonts = GetPlatformFonts(current_os);
-+    std::vector<std::string> platform_fonts = GetPlatformFonts(spoofed_platform);
++    const auto& current_os_fonts = GetPlatformFonts(current_os);
++    const auto& platform_fonts = GetPlatformFonts(spoofed_platform);
 +
 +    std::string fingerprint = command_line->GetSwitchValueASCII(switches::kFingerprint);
 +    uint32_t hash = std::hash<std::string>{}(fingerprint + requested_family);
