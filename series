@@ -9,6 +9,7 @@ fingerprint-chromium/004-rlz-spoofing.patch
 fingerprint-chromium/005-hardware-concurrency-fingerprint.patch
 fingerprint-chromium/006-font-fingerprint.patch
 fingerprint-chromium/007-shadow-root.patch
+fingerprint-chromium/008-screen-fingerprint.patch
 fingerprint-chromium/009-webdriver.patch
 fingerprint-chromium/010-headless.patch
 fingerprint-chromium/011-gpu-info.patch
@@ -18,4 +19,5 @@ fingerprint-chromium/013-webgl-fingerprint.patch
 fingerprint-chromium/014-client-rects.patch
 fingerprint-chromium/015-canvas-measure-text.patch
 fingerprint-chromium/016-webgl-readPixels.patch
+fingerprint-chromium/017-mouse-event-fingerprint.patch
 fingerprint-chromium/018-timezone.patch
