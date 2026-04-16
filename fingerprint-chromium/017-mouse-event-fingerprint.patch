@@ -1,84 +1,38 @@
-diff --git a/third_party/blink/renderer/core/events/mouse_related_event.cc b/third_party/blink/renderer/core/events/mouse_related_event.cc
-index 00000000..00000000 100644
---- a/third_party/blink/renderer/core/events/mouse_related_event.cc
-+++ b/third_party/blink/renderer/core/events/mouse_related_event.cc
+diff --git a/third_party/blink/renderer/core/events/mouse_event.h b/third_party/blink/renderer/core/events/mouse_event.h
+--- a/third_party/blink/renderer/core/events/mouse_event.h
++++ b/third_party/blink/renderer/core/events/mouse_event.h
 @@ -28,6 +28,8 @@
- 
- #include "third_party/blink/renderer/core/events/mouse_related_event.h"
- 
-+#include "components/ungoogled/fingerprint_screen.h"
-+
- #include "third_party/blink/renderer/core/dom/document.h"
- #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
- #include "third_party/blink/renderer/core/frame/local_dom_window.h"
-@@ -155,10 +157,26 @@ double MouseRelatedEvent::pageY() const {
-   return PageLocation().Y();
- }
- 
--double MouseRelatedEvent::screenX() const {
-+double MouseRelatedEvent::screenX() const {  // NOLINT
-+  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+    const gfx::Rect bounds = ungoogled::GetSpoofedScreenInfo().rect;
-+    const double raw = screen_location_.X();
-+    const double max = static_cast<double>(bounds.width() - 1);
-+    if (raw < 0.0) return 0.0;
-+    if (raw > max) return max;
-+    return raw;
-+  }
-   return screen_location_.X();
- }
- 
--double MouseRelatedEvent::screenY() const {
-+double MouseRelatedEvent::screenY() const {  // NOLINT
-+  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+    const gfx::Rect bounds = ungoogled::GetSpoofedScreenInfo().rect;
-+    const double raw = screen_location_.Y();
-+    const double max = static_cast<double>(bounds.height() - 1);
-+    if (raw < 0.0) return 0.0;
-+    if (raw > max) return max;
-+    return raw;
-+  }
-   return screen_location_.Y();
- }
-diff --git a/third_party/blink/renderer/core/input/mouse_event_manager.cc b/third_party/blink/renderer/core/input/mouse_event_manager.cc
-index b56f87be80..437e7d076b 100644
---- a/third_party/blink/renderer/core/input/mouse_event_manager.cc
-+++ b/third_party/blink/renderer/core/input/mouse_event_manager.cc
-@@ -4,6 +4,8 @@
- 
- #include "third_party/blink/renderer/core/input/mouse_event_manager.h"
+ #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EVENTS_MOUSE_EVENT_H_
+ #define THIRD_PARTY_BLINK_RENDERER_CORE_EVENTS_MOUSE_EVENT_H_
  
 +#include "components/ungoogled/fingerprint_screen.h"
 +
- #include "base/metrics/histogram_functions.h"
- #include "build/build_config.h"
- #include "third_party/blink/public/platform/web_input_event_result.h"
-@@ -632,12 +634,23 @@ gfx::PointF MouseEventManager::LastKnownMouseScreenPosition() {
- }
+ #include "third_party/blink/public/platform/web_menu_source_type.h"
+ #include "third_party/blink/renderer/core/core_export.h"
+ #include "third_party/blink/renderer/core/events/mouse_event_init.h"
+@@ -95,12 +97,22 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
+   // Note that these values are adjusted to counter the effects of zoom, so
+   // that values exposed via DOM APIs are invariant under zooming.
+   virtual double screenX() const {
++    if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++      return ungoogled::RemapScreenPoint(
++          gfx::PointF(screen_location_.X(), screen_location_.Y())).x();
++    }
+     return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
+-        ? screen_location_.X()
+-        : static_cast<int>(screen_location_.X());
++               ? screen_location_.X()
++               : static_cast<int>(screen_location_.X());
+   }
  
- void MouseEventManager::SetLastKnownMousePosition(const WebMouseEvent& event) {
-+  WebMouseEvent spoofed_event = event;
-+  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+    // Clamp screen position to spoofed screen bounds so the stored
-+    // last-known position (contextmenu, drag, hover) is also consistent.
-+    gfx::Rect screen_rect = ungoogled::GetSpoofedScreenInfo().rect;
-+    gfx::PointF pos = event.PositionInScreen();
-+    pos.SetToMax(gfx::PointF(0, 0));
-+    pos.SetToMin(gfx::PointF(screen_rect.width() - 1,
-+                              screen_rect.height() - 1));
-+    spoofed_event.SetPositionInScreen(pos);
-+  }
-+
-   is_mouse_position_unknown_ =
--      event.GetType() == WebInputEvent::Type::kMouseLeave;
-+      spoofed_event.GetType() == WebInputEvent::Type::kMouseLeave;
-   last_known_mouse_position_in_root_frame_ =
--      PhysicalOffset(gfx::ToFlooredPoint(event.PositionInRootFrame()));
--  last_known_mouse_position_ = event.PositionInWidget();
--  last_known_mouse_screen_position_ = event.PositionInScreen();
-+      PhysicalOffset(gfx::ToFlooredPoint(spoofed_event.PositionInRootFrame()));
-+  last_known_mouse_position_ = spoofed_event.PositionInWidget();
-+  last_known_mouse_screen_position_ = spoofed_event.PositionInScreen();
- }
- 
- void MouseEventManager::SetLastMousePositionAsUnknown() {
+   virtual double screenY() const {
++    if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++      return ungoogled::RemapScreenPoint(
++          gfx::PointF(screen_location_.X(), screen_location_.Y())).y();
++    }
+     return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
+-        ? screen_location_.Y()
+-        : static_cast<int>(screen_location_.Y());
++               ? screen_location_.Y()
++               : static_cast<int>(screen_location_.Y());
+   }
