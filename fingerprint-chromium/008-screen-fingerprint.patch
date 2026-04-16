@@ -11,46 +11,12 @@ index 5d330670e9..afa71870e6 100644
      "ungoogled_switches.h",
      "ungoogled_switches.cc",
    ]
-diff --git a/components/ungoogled/fingerprint_screen.h b/components/ungoogled/fingerprint_screen.h
-new file mode 100644
-index 0000000000..00000000
---- /dev/null
-+++ b/components/ungoogled/fingerprint_screen.h
-@@ -0,0 +1,27 @@
-+// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
-+// Use of this source code is governed by a BSD-style license that can be
-+// found in the LICENSE file.
-+
-+#ifndef COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
-+#define COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
-+
-+#include "ui/display/screen_info.h"
-+#include "ui/gfx/geometry/rect.h"
-+
-+namespace ungoogled {
-+
-+// Returns true if screen spoofing is active (i.e. --fingerprint is present).
-+bool IsFingerprintScreenSpoofingEnabled();
-+
-+// Returns the spoofed device pixel ratio derived from the fingerprint seed,
-+// or from --fingerprint-screen-device-pixel-ratio if explicitly set.
-+float GetSpoofedDevicePixelRatio();
-+
-+// Returns a fully populated display::ScreenInfo with spoofed dimensions/DPR.
-+display::ScreenInfo GetSpoofedScreenInfo();
-+
-+// Returns the spoofed outer window rect (for outerWidth/Height, screenX/Y).
-+gfx::Rect GetSpoofedWindowRect();
-+
-+}  // namespace ungoogled
-+
-+#endif  // COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
 diff --git a/components/ungoogled/fingerprint_screen.cc b/components/ungoogled/fingerprint_screen.cc
 new file mode 100644
-index 0000000000..00000000
+index 0000000000..c9855ae5c3
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_screen.cc
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,117 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -168,8 +134,141 @@ index 0000000000..00000000
 +}
 +
 +}  // namespace ungoogled
+\ No newline at end of file
+diff --git a/components/ungoogled/fingerprint_screen.h b/components/ungoogled/fingerprint_screen.h
+new file mode 100644
+index 0000000000..f5ccc0d32b
+--- /dev/null
++++ b/components/ungoogled/fingerprint_screen.h
+@@ -0,0 +1,28 @@
++// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
++#define COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
++
++#include "ui/display/screen_info.h"
++#include "ui/gfx/geometry/rect.h"
++
++namespace ungoogled {
++
++// Returns true if screen spoofing is active (i.e. --fingerprint is present).
++bool IsFingerprintScreenSpoofingEnabled();
++
++// Returns the spoofed device pixel ratio derived from the fingerprint seed,
++// or from --fingerprint-screen-device-pixel-ratio if explicitly set.
++float GetSpoofedDevicePixelRatio();
++
++// Returns a fully populated display::ScreenInfo with spoofed dimensions/DPR.
++display::ScreenInfo GetSpoofedScreenInfo();
++
++// Returns the spoofed outer window rect (for outerWidth/Height, screenX/Y).
++gfx::Rect GetSpoofedWindowRect();
++
++}  // namespace ungoogled
++
++#endif  // COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
+\ No newline at end of file
+diff --git a/third_party/blink/renderer/core/DEPS b/third_party/blink/renderer/core/DEPS
+index 942455c9b6..961e36b4f0 100644
+--- a/third_party/blink/renderer/core/DEPS
++++ b/third_party/blink/renderer/core/DEPS
+@@ -69,6 +69,7 @@ include_rules = [
+     "+components/attribution_reporting/features.h",
+     "+components/performance_manager/public/mojom/coordination_unit.mojom-blink.h",
+     "+components/performance_manager/public/mojom/web_memory.mojom-blink.h",
++    "+components/ungoogled",
+     "+components/viz/common/frame_timing_details.h",
+     "+components/viz/common/navigation_id.h",
+     "+gpu/config/gpu_feature_info.h",
+diff --git a/third_party/blink/renderer/core/frame/local_dom_window.cc b/third_party/blink/renderer/core/frame/local_dom_window.cc
+index 06efc300ee..5dbbfbed65 100644
+--- a/third_party/blink/renderer/core/frame/local_dom_window.cc
++++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
+@@ -30,6 +30,8 @@
+ #include <optional>
+ #include <utility>
+ 
++#include "components/ungoogled/fingerprint_screen.h"
++
+ #include "base/command_line.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "base/task/single_thread_task_runner.h"
+@@ -1576,6 +1578,10 @@ int LocalDOMWindow::outerHeight() const {
+ 
+   LocalFrame* frame = GetFrame();
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++    return ungoogled::GetSpoofedWindowRect().height();
++  }
++
+   // FencedFrames should return innerHeight to prevent passing
+   // arbitrary data through the window height.
+   if (frame->IsInFencedFrameTree()) {
+@@ -1601,6 +1607,10 @@ int LocalDOMWindow::outerWidth() const {
+ 
+   LocalFrame* frame = GetFrame();
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++    return ungoogled::GetSpoofedWindowRect().width();
++  }
++
+   // FencedFrames should return innerWidth to prevent passing
+   // arbitrary data through the window width.
+   if (frame->IsInFencedFrameTree()) {
+@@ -1655,6 +1665,9 @@ int LocalDOMWindow::innerHeight() const {
+   if (!GetFrame())
+     return 0;
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
++    return ungoogled::GetSpoofedWindowRect().height() - 85;
++
+   return AdjustForAbsoluteZoom::AdjustInt(GetViewportSize().height(),
+                                           GetFrame()->LayoutZoomFactor());
+ }
+@@ -1663,6 +1676,9 @@ int LocalDOMWindow::innerWidth() const {
+   if (!GetFrame())
+     return 0;
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
++    return ungoogled::GetSpoofedWindowRect().width();
++
+   return AdjustForAbsoluteZoom::AdjustInt(GetViewportSize().width(),
+                                           GetFrame()->LayoutZoomFactor());
+ }
+@@ -1672,6 +1688,9 @@ int LocalDOMWindow::screenX() const {
+   if (!frame)
+     return 0;
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
++    return ungoogled::GetSpoofedWindowRect().x();
++
+   Page* page = frame->GetPage();
+   if (!page)
+     return 0;
+@@ -1690,6 +1709,9 @@ int LocalDOMWindow::screenY() const {
+   if (!frame)
+     return 0;
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
++    return ungoogled::GetSpoofedWindowRect().y();
++
+   Page* page = frame->GetPage();
+   if (!page)
+     return 0;
+@@ -1802,6 +1824,9 @@ double LocalDOMWindow::devicePixelRatio() const {
+   if (!GetFrame())
+     return 0.0;
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
++    return ungoogled::GetSpoofedDevicePixelRatio();
++
+   return GetFrame()->DevicePixelRatio();
+ }
+ 
 diff --git a/third_party/blink/renderer/core/frame/screen.cc b/third_party/blink/renderer/core/frame/screen.cc
-index 69ffc2b05f..00000000 100644
+index 69ffc2b05f..799e9c68d7 100644
 --- a/third_party/blink/renderer/core/frame/screen.cc
 +++ b/third_party/blink/renderer/core/frame/screen.cc
 @@ -28,6 +28,8 @@
@@ -178,9 +277,9 @@ index 69ffc2b05f..00000000 100644
  
 +#include "components/ungoogled/fingerprint_screen.h"
 +
- #include "base/command_line.h"
  #include "base/numerics/safe_conversions.h"
  #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
+ #include "third_party/blink/renderer/core/event_target_names.h"
 @@ -175,6 +177,12 @@ const display::ScreenInfo& Screen::GetScreenInfo() const {
    DCHECK(DomWindow());
    LocalFrame* frame = DomWindow()->GetFrame();
@@ -194,67 +293,3 @@ index 69ffc2b05f..00000000 100644
    const auto& screen_infos = frame->GetChromeClient().GetScreenInfos(*frame);
    for (const auto& screen : screen_infos.screen_infos) {
      if (screen.display_id == display_id_)
-diff --git a/third_party/blink/renderer/core/frame/local_dom_window.cc b/third_party/blink/renderer/core/frame/local_dom_window.cc
-index 06efc300ee..00000000 100644
---- a/third_party/blink/renderer/core/frame/local_dom_window.cc
-+++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
-@@ -29,6 +29,8 @@
- #include <memory>
- #include <optional>
- #include <utility>
-+
-+#include "components/ungoogled/fingerprint_screen.h"
- 
- #include "base/command_line.h"
- #include "base/metrics/histogram_macros.h"
-@@ -1575,6 +1577,10 @@ int LocalDOMWindow::outerHeight() const {
- 
-   LocalFrame* frame = GetFrame();
- 
-+  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+    return ungoogled::GetSpoofedWindowRect().height();
-+  }
-+
-   // FencedFrames should return innerHeight to prevent passing
-   // arbitrary data through the window height.
-   if (frame->IsInFencedFrameTree()) {
-@@ -1604,6 +1610,10 @@ int LocalDOMWindow::outerWidth() const {
- 
-   LocalFrame* frame = GetFrame();
- 
-+  if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+    return ungoogled::GetSpoofedWindowRect().width();
-+  }
-+
-   // FencedFrames should return innerWidth to prevent passing
-   // arbitrary data through the window width.
-   if (frame->IsInFencedFrameTree()) {
-@@ -1680,6 +1690,9 @@ int LocalDOMWindow::screenX() const {
-   if (!frame)
-     return 0;
- 
-+  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
-+    return ungoogled::GetSpoofedWindowRect().x();
-+
-   Page* page = frame->GetPage();
-   if (!page)
-     return 0;
-@@ -1701,6 +1714,9 @@ int LocalDOMWindow::screenY() const {
-   if (!frame)
-     return 0;
- 
-+  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
-+    return ungoogled::GetSpoofedWindowRect().y();
-+
-   Page* page = frame->GetPage();
-   if (!page)
-     return 0;
-@@ -1817,6 +1833,9 @@ double LocalDOMWindow::devicePixelRatio() const {
-   if (!GetFrame())
-     return 0.0;
- 
-+  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
-+    return ungoogled::GetSpoofedDevicePixelRatio();
-+
-   return GetFrame()->DevicePixelRatio();
- }
