@@ -1,38 +1,42 @@
 diff --git a/third_party/blink/renderer/core/events/mouse_event.h b/third_party/blink/renderer/core/events/mouse_event.h
+index edfcb09cf3..1ae8673b97 100644
 --- a/third_party/blink/renderer/core/events/mouse_event.h
 +++ b/third_party/blink/renderer/core/events/mouse_event.h
-@@ -28,6 +28,8 @@
- #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_EVENTS_MOUSE_EVENT_H_
- #define THIRD_PARTY_BLINK_RENDERER_CORE_EVENTS_MOUSE_EVENT_H_
+@@ -26,6 +26,8 @@
+ 
+ #include <cmath>
  
 +#include "components/ungoogled/fingerprint_screen.h"
 +
- #include "third_party/blink/public/platform/web_menu_source_type.h"
+ #include "third_party/blink/public/common/input/web_menu_source_type.h"
  #include "third_party/blink/renderer/core/core_export.h"
- #include "third_party/blink/renderer/core/events/mouse_event_init.h"
-@@ -95,12 +97,22 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
-   // Note that these values are adjusted to counter the effects of zoom, so
-   // that values exposed via DOM APIs are invariant under zooming.
-   virtual double screenX() const {
-+    if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+      return ungoogled::RemapScreenPoint(
-+          gfx::PointF(screen_location_.X(), screen_location_.Y())).x();
-+    }
-     return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
--        ? screen_location_.X()
--        : static_cast<int>(screen_location_.X());
-+               ? screen_location_.X()
-+               : static_cast<int>(screen_location_.X());
-   }
+ #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
+@@ -147,8 +149,26 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
  
-   virtual double screenY() const {
+   // Note that these values are adjusted to counter the effects of zoom, so that
+   // values exposed via DOM APIs are invariant under zooming.
+-  virtual double screenX() const { return std::floor(screen_x_); }
+-  virtual double screenY() const { return std::floor(screen_y_); }
++  virtual double screenX() const {
 +    if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+      return ungoogled::RemapScreenPoint(
-+          gfx::PointF(screen_location_.X(), screen_location_.Y())).y();
++        const gfx::Rect bounds = ungoogled::GetSpoofedScreenInfo().rect;
++        const double raw = std::floor(screen_x_);
++        if (raw < 0.0) return 0.0;
++        if (raw > bounds.width() - 1) return bounds.width() - 1;
++        return raw;
 +    }
-     return (RuntimeEnabledFeatures::FractionalMouseEventEnabled())
--        ? screen_location_.Y()
--        : static_cast<int>(screen_location_.Y());
-+               ? screen_location_.Y()
-+               : static_cast<int>(screen_location_.Y());
-   }
++    return std::floor(screen_x_);
++  }
++  virtual double screenY() const {
++    if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++        const gfx::Rect bounds = ungoogled::GetSpoofedScreenInfo().rect;
++        const double raw = std::floor(screen_y_);
++        if (raw < 0.0) return 0.0;
++        if (raw > bounds.height() - 1) return bounds.height() - 1;
++        return raw;
++    }
++    return std::floor(screen_y_);
++  }
+ 
+   virtual double clientX() const { return std::floor(client_x_); }
+   virtual double clientY() const { return std::floor(client_y_); }
