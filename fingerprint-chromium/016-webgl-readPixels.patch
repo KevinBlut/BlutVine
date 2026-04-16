@@ -1,18 +1,19 @@
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index deeb4fab7c..31f3fbf6e0 100644
+index 5bd56f0e65..61f42e549d 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-@@ -34,6 +34,9 @@
- #include "components/ungoogled/fingerprint_data.h"
+@@ -35,6 +35,10 @@
  #include "components/ungoogled/ungoogled_switches.h"
+ #include <random>
  
 +#include "base/strings/string_number_conversions.h"
 +#include "third_party/skia/src/core/SkFingerprintSeed.h"
++#include <unordered_map>
 +
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
  #include "base/compiler_specific.h"
-@@ -5226,6 +5229,152 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+@@ -5233,6 +5237,204 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
        return;
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
@@ -74,50 +75,102 @@ index deeb4fab7c..31f3fbf6e0 100644
 +              return (p[0] + p[1] + p[2]) / 3;
 +          };
 +        
-+          // ── 5. Collect AA pixels ──────────────────────────────────────────────
++          // ── 5. Collect AA pixels (cached by render_hash) ──────────────────────
++          //
++          // The scan is the dominant cost: for large canvases it walks O(area/stride)
++          // pixels doing 5 luminance reads each. Since render_hash already encodes
++          // seed+width+height, the selected pixel set is fully deterministic — we
++          // can safely cache it across repeated readPixels calls on the same canvas.
++          //
++          // Cache is thread_local (matches SkFingerprintSeed TLS pattern), capped at
++          // 8 entries (covers the typical handful of distinct canvas sizes per page).
++          // Eviction is simple FIFO via insertion-order tracking.
++          //
++          // Stride is now area-tiered rather than linear:
++          //   < 4 096 px  → stride 1  (tiny canvas, scan is cheap anyway)
++          //   < 65 536 px → stride 4  (was: 2–8, now consistently 4)
++          //   < 524 288 px→ stride 8  (was: 8–65, now capped at 8)
++          //   ≥ 524 288 px→ stride 16 (HD+ frames; was potentially 65+)
++          // This keeps scan cost bounded while still finding plenty of AA candidates.
++
 +          constexpr int BOUNDARY_THRESHOLD = 10;
 +          constexpr int BLEND_MARGIN       = 2;
 +          constexpr int HARD_EDGE_TOL      = 3;
-+          int scan_stride = (area < 10000) ? 1
-+                          : std::max(2, static_cast<int>(area / 8000));
-+        
++          constexpr size_t kCacheCapacity  = 8;
++
++          struct AACacheEntry {
++              uint64_t key;
++              std::vector<std::pair<int,int>> pixels;
++          };
++          static thread_local std::vector<AACacheEntry> aa_cache;
++          static thread_local std::vector<uint64_t>     aa_cache_order;
++
 +          std::vector<std::pair<int,int>> aa_pixels;
-+          aa_pixels.reserve(static_cast<size_t>(max_pixels * 2));
-+        
-+          for (int py = 1; py < height - 1 && (int)aa_pixels.size() < max_pixels * 4; py += scan_stride) {
-+              for (int px = 1; px < width - 1 && (int)aa_pixels.size() < max_pixels * 4; px += scan_stride) {
-+                  int c      = get_lum(px,     py);
-+                  int left   = get_lum(px - 1, py);
-+                  int right  = get_lum(px + 1, py);
-+                  int top    = get_lum(px,     py - 1);
-+                  int bottom = get_lum(px,     py + 1);
-+                  bool is_aa = false;
-+                  if (std::abs(left - right) > BOUNDARY_THRESHOLD) {
-+                      int lo = std::min(left, right) + BLEND_MARGIN;
-+                      int hi = std::max(left, right) - BLEND_MARGIN;
-+                      if (c > lo && c < hi &&
-+                          std::abs(c - left)  > HARD_EDGE_TOL &&
-+                          std::abs(c - right) > HARD_EDGE_TOL)
-+                          is_aa = true;
++
++          // Look up in cache first
++          auto cache_it = std::find_if(aa_cache.begin(), aa_cache.end(),
++              [&](const AACacheEntry& e){ return e.key == render_hash; });
++
++          if (cache_it != aa_cache.end()) {
++              aa_pixels = cache_it->pixels;
++          } else {
++              // Cache miss — run the scan
++              int scan_stride = (area < 4096)   ? 1 :
++                                (area < 65536)  ? 4 :
++                                (area < 524288) ? 8 : 16;
++
++              aa_pixels.reserve(static_cast<size_t>(max_pixels * 2));
++
++              for (int py = 1; py < height - 1 && (int)aa_pixels.size() < max_pixels * 4; py += scan_stride) {
++                  for (int px = 1; px < width - 1 && (int)aa_pixels.size() < max_pixels * 4; px += scan_stride) {
++                      int c      = get_lum(px,     py);
++                      int left   = get_lum(px - 1, py);
++                      int right  = get_lum(px + 1, py);
++                      int top    = get_lum(px,     py - 1);
++                      int bottom = get_lum(px,     py + 1);
++                      bool is_aa = false;
++                      if (std::abs(left - right) > BOUNDARY_THRESHOLD) {
++                          int lo = std::min(left, right) + BLEND_MARGIN;
++                          int hi = std::max(left, right) - BLEND_MARGIN;
++                          if (c > lo && c < hi &&
++                              std::abs(c - left)  > HARD_EDGE_TOL &&
++                              std::abs(c - right) > HARD_EDGE_TOL)
++                              is_aa = true;
++                      }
++                      if (!is_aa && std::abs(top - bottom) > BOUNDARY_THRESHOLD) {
++                          int lo = std::min(top, bottom) + BLEND_MARGIN;
++                          int hi = std::max(top, bottom) - BLEND_MARGIN;
++                          if (c > lo && c < hi &&
++                              std::abs(c - top)    > HARD_EDGE_TOL &&
++                              std::abs(c - bottom) > HARD_EDGE_TOL)
++                              is_aa = true;
++                      }
++                      if (is_aa)
++                          aa_pixels.push_back({px, py});
 +                  }
-+                  if (!is_aa && std::abs(top - bottom) > BOUNDARY_THRESHOLD) {
-+                      int lo = std::min(top, bottom) + BLEND_MARGIN;
-+                      int hi = std::max(top, bottom) - BLEND_MARGIN;
-+                      if (c > lo && c < hi &&
-+                          std::abs(c - top)    > HARD_EDGE_TOL &&
-+                          std::abs(c - bottom) > HARD_EDGE_TOL)
-+                          is_aa = true;
-+                  }
-+                  if (is_aa)
-+                      aa_pixels.push_back({px, py});
 +              }
-+          }
-+        
-+          // ── 6. Apply noise ────────────────────────────────────────────────────
-+          if (!aa_pixels.empty()) {
++
++              // Shuffle + trim before caching so every hit gets the same final set
 +              std::shuffle(aa_pixels.begin(), aa_pixels.end(), rng);
 +              if ((int)aa_pixels.size() > max_pixels)
 +                  aa_pixels.resize(static_cast<size_t>(max_pixels));
++
++              // Insert into cache, evicting oldest entry if at capacity
++              if (aa_cache.size() >= kCacheCapacity) {
++                  uint64_t oldest_key = aa_cache_order.front();
++                  aa_cache_order.erase(aa_cache_order.begin());
++                  aa_cache.erase(std::remove_if(aa_cache.begin(), aa_cache.end(),
++                      [&](const AACacheEntry& e){ return e.key == oldest_key; }),
++                      aa_cache.end());
++              }
++              aa_cache.push_back({render_hash, aa_pixels});
++              aa_cache_order.push_back(render_hash);
++          }
++
++          // ── 6. Apply noise ────────────────────────────────────────────────────
++          if (!aa_pixels.empty()) {
++              // NOTE: shuffle+trim already done at cache-fill time; cached entries
++              // are pre-trimmed, so we apply noise directly here.
 +          
 +              for (const auto& [px, py] : aa_pixels) {
 +                  uint64_t p_seed = render_hash
