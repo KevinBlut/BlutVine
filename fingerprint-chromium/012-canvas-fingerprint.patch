@@ -1,5 +1,5 @@
 diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
-index 3006cad0fb..1f259a7037 100644
+index 3006cad0fb..f0f9f8d74a 100644
 --- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
 +++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
 @@ -11,6 +11,8 @@
@@ -90,7 +90,7 @@ index 3006cad0fb..1f259a7037 100644
  
    return image_data;
 diff --git a/third_party/blink/renderer/platform/graphics/graphics_context.cc b/third_party/blink/renderer/platform/graphics/graphics_context.cc
-index 362b5ab4a0..962232e311 100644
+index 362b5ab4a0..fd5ac582ec 100644
 --- a/third_party/blink/renderer/platform/graphics/graphics_context.cc
 +++ b/third_party/blink/renderer/platform/graphics/graphics_context.cc
 @@ -29,6 +29,11 @@
@@ -105,7 +105,26 @@ index 362b5ab4a0..962232e311 100644
  #include "base/logging.h"
  #include "build/build_config.h"
  #include "cc/paint/color_filter.h"
-@@ -627,6 +632,33 @@ cc::PaintFlags::FilterQuality GraphicsContext::ComputeFilterQuality(
+@@ -432,15 +437,18 @@ void GraphicsContext::DrawText(const Font& font,
+                                const cc::PaintFlags& flags,
+                                DOMNodeId node_id,
+                                const AutoDarkMode& auto_dark_mode) {
++  SetupCanvasFingerprintSeed();
+   DarkModeFlags dark_mode_flags(this, auto_dark_mode, flags);
+   if (sk_sp<SkTextBlob> text_blob = paint_controller_.CachedTextBlob()) {
+     canvas_->drawTextBlob(text_blob, point.x(), point.y(), node_id,
+                           dark_mode_flags);
++    SkClearFingerprintSeed();
+     return;
+   }
+   font.DrawText(canvas_, text_info, point, node_id, dark_mode_flags,
+                 printing_ ? Font::DrawType::kGlyphsAndClusters
+                           : Font::DrawType::kGlyphsOnly);
++  SkClearFingerprintSeed();
+ }
+ 
+ template <typename DrawTextFunc>
+@@ -627,6 +635,33 @@ cc::PaintFlags::FilterQuality GraphicsContext::ComputeFilterQuality(
        std::min(resampling, ImageInterpolationQuality()));
  }
  
@@ -139,148 +158,100 @@ index 362b5ab4a0..962232e311 100644
  void GraphicsContext::DrawImageTiled(
      Image& image,
      const gfx::RectF& dest_rect,
-@@ -656,9 +688,10 @@ void GraphicsContext::DrawLine(const gfx::PointF& from,
-                                const gfx::PointF& to,
+@@ -657,36 +692,45 @@ void GraphicsContext::DrawLine(const gfx::PointF& from,
                                 const cc::PaintFlags& flags,
                                 const AutoDarkMode& auto_dark_mode) {
--  DCHECK(canvas_);
+   DCHECK(canvas_);
 -  canvas_->drawLine(from.x(), from.y(), to.x(), to.y(),
 -                    DarkModeFlags(this, auto_dark_mode, flags));
-+    DCHECK(canvas_);
-+    SetupCanvasFingerprintSeed();
-+    canvas_->drawLine(from.x(), from.y(), to.x(), to.y(), DarkModeFlags(this, auto_dark_mode, flags));
-+    SkClearFingerprintSeed();
++  SetupCanvasFingerprintSeed();
++  canvas_->drawLine(from.x(), from.y(), to.x(), to.y(), DarkModeFlags(this, auto_dark_mode, flags));
++  SkClearFingerprintSeed();
  }
  
  void GraphicsContext::DrawOval(const SkRect& oval,
-@@ -671,8 +704,10 @@ void GraphicsContext::DrawOval(const SkRect& oval,
+                                const cc::PaintFlags& flags,
+                                const AutoDarkMode& auto_dark_mode) {
+   DCHECK(canvas_);
++  SetupCanvasFingerprintSeed();
+   canvas_->drawOval(oval, DarkModeFlags(this, auto_dark_mode, flags));
++  SkClearFingerprintSeed();
+ }
+ 
  void GraphicsContext::DrawPath(const SkPath& path,
                                 const cc::PaintFlags& flags,
                                 const AutoDarkMode& auto_dark_mode) {
--  DCHECK(canvas_);
--  canvas_->drawPath(path, DarkModeFlags(this, auto_dark_mode, flags));
-+    DCHECK(canvas_);
-+    SetupCanvasFingerprintSeed();
-+    canvas_->drawPath(path, DarkModeFlags(this, auto_dark_mode, flags));
-+    SkClearFingerprintSeed();
+   DCHECK(canvas_);
++  SetupCanvasFingerprintSeed();
+   canvas_->drawPath(path, DarkModeFlags(this, auto_dark_mode, flags));
++  SkClearFingerprintSeed();
  }
  
  void GraphicsContext::DrawRect(const SkRect& rect,
-@@ -685,8 +720,10 @@ void GraphicsContext::DrawRect(const SkRect& rect,
+                                const cc::PaintFlags& flags,
+                                const AutoDarkMode& auto_dark_mode) {
+   DCHECK(canvas_);
++  SetupCanvasFingerprintSeed();
+   canvas_->drawRect(rect, DarkModeFlags(this, auto_dark_mode, flags));
++  SkClearFingerprintSeed();
+ }
+ 
  void GraphicsContext::DrawRRect(const SkRRect& rrect,
                                  const cc::PaintFlags& flags,
                                  const AutoDarkMode& auto_dark_mode) {
--  DCHECK(canvas_);
--  canvas_->drawRRect(rrect, DarkModeFlags(this, auto_dark_mode, flags));
-+    DCHECK(canvas_);
-+    SetupCanvasFingerprintSeed();
-+    canvas_->drawRRect(rrect, DarkModeFlags(this, auto_dark_mode, flags));
-+    SkClearFingerprintSeed();
+   DCHECK(canvas_);
++  SetupCanvasFingerprintSeed();
+   canvas_->drawRRect(rrect, DarkModeFlags(this, auto_dark_mode, flags));
++  SkClearFingerprintSeed();
  }
  
  void GraphicsContext::FillPath(const Path& path_to_fill,
-@@ -826,35 +863,40 @@ void GraphicsContext::FillDRRect(const FloatRoundedRect& outer,
-                                  const FloatRoundedRect& inner,
-                                  const Color& color,
-                                  const AutoDarkMode& auto_dark_mode) {
--  DCHECK(canvas_);
--
--  const cc::PaintFlags& fill_flags = ImmutableState()->FillFlags();
--  const SkColor4f sk_color = color.toSkColor4f();
--  if (!IsSimpleDRRect(outer, inner)) {
--    if (sk_color == fill_flags.getColor4f()) {
--      canvas_->drawDRRect(SkRRect(outer), SkRRect(inner),
--                          DarkModeFlags(this, auto_dark_mode, fill_flags));
--    } else {
--      cc::PaintFlags flags(fill_flags);
--      flags.setColor(sk_color);
--      canvas_->drawDRRect(SkRRect(outer), SkRRect(inner),
--                          DarkModeFlags(this, auto_dark_mode, flags));
-+    DCHECK(canvas_);
-+
-+    const cc::PaintFlags& fill_flags = ImmutableState()->FillFlags();
-+    const SkColor4f sk_color = color.toSkColor4f();
-+    if (!IsSimpleDRRect(outer, inner)) {
-+        if (sk_color == fill_flags.getColor4f()) {
-+            SetupCanvasFingerprintSeed();
-+            canvas_->drawDRRect(SkRRect(outer), SkRRect(inner),
-+                                DarkModeFlags(this, auto_dark_mode, fill_flags));
-+            SkClearFingerprintSeed();
-+        } else {
-+            cc::PaintFlags flags(fill_flags);
-+            flags.setColor(sk_color);
-+            SetupCanvasFingerprintSeed();
-+            canvas_->drawDRRect(SkRRect(outer), SkRRect(inner),
-+                                DarkModeFlags(this, auto_dark_mode, flags));
-+            SkClearFingerprintSeed();
-+        }
-+        return;
+@@ -832,13 +876,17 @@ void GraphicsContext::FillDRRect(const FloatRoundedRect& outer,
+   const SkColor4f sk_color = color.toSkColor4f();
+   if (!IsSimpleDRRect(outer, inner)) {
+     if (sk_color == fill_flags.getColor4f()) {
++      SetupCanvasFingerprintSeed();
+       canvas_->drawDRRect(SkRRect(outer), SkRRect(inner),
+                           DarkModeFlags(this, auto_dark_mode, fill_flags));
++      SkClearFingerprintSeed();
+     } else {
+       cc::PaintFlags flags(fill_flags);
+       flags.setColor(sk_color);
++      SetupCanvasFingerprintSeed();
+       canvas_->drawDRRect(SkRRect(outer), SkRRect(inner),
+                           DarkModeFlags(this, auto_dark_mode, flags));
++      SkClearFingerprintSeed();
      }
--    return;
--  }
+     return;
+   }
+@@ -853,8 +901,10 @@ void GraphicsContext::FillDRRect(const FloatRoundedRect& outer,
+   stroke_flags.setStyle(cc::PaintFlags::kStroke_Style);
+   stroke_flags.setStrokeWidth(stroke_width);
  
--  // We can draw this as a stroked rrect.
--  float stroke_width = inner.Rect().x() - outer.Rect().x();
--  SkRRect stroke_r_rect(outer);
--  stroke_r_rect.inset(stroke_width / 2, stroke_width / 2);
-+    float stroke_width = inner.Rect().x() - outer.Rect().x();
-+    SkRRect stroke_r_rect(outer);
-+    stroke_r_rect.inset(stroke_width / 2, stroke_width / 2);
- 
--  cc::PaintFlags stroke_flags(fill_flags);
--  stroke_flags.setColor(sk_color);
--  stroke_flags.setStyle(cc::PaintFlags::kStroke_Style);
--  stroke_flags.setStrokeWidth(stroke_width);
-+    cc::PaintFlags stroke_flags(fill_flags);
-+    stroke_flags.setColor(sk_color);
-+    stroke_flags.setStyle(cc::PaintFlags::kStroke_Style);
-+    stroke_flags.setStrokeWidth(stroke_width);
- 
--  canvas_->drawRRect(stroke_r_rect,
--                     DarkModeFlags(this, auto_dark_mode, stroke_flags));
-+    SetupCanvasFingerprintSeed();
-+    canvas_->drawRRect(stroke_r_rect,
-+                       DarkModeFlags(this, auto_dark_mode, stroke_flags));
-+    SkClearFingerprintSeed();
++  SetupCanvasFingerprintSeed();
+   canvas_->drawRRect(stroke_r_rect,
+                      DarkModeFlags(this, auto_dark_mode, stroke_flags));
++  SkClearFingerprintSeed();
  }
  
  void GraphicsContext::FillRectWithContouredHole(
-@@ -862,20 +904,24 @@ void GraphicsContext::FillRectWithContouredHole(
-     const ContouredRect& contoured_hole_rect,
-     const Color& color,
-     const AutoDarkMode& auto_dark_mode) {
--  cc::PaintFlags flags(ImmutableState()->FillFlags());
--  flags.setColor(color.toSkColor4f());
--  const DarkModeFlags dark_mode_flags(this, auto_dark_mode, flags);
--  if (contoured_hole_rect.HasRoundCurvature()) {
--    canvas_->drawDRRect(SkRRect::MakeRect(gfx::RectFToSkRect(rect)),
--                        SkRRect(contoured_hole_rect.AsRoundedRect()),
--                        dark_mode_flags);
--  } else {
--    SkPath path;
--    CHECK(Op(SkPath::Rect(gfx::RectFToSkRect(rect)),
--             contoured_hole_rect.GetPath().GetSkPath(), kDifference_SkPathOp,
--             &path));
--    canvas_->drawPath(path, dark_mode_flags);
--  }
-+    cc::PaintFlags flags(ImmutableState()->FillFlags());
-+    flags.setColor(color.toSkColor4f());
-+    const DarkModeFlags dark_mode_flags(this, auto_dark_mode, flags);
-+    if (contoured_hole_rect.HasRoundCurvature()) {
-+        SetupCanvasFingerprintSeed();
-+        canvas_->drawDRRect(SkRRect::MakeRect(gfx::RectFToSkRect(rect)),
-+                            SkRRect(contoured_hole_rect.AsRoundedRect()),
-+                            dark_mode_flags);
-+        SkClearFingerprintSeed();
-+    } else {
-+        SkPath path;
-+        CHECK(Op(SkPath::Rect(gfx::RectFToSkRect(rect)),
-+                 contoured_hole_rect.GetPath().GetSkPath(), kDifference_SkPathOp,
-+                 &path));
-+        SetupCanvasFingerprintSeed();
-+        canvas_->drawPath(path, dark_mode_flags);
-+        SkClearFingerprintSeed();
-+    }
+@@ -866,15 +916,19 @@ void GraphicsContext::FillRectWithContouredHole(
+   flags.setColor(color.toSkColor4f());
+   const DarkModeFlags dark_mode_flags(this, auto_dark_mode, flags);
+   if (contoured_hole_rect.HasRoundCurvature()) {
++    SetupCanvasFingerprintSeed();
+     canvas_->drawDRRect(SkRRect::MakeRect(gfx::RectFToSkRect(rect)),
+                         SkRRect(contoured_hole_rect.AsRoundedRect()),
+                         dark_mode_flags);
++    SkClearFingerprintSeed();
+   } else {
+     SkPath path;
+     CHECK(Op(SkPath::Rect(gfx::RectFToSkRect(rect)),
+              contoured_hole_rect.GetPath().GetSkPath(), kDifference_SkPathOp,
+              &path));
++    SetupCanvasFingerprintSeed();
+     canvas_->drawPath(path, dark_mode_flags);
++    SkClearFingerprintSeed();
+   }
  }
  
- void GraphicsContext::FillEllipse(const gfx::RectF& ellipse,
