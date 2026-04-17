@@ -1,6 +1,79 @@
+diff --git a/src/core/SkBlitter_ARGB32.cpp b/src/core/SkBlitter_ARGB32.cpp
+index a753802..15289cb 100644
+--- a/src/core/SkBlitter_ARGB32.cpp
++++ b/src/core/SkBlitter_ARGB32.cpp
+@@ -1392,6 +1392,68 @@ static bool blit_color(const SkPixmap& device,
+         SkOpts::blit_mask_d32_a8(device.writable_addr32(x,y), device.rowBytes(),
+                                  (const SkAlpha*)mask.getAddr(x,y), mask.fRowBytes,
+                                  color, clip.width(), clip.height());
++
++        // BlutVine: inject noise into AA glyphs at blit time
++        uint32_t seed = SkGetFingerprintSeed();
++        if (seed != 0) {
++            uint8_t gpu_class = SkGetFingerprintGpuClass();
++            int w = clip.width();
++            int h = clip.height();
++            SkPMColor* row = device.writable_addr32(x, y);
++            const SkAlpha* mrow = (const SkAlpha*)mask.getAddr(x, y);
++
++            for (int gy = 0; gy < h; ++gy) {
++                for (int gx = 0; gx < w; ++gx) {
++                    SkAlpha a = mrow[gx];
++                    if (a == 0 || a == 255) continue;
++
++                    uint32_t h_ = seed;
++                    h_ ^= static_cast<uint32_t>(x + gx) * 2654435761u;
++                    h_ ^= static_cast<uint32_t>(y + gy) * 2246822519u;
++                    h_ ^= h_ >> 16;
++                    h_ *= 0x45d9f3bu;
++                    h_ ^= h_ >> 16;
++
++                    uint32_t mag_roll = h_ & 0xFF;
++                    uint8_t mag = 0;
++                    if (gpu_class == kSkFingerprintGpuClassIntel) {
++                        if (mag_roll >= 80) mag = 1;
++                    } else if (gpu_class == kSkFingerprintGpuClassApple) {
++                        if (mag_roll < 180)      mag = 1;
++                        else if (mag_roll < 248) mag = 2;
++                        else                     mag = 3;
++                    } else {
++                        if (mag_roll < 210) mag = 1;
++                        else                mag = 2;
++                    }
++                    if (mag == 0) continue;
++
++                    bool add = (h_ >> 8) & 1;
++
++                    // Unpack ARGB32
++                    uint32_t px = row[gx];
++                    int r = (px >> 16) & 0xFF;
++                    int g = (px >>  8) & 0xFF;
++                    int b = (px      ) & 0xFF;
++                    int al = (px >> 24) & 0xFF;
++
++                    auto clamp8 = [](int v) -> int { return v < 0 ? 0 : v > 255 ? 255 : v; };
++                    r  = clamp8(add ? r  + mag : r  - mag);
++                    g  = clamp8(add ? g  + mag : g  - mag);
++                    b  = clamp8(add ? b  + mag : b  - mag);
++
++                    row[gx] = (static_cast<uint32_t>(al) << 24) |
++                              (static_cast<uint32_t>(r)  << 16) |
++                              (static_cast<uint32_t>(g)  <<  8) |
++                              (static_cast<uint32_t>(b));
++
++                    SkStoreFingerprintPixel(x + gx, y + gy, a);
++                }
++                row  = (SkPMColor*)((char*)row + device.rowBytes());
++                mrow = mrow + mask.fRowBytes;
++            }
++        }
++
+         return true;
+     }
+ 
 diff --git a/src/core/SkFingerprintSeed.h b/src/core/SkFingerprintSeed.h
 new file mode 100644
-index 0000000..4ab77e2
+index 0000000..72c909a
 --- /dev/null
 +++ b/src/core/SkFingerprintSeed.h
 @@ -0,0 +1,60 @@
