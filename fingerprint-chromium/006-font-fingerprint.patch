@@ -9,7 +9,7 @@ index 7344fa93eb..64e9048273 100644
 +#include "base/command_line.h"
 +#include "base/strings/string_number_conversions.h"
 +#include "components/ungoogled/ungoogled_switches.h"
-+
++#include <unordered_set>
  #include "base/debug/alias.h"
  #include "base/feature_list.h"
  #include "base/notreached.h"
@@ -19,9 +19,9 @@ index 7344fa93eb..64e9048273 100644
  
 +// 获取平台特定的字体列表
 +// Returns a reference to a static vector — zero heap allocation per call.
-+static const std::vector<std::string>& GetPlatformFonts(const std::string& platform) {
++static const std::unordered_set<std::string>& GetPlatformFonts(const std::string& platform) {
 +  if (platform == "windows") {
-+    static const std::vector<std::string> kWindowsFonts = {
++    static const std::unordered_set<std::string> kWindowsFonts = {
 +      "Arial", "Arial Black",
 +      "Bahnschrift",
 +      "Calibri", "Cambria", "Cambria Math", "Candara", "Cascadia Code", "Cascadia Mono", "Comic Sans MS", "Consolas", "Constantia", "Corbel", "Courier New",
@@ -185,12 +185,12 @@ index 7344fa93eb..64e9048273 100644
 +
 +    if (spoofed_platform != current_os) {
 +      // 获取伪装平台的字体列表
-+      bool is_platform_font = std::find(platform_fonts.begin(), platform_fonts.end(),
-+                                        requested_family) != platform_fonts.end();
++      bool is_platform_font = platform_fonts.count(requested_family) > 0;
 +      if (is_platform_font) {
 +        // 伪装平台的字体，用当前系统的字体替代
-+        size_t index = hash % current_os_fonts.size();
-+        FontFaceCreationParams substitute_params(AtomicString(current_os_fonts[index].c_str()));
++        auto it = current_os_fonts.begin();
++        std::advance(it, hash % current_os_fonts.size());
++        FontFaceCreationParams substitute_params(AtomicString(it->c_str()));
 +        return font_platform_data_cache_.GetOrCreateFontPlatformData(
 +            this, font_description, substitute_params, alternate_font_name);
 +      } else {
