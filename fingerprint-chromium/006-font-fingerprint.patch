@@ -91,7 +91,7 @@ index 7344fa93eb..64e9048273 100644
 +    };
 +    return kLinuxFonts;
 +  }
-+  static const std::vector<std::string> kEmpty;
++  static const std::unordered_set<std::string> kEmpty;
 +  return kEmpty;
 +}
 +
