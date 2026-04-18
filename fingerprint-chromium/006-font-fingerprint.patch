@@ -43,7 +43,7 @@ index 7344fa93eb..64e9048273 100644
 +    };
 +    return kWindowsFonts;
 +  } else if (platform == "macos") {
-+    static const std::vector<std::string> kMacFonts = {
++    static const std::unordered_set<std::string> kMacFonts = {
 +      "Academy Engraved LET", "Adelle Sans Devanagari", "AkayaKanadaka", "AkayaTelivigala", "Al Bayan", "Al Firat", "Al Khalil", "Al Nile", "Al Rafidain", "Al Rafidain Al Fanni", "Al Tarikh", "Algiers", "American Typewriter", "Andale Mono", "Annai MN", "Apple Braille", "Apple Chancery", "Apple Color Emoji", "Apple LiGothic", "Apple LiSung", "Apple SD Gothic Neo", "Apple Symbols", "AppleGothic", "AppleMyungjo", "Arial", "Arial Hebrew", "Arial Narrow", "Arial Rounded MT", "Arial Unicode MS", "Arima Koshi", "Arima Madurai", "Asphalt", "Athelas", "Avenir", "Avenir Next", "Ayuthaya",
 +      "Baghdad", "Bai Jamjuree", "Balega", "Baloo 2", "Baloo Bhai 2", "Baloo Bhaijaan", "Baloo Bhaina 2", "Baloo Chettan 2", "Baloo Da 2", "Baloo Paaji 2", "Baloo Tamma 2", "Baloo Tammudu 2", "Baloo Thambi 2", "Bangla MN", "Bangla Sangam MN", "Bank Gothic", "Baoli SC", "Baoli TC", "Baskerville", "Basra", "Bebas Neue", "Beirut", "BiauKaiHK", "BiauKaiTC", "Big Caslon", "BIZ UDGothic", "BIZ UDMincho", "Blackmoor LET", "BlairMdITC TT", "BM DoHyeon OTF", "BM HANNA 11yrs old OTF", "BM HANNA Air OTF", "BM HANNA Pro OTF", "BM JUA OTF", "BM KIRANGHAERANG OTF", "BM YEONSUNG OTF", "Bodoni 72", "Bodoni 72 Oldstyle", "Bodoni 72 Smallcaps", "Bodoni Ornaments", "Book Antiqua", "Bookman Old Style", "Bordeaux Roman Bold LET", "Bradley Hand", "Braganza", "Brill Italic", "Brill Roman", "Brush Script MT",
 +      "Cambay Devanagari", "Canela", "Canela Deck", "Canela Text", "Capitals", "Carlito", "Catamaran", "Century Gothic", "Century Schoolbook", "Chakra Petch", "Chalkboard", "Chalkboard SE", "Chalkduster", "Charcoal CY", "Charm", "Charmonman", "Charter", "Cochin", "Comic Sans MS", "Copperplate", "Corsiva Hebrew", "Courier", "Courier New",
@@ -72,7 +72,7 @@ index 7344fa93eb..64e9048273 100644
 +    };
 +    return kMacFonts;
 +  } else if (platform == "linux") {
-+    static const std::vector<std::string> kLinuxFonts = {
++    static const std::unordered_set<std::string> kLinuxFonts = {
 +      // Ubuntu Font Family
 +      "Ubuntu", "Ubuntu Condensed", "Ubuntu Light", "Ubuntu Mono", "Ubuntu Sans", "Ubuntu Sans Mono",
 +      // DejaVu Family
