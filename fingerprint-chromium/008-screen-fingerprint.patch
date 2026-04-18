@@ -16,7 +16,7 @@ new file mode 100644
 index 0000000000..c9855ae5c3
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_screen.cc
-@@ -0,0 +1,117 @@
+@@ -0,0 +1,121 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -96,11 +96,15 @@ index 0000000000..c9855ae5c3
 +  // Seed-based fallback for width/height.
 +  if (width <= 0 || height <= 0) {
 +    struct Resolution { int w, h; };
-+    static constexpr std::array<Resolution, 6> kResolutions = {{
-+        {1920, 1080}, {1366, 768}, {1536, 864},
-+        {1440, 900},  {2560, 1440}, {3840, 2160},
++    static constexpr std::array<Resolution, 4> kDesktopResolutions = {{
++        {1920, 1080}, {1440, 900}, {2560, 1440}, {3840, 2160},
 +    }};
-+    const auto& res = kResolutions[seed % kResolutions.size()];
++    static constexpr std::array<Resolution, 4> kLaptopResolutions = {{
++        {1920, 1080}, {1366, 768}, {1536, 864}, {1440, 900},
++    }};
++    bool is_laptop = cmd->HasSwitch(switches::kFingerprintLaptop);
++    const auto& resolutions = is_laptop ? kLaptopResolutions : kDesktopResolutions;
++    const auto& res = resolutions[seed % resolutions.size()];
 +    width  = res.w;
 +    height = res.h;
 +  }
