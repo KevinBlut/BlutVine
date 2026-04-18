@@ -1,8 +1,17 @@
 diff --git a/src/core/SkBlitter_ARGB32.cpp b/src/core/SkBlitter_ARGB32.cpp
-index a753802..15289cb 100644
+index a753802..300ccec 100644
 --- a/src/core/SkBlitter_ARGB32.cpp
 +++ b/src/core/SkBlitter_ARGB32.cpp
-@@ -1392,6 +1392,68 @@ static bool blit_color(const SkPixmap& device,
+@@ -28,6 +28,8 @@
+ #include "src/core/SkMemset.h"
+ #include "src/shaders/SkShaderBase.h"
+ 
++#include "src/core/SkFingerprintSeed.h"
++
+ #include <algorithm>
+ #include <cstddef>
+ #include <cstdint>
+@@ -1392,6 +1394,68 @@ static bool blit_color(const SkPixmap& device,
          SkOpts::blit_mask_d32_a8(device.writable_addr32(x,y), device.rowBytes(),
                                   (const SkAlpha*)mask.getAddr(x,y), mask.fRowBytes,
                                   color, clip.width(), clip.height());
