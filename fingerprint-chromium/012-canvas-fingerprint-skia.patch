@@ -89,6 +89,7 @@ index 0000000..72c909a
 +#ifndef SK_FINGERPRINT_SEED_H
 +#define SK_FINGERPRINT_SEED_H
 +
++#include <atomic>
 +#include <cstdint>
 +#include <vector>
 +
@@ -97,15 +98,15 @@ index 0000000..72c909a
 +constexpr uint8_t kSkFingerprintGpuClassIntel  = 1;
 +constexpr uint8_t kSkFingerprintGpuClassApple  = 2;
 +
-+// Stores one AA pixel's position and our seed-modified coverage value
 +struct SkFingerprintPixel {
 +    int     x;
 +    int     y;
-+    uint8_t coverage;  // our modified coverage from blitAntiH
++    uint8_t coverage;
 +};
 +
-+inline thread_local uint32_t gSkFingerprintSeed                        = 0;
-+inline thread_local uint8_t  gSkFingerprintGpuClass                    = kSkFingerprintGpuClassNvidia;
++inline std::atomic<uint32_t> gSkFingerprintSeed{0};
++inline std::atomic<uint8_t>  gSkFingerprintGpuClass{kSkFingerprintGpuClassNvidia};
++
 +#pragma clang diagnostic push
 +#pragma clang diagnostic ignored "-Wexit-time-destructors"
 +#pragma clang diagnostic ignored "-Wglobal-constructors"
@@ -113,17 +114,17 @@ index 0000000..72c909a
 +#pragma clang diagnostic pop
 +
 +inline void SkSetFingerprintSeed(uint32_t seed, uint8_t gpu_class) {
-+    gSkFingerprintSeed     = seed;
-+    gSkFingerprintGpuClass = gpu_class;
++    gSkFingerprintSeed.store(seed, std::memory_order_relaxed);
++    gSkFingerprintGpuClass.store(gpu_class, std::memory_order_relaxed);
 +    gSkFingerprintPixels.clear();
 +}
 +
 +inline uint32_t SkGetFingerprintSeed() {
-+    return gSkFingerprintSeed;
++    return gSkFingerprintSeed.load(std::memory_order_relaxed);
 +}
 +
 +inline uint8_t SkGetFingerprintGpuClass() {
-+    return gSkFingerprintGpuClass;
++    return gSkFingerprintGpuClass.load(std::memory_order_relaxed);
 +}
 +
 +inline void SkStoreFingerprintPixel(int x, int y, uint8_t coverage) {
@@ -135,10 +136,8 @@ index 0000000..72c909a
 +}
 +
 +inline void SkClearFingerprintSeed() {
-+    gSkFingerprintSeed     = 0;
-+    gSkFingerprintGpuClass = kSkFingerprintGpuClassNvidia;
-+    // do NOT clear gSkFingerprintPixels here — it must persist until
-+    // getImageDataInternal reads and corrects the pixel buffer
++    gSkFingerprintSeed.store(0, std::memory_order_relaxed);
++    gSkFingerprintGpuClass.store(kSkFingerprintGpuClassNvidia, std::memory_order_relaxed);
 +}
 +
 +inline void SkClearFingerprintPixels() {
