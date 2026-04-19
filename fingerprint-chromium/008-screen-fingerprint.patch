@@ -1,8 +1,8 @@
 diff --git a/components/ungoogled/BUILD.gn b/components/ungoogled/BUILD.gn
-index 5d330670e9..afa71870e6 100644
+index 5d330670e9..9ac48e164a 100644
 --- a/components/ungoogled/BUILD.gn
 +++ b/components/ungoogled/BUILD.gn
-@@ -5,6 +5,8 @@
+@@ -5,11 +5,13 @@
  component("ungoogled_switches") {
    sources = [
      "fingerprint_data.h",
@@ -11,12 +11,19 @@ index 5d330670e9..afa71870e6 100644
      "ungoogled_switches.h",
      "ungoogled_switches.cc",
    ]
+ 
+   defines = [ "IS_UNGOOGLED_IMPL" ]
+ 
+-  deps = [ "//base" ]
++  deps = [ "//base", "//ui/display", "//ui/gfx/geometry" ]
+ }
+\ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_screen.cc b/components/ungoogled/fingerprint_screen.cc
 new file mode 100644
-index 0000000000..c9855ae5c3
+index 0000000000..dfebc8adb0
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_screen.cc
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,120 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -125,7 +132,6 @@ index 0000000000..c9855ae5c3
 +  info.is_extended         = false;
 +  info.is_primary          = true;
 +  info.is_internal         = false;
-+  info.display_frequency   = 60.0f;
 +  return info;
 +}
 +
