@@ -82,10 +82,10 @@ index a753802..300ccec 100644
  
 diff --git a/src/core/SkFingerprintSeed.h b/src/core/SkFingerprintSeed.h
 new file mode 100644
-index 0000000..72c909a
+index 0000000..a2a9f7b
 --- /dev/null
 +++ b/src/core/SkFingerprintSeed.h
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,59 @@
 +#ifndef SK_FINGERPRINT_SEED_H
 +#define SK_FINGERPRINT_SEED_H
 +
