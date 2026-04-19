@@ -37,13 +37,21 @@ diff --git a/third_party/blink/renderer/core/frame/navigator_device_memory.cc b/
 index 05fa33e456..4c09100671 100644
 --- a/third_party/blink/renderer/core/frame/navigator_device_memory.cc
 +++ b/third_party/blink/renderer/core/frame/navigator_device_memory.cc
-@@ -12,7 +12,8 @@
+@@ -12,7 +12,19 @@
  namespace blink {
  
  float NavigatorDeviceMemory::deviceMemory() const {
 -  return ApproximatedDeviceMemory::GetApproximatedDeviceMemory();
-+  return 8;
-+  //return ApproximatedDeviceMemory::GetApproximatedDeviceMemory();
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprintDeviceMemory)) {
++    std::string val = cmd->GetSwitchValueASCII(switches::kFingerprintDeviceMemory);
++    double mem = 0.0;
++    if (base::StringToDouble(val, &mem) && mem > 0.0)
++      return static_cast<float>(mem);
++  }
++  if (cmd->HasSwitch(switches::kFingerprint))
++    return 16.0f;
++  return ApproximatedDeviceMemory::GetApproximatedDeviceMemory();
  }
  
  }  // namespace blink
