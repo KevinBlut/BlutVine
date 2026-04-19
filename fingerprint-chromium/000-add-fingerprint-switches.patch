@@ -120,7 +120,7 @@ diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content
 index bd954af691..6c6dbf21f6 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
-@@ -3741,6 +3741,27 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+@@ -3741,6 +3741,28 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
        switches::kEnableWebGLDraftExtensions,
        switches::kEnableWebGPUDeveloperFeatures,
        switches::kFileUrlPathAlias,
@@ -141,6 +141,7 @@ index bd954af691..6c6dbf21f6 100644
 +      switches::kFingerprintGpuModel,
 +      switches::kFingerprintLaptop,
 +      switches::kFingerprintHardwareConcurrency,
++      switches::kFingerprintDeviceMemory,
 +      switches::kFingerprintPlatform,
 +      switches::kFingerprintPlatformVersion,
 +      switches::kFingerprintLocation,
