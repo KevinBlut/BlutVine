@@ -1,8 +1,8 @@
 diff --git a/third_party/blink/renderer/platform/fonts/font_cache.cc b/third_party/blink/renderer/platform/fonts/font_cache.cc
-index 7344fa93eb..64e9048273 100644
+index 7344fa93eb..21392dc2d0 100644
 --- a/third_party/blink/renderer/platform/fonts/font_cache.cc
 +++ b/third_party/blink/renderer/platform/fonts/font_cache.cc
-@@ -32,6 +32,10 @@
+@@ -32,6 +32,11 @@
  #include <limits>
  #include <memory>
  
@@ -10,10 +10,11 @@ index 7344fa93eb..64e9048273 100644
 +#include "base/strings/string_number_conversions.h"
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include <unordered_set>
++
  #include "base/debug/alias.h"
  #include "base/feature_list.h"
  #include "base/notreached.h"
-@@ -123,6 +127,127 @@ const FontPlatformData* FontCache::SystemFontPlatformData(
+@@ -123,6 +128,127 @@ const FontPlatformData* FontCache::SystemFontPlatformData(
  }
  #endif
  
@@ -141,72 +142,27 @@ index 7344fa93eb..64e9048273 100644
  const FontPlatformData* FontCache::GetFontPlatformData(
      const FontDescription& font_description,
      const FontFaceCreationParams& creation_params,
-@@ -141,6 +266,71 @@ const FontPlatformData* FontCache::GetFontPlatformData(
+@@ -141,6 +267,26 @@ const FontPlatformData* FontCache::GetFontPlatformData(
    }
  #endif
  
 +  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-+  // 字体指纹处理逻辑 - 不应用于最后手段字体
 +  if (command_line->HasSwitch(switches::kFingerprint) &&
 +      creation_params.CreationType() == kCreateFontByFamily &&
 +      alternate_font_name != AlternateFontName::kLastResort) {
 +
 +    const std::string requested_family = creation_params.Family().Utf8();
 +
-+    // 基础字体直接返回，不进行任何处理
 +    if (IsBasicFont(requested_family)) {
 +      return font_platform_data_cache_.GetOrCreateFontPlatformData(
 +          this, font_description, creation_params, alternate_font_name);
 +    }
 +
-+    // 检测当前操作系统
-+    const char* current_os =
-+#if BUILDFLAG(IS_WIN)
-+      "windows";
-+#elif BUILDFLAG(IS_MAC)
-+      "macos";
-+#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-+      "linux";
-+#else
-+      "linux";  // 默认
-+#endif
-+
-+
-+    std::string spoofed_platform = command_line->GetSwitchValueASCII(switches::kFingerprintPlatform);
-+    if (spoofed_platform.empty()) {
-+      spoofed_platform = current_os;
-+    }
-+
-+    const auto& current_os_fonts = GetPlatformFonts(current_os);
-+    const auto& platform_fonts = GetPlatformFonts(spoofed_platform);
-+
-+    std::string fingerprint = command_line->GetSwitchValueASCII(switches::kFingerprint);
-+    uint32_t hash = std::hash<std::string>{}(fingerprint + requested_family);
-+
-+    if (spoofed_platform != current_os) {
-+      // 获取伪装平台的字体列表
-+      bool is_platform_font = platform_fonts.count(requested_family) > 0;
-+      if (is_platform_font) {
-+        // 伪装平台的字体，用当前系统的字体替代
-+        auto it = current_os_fonts.begin();
-+        std::advance(it, hash % current_os_fonts.size());
-+        FontFaceCreationParams substitute_params(AtomicString(it->c_str()));
-+        return font_platform_data_cache_.GetOrCreateFontPlatformData(
-+            this, font_description, substitute_params, alternate_font_name);
-+      } else {
-+        // 非平台字体处理：95%概率隐藏
-+        float probability = static_cast<float>(hash) / static_cast<float>(std::numeric_limits<uint32_t>::max());
-+        if (probability < 0.95) {
-+          return nullptr;
-+        }
-+        // 5%概率显示，继续默认流程
-+      }
-+    } else {
-+      // 系统相同，随机隐藏2%的字体以生成指纹
-+      float probability = static_cast<float>(hash) / static_cast<float>(std::numeric_limits<uint32_t>::max());
-+      if (probability < 0.02) {
-+        return nullptr;
-+      }
++    static const std::unordered_set<std::string> kChromeDefaultFonts = {
++      "Arial", "Helvetica", "Times New Roman", "Courier New"
++    };
++    if (kChromeDefaultFonts.find(requested_family) == kChromeDefaultFonts.end()) {
++      return nullptr;
 +    }
 +  }
 +
