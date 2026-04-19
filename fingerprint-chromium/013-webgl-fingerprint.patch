@@ -1,5 +1,5 @@
 diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
-index 0037a13bba..66ef434d71 100644
+index 82a8b1979c..3f1c44306b 100644
 --- a/components/ungoogled/fingerprint_data.h
 +++ b/components/ungoogled/fingerprint_data.h
 @@ -275,6 +275,78 @@ constexpr GpuModelInfo kGpuModels[] = {
@@ -82,7 +82,7 @@ index 0037a13bba..66ef434d71 100644
  }  // namespace ungoogled
  
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index b0bba87aad..5bd56f0e65 100644
+index b0bba87aad..cb6e65dab9 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 @@ -28,6 +28,13 @@
@@ -205,26 +205,28 @@ index b0bba87aad..5bd56f0e65 100644
      case GL_MAX_VIEWPORT_DIMS:
        return GetWebGLIntArrayParameter(script_state, pname);
      case GL_PACK_ALIGNMENT:
-@@ -3881,7 +3960,13 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3881,7 +3960,15 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GL_RENDERBUFFER_BINDING:
        return WebGLAny(script_state, renderbuffer_binding_.Get());
      case GL_RENDERER:
--      return WebGLAny(script_state, String("WebKit WebGL"));
++    {
+       return WebGLAny(script_state, String("WebKit WebGL"));
 +    //{
 +    //    std::string r = GetGLRendererStringForFingerprint();
 +    //    if (!r.empty())
 +    //        return WebGLAny(script_state, String(r));
 +    //    return WebGLAny(script_state, String(ContextGL()->GetString(GL_RENDERER)));
 +    //}
-+      return WebGLAny(script_state, String("WebKit WebGL"));
++    }
      case GL_SAMPLE_ALPHA_TO_COVERAGE:
        return GetBooleanParameter(script_state, pname);
      case GL_SAMPLE_BUFFERS:
-@@ -3959,7 +4043,12 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3959,7 +4046,14 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GC3D_UNPACK_COLORSPACE_CONVERSION_WEBGL:
        return WebGLAny(script_state, unpack_colorspace_conversion_);
      case GL_VENDOR:
--      return WebGLAny(script_state, String("WebKit"));
++    {
+       return WebGLAny(script_state, String("WebKit"));
 +    //{
 +    //    std::string v = GetGLVendorStringForFingerprint();
 +    //    if (!v.empty())
@@ -234,7 +236,7 @@ index b0bba87aad..5bd56f0e65 100644
      case GL_VERSION:
        return WebGLAny(
            script_state,
-@@ -7754,47 +7843,75 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
+@@ -7754,47 +7848,75 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
  ScriptValue WebGLRenderingContextBase::GetWebGLFloatArrayParameter(
      ScriptState* script_state,
      GLenum pname) {
