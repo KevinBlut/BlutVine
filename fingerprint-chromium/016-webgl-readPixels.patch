@@ -20,10 +20,15 @@ index 5bd56f0e65..61f42e549d 100644
 +
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +    if (cmd->HasSwitch(switches::kFingerprint) &&
-+        format == GL_RGBA && type == GL_UNSIGNED_BYTE &&
++        type == GL_UNSIGNED_BYTE &&
 +        data && width > 0 && height > 0) {
 +
 +        if (width < 8 || height < 8) goto done;
++
++        int bpp = 4;
++        if (format == GL_RGB)        bpp = 3;
++        else if (format == GL_ALPHA) bpp = 1;
++        if (bpp == 1) goto done;
 +
 +        {
 +          // ── 1. GPU class ──────────────────────────────────────────────────────
@@ -71,7 +76,7 @@ index 5bd56f0e65..61f42e549d 100644
 +        
 +          // ── 4. Luminance helper (RGBA_8888) ───────────────────────────────────
 +          auto get_lum = [&](int px, int py) -> int {
-+              const uint8_t* p = data + py * width * 4 + px * 4;
++              const uint8_t* p = data + py * width * bpp + px * bpp;
 +              return (p[0] + p[1] + p[2]) / 3;
 +          };
 +        
@@ -197,7 +202,7 @@ index 5bd56f0e65..61f42e549d 100644
 +                  uint8_t jG  = (p_seed >> 10) & 1;
 +                  uint8_t jB  = (p_seed >> 11) & 1;
 +                
-+                  uint8_t* pixel = data + py * width * 4 + px * 4;
++                  uint8_t* pixel = data + py * width * bpp + px * bpp;
 +                  uint8_t r = pixel[0], g = pixel[1], b = pixel[2];
 +                
 +                  if ((r < 5 && g < 5 && b < 5) || (r > 250 && g > 250 && b > 250))
