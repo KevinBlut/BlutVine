@@ -160,21 +160,21 @@ index 0000000000..f5ccc0d32b
 +
 +#include "ui/display/screen_info.h"
 +#include "ui/gfx/geometry/rect.h"
-+
++#include "base/component_export.h"
 +namespace ungoogled {
 +
 +// Returns true if screen spoofing is active (i.e. --fingerprint is present).
-+bool IsFingerprintScreenSpoofingEnabled();
++COMPONENT_EXPORT(UNGOOGLED) bool IsFingerprintScreenSpoofingEnabled();
 +
 +// Returns the spoofed device pixel ratio derived from the fingerprint seed,
 +// or from --fingerprint-screen-device-pixel-ratio if explicitly set.
-+float GetSpoofedDevicePixelRatio();
++COMPONENT_EXPORT(UNGOOGLED) float GetSpoofedDevicePixelRatio();
 +
 +// Returns a fully populated display::ScreenInfo with spoofed dimensions/DPR.
-+display::ScreenInfo GetSpoofedScreenInfo();
++COMPONENT_EXPORT(UNGOOGLED) display::ScreenInfo GetSpoofedScreenInfo();
 +
 +// Returns the spoofed outer window rect (for outerWidth/Height, screenX/Y).
-+gfx::Rect GetSpoofedWindowRect();
++COMPONENT_EXPORT(UNGOOGLED) gfx::Rect GetSpoofedWindowRect();
 +
 +}  // namespace ungoogled
 +
