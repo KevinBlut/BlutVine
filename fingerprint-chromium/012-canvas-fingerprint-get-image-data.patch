@@ -174,9 +174,9 @@ index 7bd7cb5906..40ede47327 100644
 +    uint8_t jG  = (p_seed >> 14) & 1;
 +    uint8_t jB  = (p_seed >> 15) & 1;
 +
-+    uint8_t sR = mag + jR;
-+    uint8_t sG = mag + jG;
-+    uint8_t sB = mag + jB;
++    uint8_t sR = 1;
++    uint8_t sG = 1;
++    uint8_t sB = 1;
 +
 +    switch (colorType) {
 +      case kRGBA_8888_SkColorType:
