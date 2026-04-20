@@ -13,7 +13,7 @@ index cb6e65dab9..e8b5a75b39 100644
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
  #include "base/compiler_specific.h"
-@@ -5238,6 +5242,209 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+@@ -5238,6 +5242,206 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
        return;
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
