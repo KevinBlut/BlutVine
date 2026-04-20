@@ -23,13 +23,11 @@ index cb6e65dab9..e8b5a75b39 100644
 +        type == GL_UNSIGNED_BYTE &&
 +        data && width > 0 && height > 0) {
 +
-+        if (width < 8 || height < 8) goto done;
-+
 +        int bpp = 4;
 +        if (format == GL_RGB)        bpp = 3;
 +        else if (format == GL_ALPHA) bpp = 1;
-+        if (bpp == 1) goto done;
 +
++        if (width < 8 || height < 8 || bpp == 1) goto done;
 +        {
 +          // ── 1. GPU class ──────────────────────────────────────────────────────
 +          uint8_t gpu_class = kSkFingerprintGpuClassNvidia;
