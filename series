@@ -1,5 +1,6 @@
 fingerprint-chromium/add-components-ungoogled.patch
 fingerprint-chromium/add-client-rects-and-measuretext.patch
+fingerprint-chromium/add-fingerprint-to-gpu-thread.patch
 fingerprint-chromium/000-add-fingerprint-switches.patch
 fingerprint-chromium/001-disable-runtime.enable.patch
 fingerprint-chromium/002-user-agent-fingerprint.patch
