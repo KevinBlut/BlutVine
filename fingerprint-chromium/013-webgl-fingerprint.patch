@@ -177,10 +177,13 @@ index b0bba87aad..cb6e65dab9 100644
      case GL_MAX_TEXTURE_SIZE:
 -      return GetIntParameter(script_state, pname);
 +    {
-+        const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
-+        if (limits)
-+            return WebGLAny(script_state, limits->max_texture_size);
-+        return GetIntParameter(script_state, pname);
++    const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
++    if (limits) {
++        uint32_t seed = 0;
++        base::StringToUint(base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(switches::kFingerprint), &seed);
++        return WebGLAny(script_state, limits->max_texture_size - static_cast<int>(seed % 4));
++    }
++    return GetIntParameter(script_state, pname);
 +    }
      case GL_MAX_VARYING_VECTORS:
 -      return GetIntParameter(script_state, pname);
