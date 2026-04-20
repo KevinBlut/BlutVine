@@ -1,0 +1,113 @@
+diff --git a/src/gpu/ganesh/Device.cpp b/src/gpu/ganesh/Device.cpp
+index b79bd00..9ebac4d 100644
+--- a/src/gpu/ganesh/Device.cpp
++++ b/src/gpu/ganesh/Device.cpp
+@@ -6,6 +6,8 @@
+  */
+ #include "src/gpu/ganesh/Device.h"
+ 
++#include "src/core/SkFingerprintSeed.h"
++
+ #include "include/core/SkAlphaType.h"
+ #include "include/core/SkBlendMode.h"
+ #include "include/core/SkCanvas.h"
+@@ -553,6 +555,18 @@ void Device::drawPoints(SkCanvas::PointMode mode, SkSpan<const SkPoint> pts, con
+ void Device::drawRect(const SkRect& rect, const SkPaint& paint) {
+     ASSERT_SINGLE_OWNER
+     GR_CREATE_TRACE_MARKER_CONTEXT("skgpu::ganesh::Device", "drawRect", fContext.get());
++    
++    SkRect perturbedRect = rect;
++    uint32_t fp_seed = SkGetFingerprintSeed();
++    if (fp_seed) {
++        uint32_t h = fp_seed;
++        h ^= static_cast<uint32_t>(rect.left() * 100) * 2654435761u;
++        h ^= static_cast<uint32_t>(rect.top() * 100) * 2246822519u;
++        h ^= h >> 16; h *= 0x45d9f3bu; h ^= h >> 16;
++        float delta = ((h & 0xFF) / 255.0f - 0.5f) * 0.03f;
++        perturbedRect.outset(delta, delta);
++    }
++    const SkRect& rect = perturbedRect;
+ 
+     GrStyle style(paint);
+ 
+@@ -615,6 +629,23 @@ void Device::drawRRect(const SkRRect& rrect, const SkPaint& paint) {
+     ASSERT_SINGLE_OWNER
+     GR_CREATE_TRACE_MARKER_CONTEXT("skgpu::ganesh::Device", "drawRRect", fContext.get());
+ 
++    SkRRect perturbedRRect = rrect;
++    uint32_t fp_seed = SkGetFingerprintSeed();
++    if (fp_seed) {
++        uint32_t h = fp_seed;
++        h ^= static_cast<uint32_t>(rrect.rect().left() * 100) * 2654435761u;
++        h ^= static_cast<uint32_t>(rrect.rect().top() * 100) * 2246822519u;
++        h ^= h >> 16; h *= 0x45d9f3bu; h ^= h >> 16;
++        float delta = ((h & 0xFF) / 255.0f - 0.5f) * 0.03f;
++        SkRect r = rrect.rect();
++        r.outset(delta, delta);
++        SkVector radii[4];
++        for (int i = 0; i < 4; i++)
++            radii[i] = rrect.radii((SkRRect::Corner)i);
++        perturbedRRect.setRectRadii(r, radii);
++    }
++    const SkRRect& rrect = perturbedRRect;
++
+     auto mf = paint.getMaskFilter();
+     if (mf) {
+         if (GrFragmentProcessors::IsSupported(mf)) {
+@@ -725,6 +756,18 @@ void Device::drawOval(const SkRect& oval, const SkPaint& paint) {
+     ASSERT_SINGLE_OWNER
+     GR_CREATE_TRACE_MARKER_CONTEXT("skgpu::ganesh::Device", "drawOval", fContext.get());
+ 
++    SkRect perturbedOval = oval;
++    uint32_t fp_seed = SkGetFingerprintSeed();
++    if (fp_seed) {
++        uint32_t h = fp_seed;
++        h ^= static_cast<uint32_t>(oval.left() * 100) * 2654435761u;
++        h ^= static_cast<uint32_t>(oval.top() * 100) * 2246822519u;
++        h ^= h >> 16; h *= 0x45d9f3bu; h ^= h >> 16;
++        float delta = ((h & 0xFF) / 255.0f - 0.5f) * 0.03f;
++        perturbedOval.outset(delta, delta);
++    }
++    const SkRect& oval = perturbedOval;
++
+     if (paint.getMaskFilter()) {
+         // The RRect path can handle special case blurring
+         SkRRect rr = SkRRect::MakeOval(oval);
+@@ -772,6 +815,23 @@ void Device::drawPath(const SkPath& origSrcPath, const SkPaint& paint) {
+ #endif
+     ASSERT_SINGLE_OWNER
+     GR_CREATE_TRACE_MARKER_CONTEXT("skgpu::ganesh::Device", "drawPath", fContext.get());
++    
++    SkPath perturbedPath;
++    const SkPath* srcPath = &origSrcPath;
++    uint32_t fp_seed = SkGetFingerprintSeed();
++    if (fp_seed) {
++        uint32_t h = fp_seed;
++        const SkPoint& pt = origSrcPath.getBounds().topLeft();
++        h ^= static_cast<uint32_t>(pt.x() * 100) * 2654435761u;
++        h ^= static_cast<uint32_t>(pt.y() * 100) * 2246822519u;
++        h ^= h >> 16; h *= 0x45d9f3bu; h ^= h >> 16;
++        float dx = ((h & 0xFF) / 255.0f - 0.5f) * 0.03f;
++        float dy = (((h >> 8) & 0xFF) / 255.0f - 0.5f) * 0.03f;
++        SkMatrix m = SkMatrix::Translate(dx, dy);
++        origSrcPath.transform(m, &perturbedPath);
++        srcPath = &perturbedPath;
++    }
++
+     if (!paint.getMaskFilter()) {
+         GrPaint grPaint;
+         if (!SkPaintToGrPaint(fSurfaceDrawContext.get(),
+@@ -782,11 +842,11 @@ void Device::drawPath(const SkPath& origSrcPath, const SkPaint& paint) {
+         }
+         fSurfaceDrawContext->drawPath(this->clip(), std::move(grPaint),
+                                       fSurfaceDrawContext->chooseAA(paint), this->localToDevice(),
+-                                      origSrcPath, GrStyle(paint));
++                                      *srcPath, GrStyle(paint));
+         return;
+     }
+ 
+-    GrStyledShape shape(origSrcPath, paint);
++    GrStyledShape shape(*srcPath, paint);
+ 
+     GrBlurUtils::DrawShapeWithMaskFilter(fContext.get(), fSurfaceDrawContext.get(), this->clip(),
+                                          paint, this->localToDevice(), shape);
