@@ -1,0 +1,12 @@
+diff --git a/content/browser/gpu/gpu_process_host.cc b/content/browser/gpu/gpu_process_host.cc
+index 62cab5dad3..47ea050f14 100644
+--- a/content/browser/gpu/gpu_process_host.cc
++++ b/content/browser/gpu/gpu_process_host.cc
+@@ -331,6 +331,7 @@ static const char* const kSwitchNames[] = {
+ #if BUILDFLAG(USE_VAAPI)
+     switches::kHardwareVideoDevicePath,
+ #endif
++    "fingerprint",
+ };
+ 
+ // These values are persisted to logs. Entries should not be renumbered and
