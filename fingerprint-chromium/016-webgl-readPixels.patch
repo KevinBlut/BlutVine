@@ -1,5 +1,5 @@
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index cb6e65dab9..e8b5a75b39 100644
+index cb6e65dab9..51bf7ec5e1 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 @@ -35,6 +35,10 @@
@@ -13,7 +13,7 @@ index cb6e65dab9..e8b5a75b39 100644
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
  #include "base/compiler_specific.h"
-@@ -5238,6 +5242,206 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+@@ -5238,6 +5242,207 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
        return;
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
