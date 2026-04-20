@@ -1,5 +1,5 @@
 diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
-index 07df84ea52..2a29b5a5fe 100644
+index 3006cad0fb..a419b85851 100644
 --- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
 +++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
 @@ -523,6 +523,10 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
@@ -49,7 +49,7 @@ index 07df84ea52..2a29b5a5fe 100644
  
  String BaseRenderingContext2D::lang() const {
 diff --git a/third_party/blink/renderer/platform/graphics/image_data_buffer.cc b/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
-index c76f6553e1..277557bda9 100644
+index c76f6553e1..89a661b74d 100644
 --- a/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
 +++ b/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
 @@ -32,6 +32,10 @@
@@ -58,7 +58,7 @@ index c76f6553e1..277557bda9 100644
  
 +#include "base/command_line.h"
 +#include "components/ungoogled/ungoogled_switches.h"
-+#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
++#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h
 +
  #include "base/compiler_specific.h"
  #include "base/memory/ptr_util.h"
@@ -76,7 +76,7 @@ index c76f6553e1..277557bda9 100644
  }
  
 diff --git a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
-index 7bd7cb5906..ac0fbcb739 100644
+index 7bd7cb5906..40ede47327 100644
 --- a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
 +++ b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
 @@ -4,6 +4,13 @@
@@ -93,7 +93,7 @@ index 7bd7cb5906..ac0fbcb739 100644
  #include "base/numerics/checked_math.h"
  #include "gpu/command_buffer/client/gles2_interface.h"
  #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
-@@ -114,4 +121,279 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
+@@ -114,4 +121,266 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
                          ToSkiaRectConstraint(draw_options.clamping_mode));
  }
  
@@ -128,16 +128,7 @@ index 7bd7cb5906..ac0fbcb739 100644
 +  }
 +  std::mt19937_64 rng(render_hash);
 +
-+  // ── 2. Budget: logarithmic scale, 5–20 pixels ────────────────────────────
-+  double area = static_cast<double>(w) * h;
-+  double scale_factor = std::log10(std::max(10.0, area));
-+  int base_pixels = std::clamp(static_cast<int>(scale_factor * 4.6), 5, 20);
-+  
-+  int var_range = base_pixels / 5;
-+  int jitter = static_cast<int>(render_hash % (var_range * 2 + 1)) - var_range;
-+  int max_pixels = std::clamp(base_pixels + jitter, 5, 20);
-+
-+  // ── 3. Collect true AA pixels only ───────────────────────────────────────
++  // ── 2. Collect true AA pixels only ───────────────────────────────────────
 +  // NO random pixel fallback.
 +  // If the canvas contains only solid fills (e.g. the known-canvas detection
 +  // test draws a solid rectangle and reads it back), aa_pixels will be empty
@@ -151,10 +142,10 @@ index 7bd7cb5906..ac0fbcb739 100644
 +  int stride = (area < 10000) ? 1 : std::max(2, static_cast<int>(area / 8000));
 +
 +  std::vector<std::pair<int,int>> aa_pixels;
-+  aa_pixels.reserve(static_cast<size_t>(max_pixels * 2));
++  aa_pixels.reserve(64);
 +
-+  for (int y = 1; y < h - 1 && (int)aa_pixels.size() < max_pixels * 4; y += stride) {
-+    for (int x = 1; x < w - 1 && (int)aa_pixels.size() < max_pixels * 4; x += stride) {
++  for (int y = 1; y < h - 1; y += stride) {
++    for (int x = 1; x < w - 1; x += stride) {
 +      if (IsAntiAliasedPixel(addr, fRowBytes, x, y, w, h, colorType))
 +        aa_pixels.push_back({x, y});
 +    }
@@ -163,11 +154,7 @@ index 7bd7cb5906..ac0fbcb739 100644
 +  // Nothing to do — solid-fill canvas, undetectable
 +  if (aa_pixels.empty()) return;
 +
-+  std::shuffle(aa_pixels.begin(), aa_pixels.end(), rng);
-+  if ((int)aa_pixels.size() > max_pixels)
-+    aa_pixels.resize(static_cast<size_t>(max_pixels));
-+
-+  // ── 4. Apply noise ────────────────────────────────────────────────────────
++  // ── 3. Apply noise ────────────────────────────────────────────────────────
 +  auto clamp8 = [](int v) -> uint8_t {
 +    return static_cast<uint8_t>(std::clamp(v, 0, 255));
 +  };
