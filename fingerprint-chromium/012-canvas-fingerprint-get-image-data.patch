@@ -23,7 +23,7 @@ index c76f6553e1..eaaad9530f 100644
  
 +#include "base/command_line.h"
 +#include "components/ungoogled/ungoogled_switches.h"
-+#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h
++#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 +
  #include "base/compiler_specific.h"
  #include "base/memory/ptr_util.h"
