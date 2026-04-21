@@ -18,6 +18,7 @@ fingerprint-chromium/012-canvas-fingerprint.patch
 fingerprint-chromium/012-canvas-fingerprint-skia.patch
 fingerprint-chromium/012-canvas-fingerprint-gpu.patch
 fingerprint-chromium/012-canvas-fingerprint-get-image-data.patch
+fingerprint-chromium/012-canvas-fingerprint-toDataURL.patch
 fingerprint-chromium/013-webgl-fingerprint.patch
 fingerprint-chromium/014-client-rects.patch
 fingerprint-chromium/015-canvas-measure-text.patch
