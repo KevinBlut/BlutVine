@@ -1,151 +1,190 @@
 diff --git a/third_party/blink/renderer/platform/fonts/font_cache.cc b/third_party/blink/renderer/platform/fonts/font_cache.cc
-index 7344fa93eb..21392dc2d0 100644
+index 34603fc206..blutvine006 100644
 --- a/third_party/blink/renderer/platform/fonts/font_cache.cc
 +++ b/third_party/blink/renderer/platform/fonts/font_cache.cc
-@@ -32,6 +32,11 @@
+@@ -32,10 +32,13 @@
  #include <limits>
  #include <memory>
  
 +#include "base/command_line.h"
-+#include "base/strings/string_number_conversions.h"
-+#include "components/ungoogled/ungoogled_switches.h"
-+#include <unordered_set>
-+
  #include "base/debug/alias.h"
  #include "base/feature_list.h"
  #include "base/notreached.h"
-@@ -123,6 +128,127 @@ const FontPlatformData* FontCache::SystemFontPlatformData(
+ #include "base/strings/escape.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/system/sys_info.h"
+ #include "base/timer/elapsed_timer.h"
+ #include "base/trace_event/process_memory_dump.h"
+ #include "base/trace_event/trace_event.h"
++#include "components/ungoogled/ungoogled_switches.h"
+ #include "build/build_config.h"
+ #include "skia/ext/font_utils.h"
+ #include "third_party/blink/public/common/features.h"
+@@ -147,6 +150,108 @@ const FontPlatformData* FontCache::SystemFontPlatformData(
  }
  #endif
  
-+// 获取平台特定的字体列表
-+// Returns a reference to a static vector — zero heap allocation per call.
-+static const std::unordered_set<std::string>& GetPlatformFonts(const std::string& platform) {
-+  if (platform == "windows") {
-+    static const std::unordered_set<std::string> kWindowsFonts = {
-+      "Arial", "Arial Black",
-+      "Bahnschrift",
-+      "Calibri", "Cambria", "Cambria Math", "Candara", "Cascadia Code", "Cascadia Mono", "Comic Sans MS", "Consolas", "Constantia", "Corbel", "Courier New",
-+      "Ebrima",
-+      "Franklin Gothic Medium",
-+      "Gabriola", "Gadugi", "Georgia",
-+      "HoloLens MDL2 Assets",
-+      "Impact", "Ink Free",
-+      "Javanese Text",
-+      "Leelawadee UI", "Lucida Console", "Lucida Sans Unicode",
-+      "Malgun Gothic", "Marlett", "Microsoft Himalaya", "Microsoft JhengHei", "Microsoft New Tai Lue", "Microsoft PhagsPa", "Microsoft Sans Serif", "Microsoft Tai Le", "Microsoft YaHei", "Microsoft Yi Baiti", "MingLiU-ExtB", "Mongolian Baiti", "MS Gothic", "MV Boli", "Myanmar Text",
-+      "Nirmala UI",
-+      "Palatino Linotype",
-+      "Segoe Fluent Icons", "Segoe MDL2 Assets", "Segoe Print", "Segoe Script", "Segoe UI", "Segoe UI Emoji", "Segoe UI Historic", "Segoe UI Symbol", "Segoe UI Variable", "SimSun", "Sitka", "Sylfaen", "Symbol",
-+      "Tahoma", "Times New Roman", "Trebuchet MS",
-+      "Verdana",
-+      "Webdings", "Wingdings",
-+      "Yu Gothic"
-+    };
-+    return kWindowsFonts;
-+  } else if (platform == "macos") {
-+    static const std::unordered_set<std::string> kMacFonts = {
-+      "Academy Engraved LET", "Adelle Sans Devanagari", "AkayaKanadaka", "AkayaTelivigala", "Al Bayan", "Al Firat", "Al Khalil", "Al Nile", "Al Rafidain", "Al Rafidain Al Fanni", "Al Tarikh", "Algiers", "American Typewriter", "Andale Mono", "Annai MN", "Apple Braille", "Apple Chancery", "Apple Color Emoji", "Apple LiGothic", "Apple LiSung", "Apple SD Gothic Neo", "Apple Symbols", "AppleGothic", "AppleMyungjo", "Arial", "Arial Hebrew", "Arial Narrow", "Arial Rounded MT", "Arial Unicode MS", "Arima Koshi", "Arima Madurai", "Asphalt", "Athelas", "Avenir", "Avenir Next", "Ayuthaya",
-+      "Baghdad", "Bai Jamjuree", "Balega", "Baloo 2", "Baloo Bhai 2", "Baloo Bhaijaan", "Baloo Bhaina 2", "Baloo Chettan 2", "Baloo Da 2", "Baloo Paaji 2", "Baloo Tamma 2", "Baloo Tammudu 2", "Baloo Thambi 2", "Bangla MN", "Bangla Sangam MN", "Bank Gothic", "Baoli SC", "Baoli TC", "Baskerville", "Basra", "Bebas Neue", "Beirut", "BiauKaiHK", "BiauKaiTC", "Big Caslon", "BIZ UDGothic", "BIZ UDMincho", "Blackmoor LET", "BlairMdITC TT", "BM DoHyeon OTF", "BM HANNA 11yrs old OTF", "BM HANNA Air OTF", "BM HANNA Pro OTF", "BM JUA OTF", "BM KIRANGHAERANG OTF", "BM YEONSUNG OTF", "Bodoni 72", "Bodoni 72 Oldstyle", "Bodoni 72 Smallcaps", "Bodoni Ornaments", "Book Antiqua", "Bookman Old Style", "Bordeaux Roman Bold LET", "Bradley Hand", "Braganza", "Brill Italic", "Brill Roman", "Brush Script MT",
-+      "Cambay Devanagari", "Canela", "Canela Deck", "Canela Text", "Capitals", "Carlito", "Catamaran", "Century Gothic", "Century Schoolbook", "Chakra Petch", "Chalkboard", "Chalkboard SE", "Chalkduster", "Charcoal CY", "Charm", "Charmonman", "Charter", "Cochin", "Comic Sans MS", "Copperplate", "Corsiva Hebrew", "Courier", "Courier New",
-+      "Damascus", "Dash", "Dear Joe Four", "DecoType Naskh", "Devanagari MT", "Devanagari Sangam MN", "DFKaiShu-SB-Estd-BF", "Didot", "Dijla", "DIN Alternate", "DIN Condensed", "Diwan Kufi", "Diwan Thuluth", "Domaine Display", "Druk", "Druk Text", "Druk Wide",
-+      "Euphemia UCAS",
-+      "Fahkwang", "Fakt Slab Stencil Pro", "Farah", "Farisi", "Forgotten Futurist", "Founders Grotesk", "Founders Grotesk Text", "Futura",
-+      "Galvji", "Garamond", "GB18030 Bitmap", "Geeza Pro", "Geneva", "Geneva CY", "Georgia", "Gill Sans", "Gotu", "Grantha Sangam MN", "Graphik", "Graphik Compact", "Gujarati MT", "Gujarati Sangam MN", "GungSeo", "Gurmukhi MN", "Gurmukhi MT", "Gurmukhi Sangam MN",
-+      "Hannotate SC", "Hannotate TC", "HanziPen SC", "HanziPen TC", "HeadLineA", "Hei", "Heiti SC", "Heiti TC", "Helvetica", "Helvetica CY", "Helvetica Neue", "Herculanum", "Hiragino Kaku Gothic Pro", "Hiragino Kaku Gothic ProN", "Hiragino Kaku Gothic Std", "Hiragino Kaku Gothic StdN", "Hiragino Maru Gothic Pro", "Hiragino Maru Gothic ProN", "Hiragino Mincho Pro", "Hiragino Mincho ProN", "Hiragino Sans", "Hiragino Sans CNS", "Hiragino Sans GB", "Hiragino Sans TC", "Hoefler Text", "Hopper Script", "Hubballi",
-+      "Impact", "InaiMathi", "Iowan Old Style", "ITF Devanagari", "ITF Devanagari Marathi",
-+      "Jaini", "Jaini Purva", "Jazz LET", "Journal Sans New",
-+      "K2D", "Kai", "Kailasa", "Kaiti SC", "Kaiti TC", "Kannada MN", "Kannada Sangam MN", "Katari", "Kavivanar", "Kefa", "Khmer MN", "Khmer Sangam MN", "Kigelia", "Kigelia Arabic", "Klee", "Kodchasan", "Kohinoor Bangla", "Kohinoor Devanagari", "Kohinoor Gujarati", "Kohinoor Telugu", "KoHo", "Kokonor", "Koufi Abjadi", "Krub", "Krungthep", "KufiStandardGK",
-+      "Lahore Gurmukhi", "Laimoon", "Lantinghei SC", "Lantinghei TC", "Lao MN", "Lao Sangam MN", "Lava Devanagari", "Lava Kannada", "Lava Telugu", "Libian SC", "Libian TC", "LiHei Pro", "LingWai SC", "LingWai TC", "LiSong Pro", "Lucida Grande", "Luminari",
-+      "Maku", "Malayalam MN", "Malayalam Sangam MN", "Mali", "Marion", "Marker Felt", "Menlo", "Microsoft Sans Serif", "Mishafi", "Mishafi Gold", "Modak", "Mona Lisa Solid ITC TT", "Monaco", "Mshtakan", "Mukta", "Mukta Malar", "Mukta Vaani", "MuktaMahee", "Muna", "Myanmar MN", "Myanmar Sangam MN", "Myriad Arabic",
-+      "Nadeem", "Nanum Brush Script", "Nanum Pen Script", "NanumGothic", "NanumMyeongjo", "New Peninim MT", "Niramit", "Nisan", "Nom Na Tong", "Noteworthy", "Noto Nastaliq Urdu", "Noto Sans Adlam", "Noto Sans Armenian", "Noto Sans Avestan", "Noto Sans Bamum", "Noto Sans Bassa Vah", "Noto Sans Batak", "Noto Sans Bhaiksuki", "Noto Sans Brahmi", "Noto Sans Buginese", "Noto Sans Buhid", "Noto Sans Canadian Aboriginal", "Noto Sans Carian", "Noto Sans Caucasian Albanian", "Noto Sans Chakma", "Noto Sans Cham", "Noto Sans Coptic", "Noto Sans Cuneiform", "Noto Sans Cypriot", "Noto Sans Duployan", "Noto Sans Egyptian Hieroglyphs", "Noto Sans Elbasan", "Noto Sans Glagolitic", "Noto Sans Gothic", "Noto Sans Gunjala Gondi", "Noto Sans Hanifi Rohingya", "Noto Sans Hanunoo", "Noto Sans Hatran", "Noto Sans Imperial Aramaic", "Noto Sans Inscriptional Pahlavi", "Noto Sans Inscriptional Parthian", "Noto Sans Javanese", "Noto Sans Kaithi", "Noto Sans Kannada", "Noto Sans Kayah Li", "Noto Sans Kharoshthi", "Noto Sans Khojki", "Noto Sans Khudawadi", "Noto Sans Lepcha", "Noto Sans Limbu", "Noto Sans Linear A", "Noto Sans Linear B", "Noto Sans Lisu", "Noto Sans Lycian", "Noto Sans Lydian", "Noto Sans Mahajani", "Noto Sans Mandaic", "Noto Sans Manichaean", "Noto Sans Marchen", "Noto Sans Masaram Gondi", "Noto Sans Meetei Mayek", "Noto Sans Mende Kikakui", "Noto Sans Meroitic", "Noto Sans Miao", "Noto Sans Modi", "Noto Sans Mongolian", "Noto Sans Mro", "Noto Sans Multani", "Noto Sans Myanmar", "Noto Sans Nabataean", "Noto Sans New Tai Lue", "Noto Sans Newa", "Noto Sans NKo", "Noto Sans Ol Chiki", "Noto Sans Old Hungarian", "Noto Sans Old Italic", "Noto Sans Old North Arabian", "Noto Sans Old Permic", "Noto Sans Old Persian", "Noto Sans Old South Arabian", "Noto Sans Old Turkic", "Noto Sans Oriya", "Noto Sans Osage", "Noto Sans Osmanya", "Noto Sans Pahawh Hmong", "Noto Sans Palmyrene", "Noto Sans Pau Cin Hau", "Noto Sans PhagsPa", "Noto Sans Phoenician", "Noto Sans Psalter Pahlavi", "Noto Sans Rejang", "Noto Sans Samaritan", "Noto Sans Saurashtra", "Noto Sans Sharada", "Noto Sans Siddham", "Noto Sans Sora Sompeng", "Noto Sans Sundanese", "Noto Sans Syloti Nagri", "Noto Sans Syriac", "Noto Sans Tagalog", "Noto Sans Tagbanwa", "Noto Sans Tai Le", "Noto Sans Tai Tham", "Noto Sans Tai Viet", "Noto Sans Takri", "Noto Sans Thaana", "Noto Sans Tifinagh", "Noto Sans Tirhuta", "Noto Sans Ugaritic", "Noto Sans Vai", "Noto Sans Wancho", "Noto Sans Warang Citi", "Noto Sans Yi", "Noto Sans Zawgyi", "Noto Serif Ahom", "Noto Serif Balinese", "Noto Serif Hmong Nyiakeng", "Noto Serif Kannada", "Noto Serif Myanmar", "Noto Serif Yezidi", "November Bangla Traditional",
-+      "October Compressed Devanagari", "October Compressed Gujarati", "October Compressed Gurmukhi", "October Compressed Kannada", "October Compressed Meetei Mayek", "October Compressed Odia", "October Compressed Ol Chiki", "October Compressed Tamil", "October Compressed Telugu", "October Condensed Devanagari", "October Condensed Gujarati", "October Condensed Gurmukhi", "October Condensed Kannada", "October Condensed Meetei Mayek", "October Condensed Odia", "October Condensed Ol Chiki", "October Condensed Tamil", "October Condensed Telugu", "October Devanagari", "October Gujarati", "October Gurmukhi", "October Kannada", "October Meetei Mayek", "October Odia", "October Ol Chiki", "October Tamil", "October Telugu", "Optima", "Oriya MN", "Oriya Sangam MN", "Osaka", "Osaka-Mono",
-+      "Padyakke Expanded One", "Palatino", "Papyrus", "Party LET", "PCMyungjo", "Phosphate", "PilGi", "PingFang HK", "PingFang MO", "PingFang SC", "PingFang TC", "Plantagenet Cherokee", "PortagoITC TT", "Princetown LET", "Produkt", "Proxima Nova", "PSL Ornanong Pro", "PT Mono", "PT Sans", "PT Sans Caption", "PT Sans Narrow", "PT Serif", "PT Serif Caption", "Publico Headline", "Publico Text",
-+      "Quotes Caps", "Quotes Script",
-+      "Raanana", "Raya", "Rockwell",
-+      "Sama Devanagari", "Sama Gujarati", "Sama Gurmukhi", "Sama Kannada", "Sama Malayalam", "Sama Tamil", "Sana", "Santa Fe LET", "Sarabun", "Sathu", "Sauber Script", "Savoye LET", "Scheme", "SchoolHouse Cursive B", "SchoolHouse Printed A", "Seravek", "Shobhika", "Shree Devanagari 714", "SignPainter-HouseScript", "Silom", "SimSong", "Sinhala MN", "Sinhala Sangam MN", "Skia", "Snell Roundhand", "Somer", "Songti SC", "Songti TC", "Spot Mono", "Srisakdi", "STFangsong", "STHeiti", "STIXGeneral", "STIXIntegralsD", "STIXIntegralsSm", "STIXIntegralsUp", "STIXIntegralsUpD", "STIXIntegralsUpSm", "STIXNonUnicode", "STIXSizeFiveSym", "STIXSizeFourSym", "STIXSizeOneSym", "STIXSizeThreeSym", "STIXSizeTwoSym", "STIX Two Math", "STIX Two Text", "STIXVariants", "STKaiti", "STSong", "STXihei", "Stone Sans ITC TT", "Stone Sans Sem ITC TT", "Sukhumvit Set", "Superclarendon", "Symbol", "Synchro LET",
-+      "Tahoma", "Tamil MN", "Tamil Sangam MN", "Telugu MN", "Telugu Sangam MN", "The Hand Serif", "Thonburi", "Times", "Times New Roman", "Tiro Bangla", "Tiro Devanagari Hindi", "Tiro Devanagari Marathi", "Tiro Devanagari Sanskrit", "Tiro Gurmukhi", "Tiro Kannada", "Tiro Tamil", "Tiro Telugu", "Toppan Bunkyu Gothic", "Toppan Bunkyu Midashi Gothic", "Toppan Bunkyu Midashi Mincho", "Toppan Bunkyu Mincho", "Trattatello", "Trebuchet MS", "Tsukushi A Round Gothic", "Tsukushi B Round Gothic", "Tw Cen MT", "Type Embellishments One LET",
-+      "Verdana",
-+      "Waseem", "Wawati SC", "Wawati TC", "Webdings", "Weibei SC", "Weibei TC", "Wingdings", "Wingdings 2", "Wingdings 3",
-+      "Xingkai SC", "Xingkai TC",
-+      "Yaziji", "Yuanti SC", "Yuanti TC", "YuGothic", "YuKyokasho", "YuKyokasho Yoko", "YuMincho", "YuMincho +36p Kana", "Yuppy SC", "Yuppy TC",
-+      "Zapf Dingbats", "Zapfino", "Zawra"
-+    };
-+    return kMacFonts;
-+  } else if (platform == "linux") {
-+    static const std::unordered_set<std::string> kLinuxFonts = {
-+      // Ubuntu Font Family
-+      "Ubuntu", "Ubuntu Condensed", "Ubuntu Light", "Ubuntu Mono", "Ubuntu Sans", "Ubuntu Sans Mono",
-+      // DejaVu Family
-+      "DejaVu Sans", "DejaVu Sans Condensed", "DejaVu Sans Light", "DejaVu Sans Mono",
-+      "DejaVu Serif", "DejaVu Serif Condensed", "DejaVu Math TeX Gyre",
-+      // Liberation Family
-+      "Liberation Sans", "Liberation Sans Narrow", "Liberation Serif", "Liberation Mono",
-+      // Noto Family
-+      "Noto Sans", "Noto Sans Display", "Noto Sans Mono",
-+      "Noto Serif", "Noto Serif Display", "Noto Mono", "Noto Color Emoji",
-+      // Nimbus Family
-+      "Nimbus Sans", "Nimbus Sans L", "Nimbus Sans Narrow", "Nimbus Roman", "Nimbus Roman No9 L",
-+      "Nimbus Mono", "Nimbus Mono L", "Nimbus Mono PS",
-+      // FreeFont Family
-+      "FreeSans", "FreeSerif", "FreeMono"
-+    };
-+    return kLinuxFonts;
-+  }
-+  static const std::unordered_set<std::string> kEmpty;
-+  return kEmpty;
++// ---------------------------------------------------------------------------
++// BlutVine font fingerprint spoofing
++//
++// Goal: make font availability probes return exactly the same yes/no results
++// as stock Chrome on a typical Linux (Ubuntu/Debian) desktop install.
++//
++// Strategy:
++//   - CSS generic families and a small set of universally-present faces are
++//     always allowed through (IsAlwaysAllowedFont).
++//   - Any font name in kLinuxAllowlist is allowed through — this matches the
++//     real fontconfig set present on a stock Linux Chrome machine.
++//   - Everything else (Windows-only, macOS-only, obscure names) returns
++//     nullptr, so probes correctly report those fonts as absent.
++//   - No random hiding: the goal is deterministic identity with real Chrome,
++//     not per-seed variation (Unicode glyph path handles per-seed variation).
++// ---------------------------------------------------------------------------
++
++// Fonts that must always resolve regardless of fingerprint mode.
++// These are CSS generics, system aliases, and faces so fundamental that
++// blocking them would break page rendering.
++static bool IsAlwaysAllowedFont(const std::string& family) {
++  static const std::unordered_set<std::string> kAlways = {
++    // CSS generic families
++    "serif", "sans-serif", "monospace", "cursive", "fantasy", "math",
++    "system-ui", "-webkit-standard", "BlinkMacSystemFont",
++    // Universal web-safe faces present on every platform
++    "Arial", "Helvetica", "Helvetica Neue", "Times New Roman", "Times",
++    "Courier New", "Courier", "Verdana", "Georgia", "Trebuchet MS",
++    "Comic Sans MS", "Impact",
++    // Common Linux/Chrome UI faces
++    "Roboto", "Segoe UI", "sans", "Sans",
++  };
++  return kAlways.count(family) > 0;
 +}
 +
-+// 判断是否为基础字体（不应被处理）
-+static bool IsBasicFont(const std::string& font_family) {
-+  static constexpr const char* kBasicFonts[] = {
-+    // 系统特殊字体
-+    "-webkit-standard",
-+    "system-ui",
-+
-+    // 基础西文字体
-+    "Arial",
-+    "Calibri",
-+    "Courier New",
-+    "Courier",
-+    "Helvetica",
-+    "Helvetica Neue",
-+    "Lucida Grande",
-+    "Microsoft Sans Serif",
-+    "MS Sans Serif",
-+    "MS Serif",
-+    "MS UI Gothic",
-+    "Roboto",
-+    "Sans",
-+    "Segoe UI",
-+    "Times New Roman",
-+    "Times",
-+
-+    // CSS通用字体
-+    "cursive",
-+    "fantasy",
-+    "monospace",
-+    "sans-serif",
-+    "serif",
-+    "math",
-+
-+    // 系统字体别名
-+    "BlinkMacSystemFont"
++// Authoritative Linux font allowlist derived from fontconfig on a stock
++// Ubuntu/Debian system with Chrome installed.  Any font name in this set
++// is reported as present; all other probed names return nullptr.
++//
++// Source: fontconfig dump + standard Chrome Linux font packages.
++static bool IsLinuxAllowedFont(const std::string& family) {
++  static const std::unordered_set<std::string> kLinuxAllowlist = {
++    // Core metric-compatible families
++    "Liberation Sans", "Liberation Sans Narrow", "Liberation Serif",
++    "Liberation Mono",
++    "Arimo", "Tinos", "Cousine",
++    // DejaVu
++    "DejaVu Sans", "DejaVu Sans Condensed", "DejaVu Sans Light",
++    "DejaVu Sans Mono", "DejaVu Serif", "DejaVu Serif Condensed",
++    "DejaVu Math TeX Gyre",
++    // Nimbus (ghostscript)
++    "Nimbus Sans", "Nimbus Sans L", "Nimbus Sans Narrow",
++    "Nimbus Roman", "Nimbus Roman No9 L",
++    "Nimbus Mono", "Nimbus Mono L", "Nimbus Mono PS",
++    // URW
++    "URW Bookman", "URW Gothic",
++    // C/P/Z aliases from ghostscript
++    "C059", "P052", "Z003", "D050000L",
++    "Standard Symbols PS",
++    // Ubuntu
++    "Ubuntu", "Ubuntu Condensed", "Ubuntu Light", "Ubuntu Mono",
++    "Ubuntu Sans", "Ubuntu Sans Mono",
++    // Noto Sans core
++    "Noto Sans", "Noto Sans Display", "Noto Sans Mono",
++    "Noto Serif", "Noto Serif Display",
++    "Noto Mono", "Noto Color Emoji",
++    // Noto Sans script variants (present in noto-fonts packages on Ubuntu)
++    "Noto Sans Adlam", "Noto Sans Adlam Unjoined",
++    "Noto Sans Anatolian Hieroglyphs", "Noto Sans Arabic",
++    "Noto Sans Armenian", "Noto Sans Avestan", "Noto Sans Balinese",
++    "Noto Sans Bamum", "Noto Sans Bassa Vah", "Noto Sans Batak",
++    "Noto Sans Bengali", "Noto Sans Bhaiksuki", "Noto Sans Brahmi",
++    "Noto Sans Buginese", "Noto Sans Buhid", "Noto Sans Canadian Aboriginal",
++    "Noto Sans Carian", "Noto Sans Caucasian Albanian", "Noto Sans Chakma",
++    "Noto Sans Cham", "Noto Sans Cherokee", "Noto Sans Coptic",
++    "Noto Sans Cuneiform", "Noto Sans Cypriot", "Noto Sans Deseret",
++    "Noto Sans Devanagari", "Noto Sans Duployan",
++    "Noto Sans Egyptian Hieroglyphs", "Noto Sans Elbasan",
++    "Noto Sans Ethiopic", "Noto Sans Georgian", "Noto Sans Glagolitic",
++    "Noto Sans Gothic", "Noto Sans Grantha", "Noto Sans Gujarati",
++    "Noto Sans Gunjala Gondi", "Noto Sans Gurmukhi",
++    "Noto Sans Hanifi Rohingya", "Noto Sans Hanunoo", "Noto Sans Hatran",
++    "Noto Sans Hebrew", "Noto Sans Imperial Aramaic",
++    "Noto Sans Inscriptional Pahlavi", "Noto Sans Inscriptional Parthian",
++    "Noto Sans Javanese", "Noto Sans Kaithi", "Noto Sans Kannada",
++    "Noto Sans Kayah Li", "Noto Sans Kharoshthi", "Noto Sans Khmer",
++    "Noto Sans Khojki", "Noto Sans Khudawadi", "Noto Sans Lao",
++    "Noto Sans Lepcha", "Noto Sans Limbu", "Noto Sans Linear A",
++    "Noto Sans Linear B", "Noto Sans Lisu", "Noto Sans Lycian",
++    "Noto Sans Lydian", "Noto Sans Mahajani", "Noto Sans Malayalam",
++    "Noto Sans Mandaic", "Noto Sans Manichaean", "Noto Sans Marchen",
++    "Noto Sans Masaram Gondi", "Noto Sans Math", "Noto Sans Medefaidrin",
++    "Noto Sans Meetei Mayek", "Noto Sans Mende Kikakui",
++    "Noto Sans Meroitic", "Noto Sans Miao", "Noto Sans Modi",
++    "Noto Sans Mongolian", "Noto Sans Mro", "Noto Sans Multani",
++    "Noto Sans Myanmar", "Noto Sans Nabataean", "Noto Sans Newa",
++    "Noto Sans New Tai Lue", "Noto Sans NKo", "Noto Sans Ogham",
++    "Noto Sans Ol Chiki", "Noto Sans Old Hungarian", "Noto Sans Old Italic",
++    "Noto Sans Old North Arabian", "Noto Sans Old Permic",
++    "Noto Sans Old Persian", "Noto Sans Old South Arabian",
++    "Noto Sans Old Turkic", "Noto Sans Oriya", "Noto Sans Osage",
++    "Noto Sans Pahawh Hmong", "Noto Sans Palmyrene", "Noto Sans Pau Cin Hau",
++    "Noto Sans PhagsPa", "Noto Sans Phoenician", "Noto Sans Psalter Pahlavi",
++    "Noto Sans Rejang", "Noto Sans Runic", "Noto Sans Samaritan",
++    "Noto Sans Saurashtra", "Noto Sans Sharada", "Noto Sans Shavian",
++    "Noto Sans Siddham", "Noto Sans Sinhala", "Noto Sans Sora Sompeng",
++    "Noto Sans Soyombo", "Noto Sans Sundanese", "Noto Sans Syloti Nagri",
++    "Noto Sans Symbols", "Noto Sans Symbols 2", "Noto Sans Syriac",
++    "Noto Sans Tagalog", "Noto Sans Tagbanwa", "Noto Sans Tai Le",
++    "Noto Sans Tai Tham", "Noto Sans Tai Viet", "Noto Sans Takri",
++    "Noto Sans Tamil", "Noto Sans Telugu", "Noto Sans Thaana",
++    "Noto Sans Thai", "Noto Sans Tifinagh",
++    "Noto Sans Tifinagh Adrar", "Noto Sans Tifinagh Agraw Imazighen",
++    "Noto Sans Tifinagh Ahaggar", "Noto Sans Tifinagh Air",
++    "Noto Sans Tifinagh APT", "Noto Sans Tifinagh Azawagh",
++    "Noto Sans Tifinagh Ghat", "Noto Sans Tifinagh Hawad",
++    "Noto Sans Tifinagh Rhissa Ixa", "Noto Sans Tifinagh SIL",
++    "Noto Sans Tifinagh Tawellemmet",
++    "Noto Sans Tirhuta", "Noto Sans Ugaritic", "Noto Sans Vai",
++    "Noto Sans Wancho", "Noto Sans Warang Citi", "Noto Sans Yi",
++    "Noto Sans Zanabazar Square",
++    // Noto Serif script variants
++    "Noto Serif Ahom", "Noto Serif Armenian", "Noto Serif Balinese",
++    "Noto Serif Bengali", "Noto Serif Devanagari", "Noto Serif Dogra",
++    "Noto Serif Ethiopic", "Noto Serif Georgian", "Noto Serif Grantha",
++    "Noto Serif Gujarati", "Noto Serif Gurmukhi", "Noto Serif Hebrew",
++    "Noto Serif Hmong Nyiakeng", "Noto Serif Kannada", "Noto Serif Khmer",
++    "Noto Serif Khojki", "Noto Serif Lao", "Noto Serif Malayalam",
++    "Noto Serif Myanmar", "Noto Serif Sinhala", "Noto Serif Tamil",
++    "Noto Serif Tamil Slanted", "Noto Serif Telugu", "Noto Serif Thai",
++    "Noto Serif Tibetan", "Noto Serif Yezidi",
++    // Noto misc
++    "Noto Kufi Arabic", "Noto Music", "Noto Naskh Arabic",
++    "Noto Nastaliq Urdu",
++    // CJK (present via noto-cjk or fonts-noto-cjk)
++    "Noto Sans CJK JP", "Noto Sans CJK KR", "Noto Sans CJK SC",
++    "Noto Sans CJK TC", "Noto Sans CJK HK",
++    "Noto Sans Mono CJK JP", "Noto Sans Mono CJK KR", "Noto Sans Mono CJK SC",
++    "Noto Sans Mono CJK TC", "Noto Sans Mono CJK HK",
++    "Noto Serif CJK JP", "Noto Serif CJK KR", "Noto Serif CJK SC",
++    "Noto Serif CJK TC",
++    // CJK aliases
++    "MS Gothic", "MS PGothic", "MS PMincho",
++    "SimSun", "PMingLiU",
++    // Misc present on typical Ubuntu installs
++    "Lato", "FreeSerif", "FreeSans", "FreeMono",
++    "Droid Sans Fallback",
 +  };
-+   
-+  for (const char* f : kBasicFonts) {
-+     if (font_family == f) return true;
-+  }
-+  return false;
++  return kLinuxAllowlist.count(family) > 0;
 +}
 +
  const FontPlatformData* FontCache::GetFontPlatformData(
      const FontDescription& font_description,
      const FontFaceCreationParams& creation_params,
-@@ -141,6 +267,26 @@ const FontPlatformData* FontCache::GetFontPlatformData(
+@@ -165,6 +320,30 @@ const FontPlatformData* FontCache::GetFontPlatformData(
    }
  #endif
  
++  // BlutVine: Linux font availability spoofing.
++  // Only active when --fingerprint is set and we are resolving a named family
++  // (not a last-resort fallback).
 +  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 +  if (command_line->HasSwitch(switches::kFingerprint) &&
 +      creation_params.CreationType() == kCreateFontByFamily &&
@@ -153,17 +192,22 @@ index 7344fa93eb..21392dc2d0 100644
 +
 +    const std::string requested_family = creation_params.Family().Utf8();
 +
-+    if (IsBasicFont(requested_family)) {
++    // Always-allowed fonts: generics, web-safe faces, system aliases.
++    // These must resolve normally or pages will break.
++    if (IsAlwaysAllowedFont(requested_family)) {
 +      return font_platform_data_cache_.GetOrCreateFontPlatformData(
 +          this, font_description, creation_params, alternate_font_name);
 +    }
 +
-+    static const std::unordered_set<std::string> kChromeDefaultFonts = {
-+      "Arial", "Helvetica", "Times New Roman", "Courier New"
-+    };
-+    if (kChromeDefaultFonts.find(requested_family) == kChromeDefaultFonts.end()) {
-+      return nullptr;
++    // If the font is in the Linux allowlist, let it through normally.
++    // This makes availability probes match stock Chrome on Linux exactly.
++    if (IsLinuxAllowedFont(requested_family)) {
++      return font_platform_data_cache_.GetOrCreateFontPlatformData(
++          this, font_description, creation_params, alternate_font_name);
 +    }
++
++    // Everything else (Windows-only, macOS-only, unknown names): report absent.
++    return nullptr;
 +  }
 +
    return font_platform_data_cache_.GetOrCreateFontPlatformData(
