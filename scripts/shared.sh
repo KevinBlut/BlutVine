@@ -142,7 +142,7 @@ apply_blutvine_patches() {
 
         echo "  applying ${patch_file}"
 
-        if [[ "${patch_file}" == *"skia.patch" ]] || [[ "${patch_file}" == *"gpu.patch" ]] || [[ "${patch_file}" == *"012-canvas-fingerprint-get-image-data.patch" ]]; then
+        if [[ "${patch_file}" == *"skia.patch" ]] || [[ "${patch_file}" == *"gpu.patch" ]]; then
             # Navigate to skia, apply, then jump back to src
             cd "${_src_dir}/third_party/skia"
             if ! patch -p1 -F3 --ignore-whitespace < "${full_path}"; then
