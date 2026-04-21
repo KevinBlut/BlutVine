@@ -118,15 +118,14 @@ index 7bd7cb5906..40ede47327 100644
 +  // Incorporate canvas dimensions:
 +  //   same seed + same size  → always identical noise (consistency guarantee)
 +  //   same seed + diff size  → different noise (no cross-canvas correlation)
-+  std::string combined = seed_str + "_" 
-+                       + std::to_string(w) + "_" 
-+                       + std::to_string(h);
-+  uint64_t render_hash = 2166136261u;
-+  for (char c : combined) {
-+      render_hash ^= static_cast<uint64_t>(c);
-+      render_hash *= 16777619u;
-+  }
-+  std::mt19937_64 rng(render_hash);
++  uint32_t seed = 0;
++  base::StringToUint(seed_str, &seed);
++  uint32_t render_hash = seed;
++  render_hash ^= static_cast<uint32_t>(w) * 2654435761u;
++  render_hash ^= static_cast<uint32_t>(h) * 2246822519u;
++  render_hash ^= render_hash >> 16;
++  render_hash *= 0x45d9f3bu;
++  render_hash ^= render_hash >> 16;
 +
 +  // ── 2. Collect true AA pixels only ───────────────────────────────────────
 +  // NO random pixel fallback.
