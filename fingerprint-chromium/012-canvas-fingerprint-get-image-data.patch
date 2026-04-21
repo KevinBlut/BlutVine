@@ -76,7 +76,7 @@ index c76f6553e1..89a661b74d 100644
  }
  
 diff --git a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
-index 7bd7cb5906..40ede47327 100644
+index 7bd7cb5906..e0e76edde2 100644
 --- a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
 +++ b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
 @@ -4,6 +4,13 @@
@@ -93,7 +93,7 @@ index 7bd7cb5906..40ede47327 100644
  #include "base/numerics/checked_math.h"
  #include "gpu/command_buffer/client/gles2_interface.h"
  #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
-@@ -114,4 +121,266 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
+@@ -114,4 +121,254 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
                          ToSkiaRectConstraint(draw_options.clamping_mode));
  }
  
