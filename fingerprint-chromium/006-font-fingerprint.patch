@@ -20,53 +20,78 @@ index 34603fc206..blutvine006 100644
  #include "build/build_config.h"
  #include "skia/ext/font_utils.h"
  #include "third_party/blink/public/common/features.h"
-@@ -147,6 +150,108 @@ const FontPlatformData* FontCache::SystemFontPlatformData(
+@@ -147,6 +150,196 @@ const FontPlatformData* FontCache::SystemFontPlatformData(
  }
  #endif
  
 +// ---------------------------------------------------------------------------
-+// BlutVine font fingerprint spoofing
++// BlutVine font fingerprint spoofing (006)
 +//
-+// Goal: make font availability probes return exactly the same yes/no results
-+// as stock Chrome on a typical Linux (Ubuntu/Debian) desktop install.
++// Reads --fingerprint-platform ("windows" or "linux", default "linux").
++// Allows only the fonts that stock Chrome on that platform would report as
++// present. Everything else returns nullptr so availability probes see the
++// correct absent/present answer for the target platform.
 +//
-+// Strategy:
-+//   - CSS generic families and a small set of universally-present faces are
-+//     always allowed through (IsAlwaysAllowedFont).
-+//   - Any font name in kLinuxAllowlist is allowed through — this matches the
-+//     real fontconfig set present on a stock Linux Chrome machine.
-+//   - Everything else (Windows-only, macOS-only, obscure names) returns
-+//     nullptr, so probes correctly report those fonts as absent.
-+//   - No random hiding: the goal is deterministic identity with real Chrome,
-+//     not per-seed variation (Unicode glyph path handles per-seed variation).
++// No random hiding — the goal is a deterministic match with real Chrome.
 +// ---------------------------------------------------------------------------
 +
-+// Fonts that must always resolve regardless of fingerprint mode.
-+// These are CSS generics, system aliases, and faces so fundamental that
-+// blocking them would break page rendering.
++// Fonts that must always resolve regardless of platform spoofing.
++// These are CSS generics, universal web-safe faces, and system aliases.
++// Blocking any of these breaks page rendering.
 +static bool IsAlwaysAllowedFont(const std::string& family) {
 +  static const std::unordered_set<std::string> kAlways = {
-+    // CSS generic families
 +    "serif", "sans-serif", "monospace", "cursive", "fantasy", "math",
 +    "system-ui", "-webkit-standard", "BlinkMacSystemFont",
-+    // Universal web-safe faces present on every platform
-+    "Arial", "Helvetica", "Helvetica Neue", "Times New Roman", "Times",
-+    "Courier New", "Courier", "Verdana", "Georgia", "Trebuchet MS",
-+    "Comic Sans MS", "Impact",
-+    // Common Linux/Chrome UI faces
-+    "Roboto", "Segoe UI", "sans", "Sans",
++    "Arial", "Helvetica", "Helvetica Neue",
++    "Times New Roman", "Times",
++    "Courier New", "Courier",
++    "Verdana", "Georgia", "Trebuchet MS", "Comic Sans MS", "Impact",
++    "sans", "Sans", "Roboto",
 +  };
 +  return kAlways.count(family) > 0;
 +}
 +
-+// Authoritative Linux font allowlist derived from fontconfig on a stock
-+// Ubuntu/Debian system with Chrome installed.  Any font name in this set
-+// is reported as present; all other probed names return nullptr.
-+//
-+// Source: fontconfig dump + standard Chrome Linux font packages.
-+static bool IsLinuxAllowedFont(const std::string& family) {
-+  static const std::unordered_set<std::string> kLinuxAllowlist = {
-+    // Core metric-compatible families
++// Font set for --fingerprint-platform=windows
++// Matches the default font install on Windows 10/11 plus what Chrome ships.
++static bool IsWindowsFont(const std::string& family) {
++  static const std::unordered_set<std::string> kWindows = {
++    "Arial", "Arial Black",
++    "Bahnschrift",
++    "Calibri", "Cambria", "Cambria Math", "Candara",
++    "Cascadia Code", "Cascadia Mono",
++    "Comic Sans MS", "Consolas", "Constantia", "Corbel", "Courier New",
++    "Ebrima",
++    "Franklin Gothic Medium",
++    "Gabriola", "Gadugi", "Georgia",
++    "HoloLens MDL2 Assets",
++    "Impact", "Ink Free",
++    "Javanese Text",
++    "Leelawadee UI", "Lucida Console", "Lucida Sans Unicode",
++    "Malgun Gothic", "Marlett",
++    "Microsoft Himalaya", "Microsoft JhengHei", "Microsoft New Tai Lue",
++    "Microsoft PhagsPa", "Microsoft Sans Serif", "Microsoft Tai Le",
++    "Microsoft YaHei", "Microsoft Yi Baiti",
++    "MingLiU-ExtB", "Mongolian Baiti", "MS Gothic", "MV Boli", "Myanmar Text",
++    "Nirmala UI",
++    "Palatino Linotype",
++    "Segoe Fluent Icons", "Segoe MDL2 Assets", "Segoe Print", "Segoe Script",
++    "Segoe UI", "Segoe UI Emoji", "Segoe UI Historic", "Segoe UI Symbol",
++    "Segoe UI Variable",
++    "SimSun", "Sitka", "Sylfaen", "Symbol",
++    "Tahoma", "Times New Roman", "Trebuchet MS",
++    "Verdana",
++    "Webdings", "Wingdings", "Wingdings 2", "Wingdings 3",
++    "Yu Gothic",
++    "Roboto",
++  };
++  return kWindows.count(family) > 0;
++}
++
++// Font set for --fingerprint-platform=linux (or unset, the default).
++// Derived from fontconfig output on a stock Ubuntu/Debian system with Chrome.
++static bool IsLinuxFont(const std::string& family) {
++  static const std::unordered_set<std::string> kLinux = {
++    // Metric-compatible families
 +    "Liberation Sans", "Liberation Sans Narrow", "Liberation Serif",
 +    "Liberation Mono",
 +    "Arimo", "Tinos", "Cousine",
@@ -74,37 +99,36 @@ index 34603fc206..blutvine006 100644
 +    "DejaVu Sans", "DejaVu Sans Condensed", "DejaVu Sans Light",
 +    "DejaVu Sans Mono", "DejaVu Serif", "DejaVu Serif Condensed",
 +    "DejaVu Math TeX Gyre",
-+    // Nimbus (ghostscript)
++    // Nimbus / ghostscript
 +    "Nimbus Sans", "Nimbus Sans L", "Nimbus Sans Narrow",
 +    "Nimbus Roman", "Nimbus Roman No9 L",
 +    "Nimbus Mono", "Nimbus Mono L", "Nimbus Mono PS",
 +    // URW
 +    "URW Bookman", "URW Gothic",
-+    // C/P/Z aliases from ghostscript
-+    "C059", "P052", "Z003", "D050000L",
-+    "Standard Symbols PS",
++    // Ghostscript aliases
++    "C059", "P052", "Z003", "D050000L", "Standard Symbols PS",
 +    // Ubuntu
 +    "Ubuntu", "Ubuntu Condensed", "Ubuntu Light", "Ubuntu Mono",
 +    "Ubuntu Sans", "Ubuntu Sans Mono",
-+    // Noto Sans core
++    // Noto core
 +    "Noto Sans", "Noto Sans Display", "Noto Sans Mono",
 +    "Noto Serif", "Noto Serif Display",
 +    "Noto Mono", "Noto Color Emoji",
-+    // Noto Sans script variants (present in noto-fonts packages on Ubuntu)
++    // Noto Sans scripts
 +    "Noto Sans Adlam", "Noto Sans Adlam Unjoined",
 +    "Noto Sans Anatolian Hieroglyphs", "Noto Sans Arabic",
 +    "Noto Sans Armenian", "Noto Sans Avestan", "Noto Sans Balinese",
 +    "Noto Sans Bamum", "Noto Sans Bassa Vah", "Noto Sans Batak",
 +    "Noto Sans Bengali", "Noto Sans Bhaiksuki", "Noto Sans Brahmi",
-+    "Noto Sans Buginese", "Noto Sans Buhid", "Noto Sans Canadian Aboriginal",
-+    "Noto Sans Carian", "Noto Sans Caucasian Albanian", "Noto Sans Chakma",
-+    "Noto Sans Cham", "Noto Sans Cherokee", "Noto Sans Coptic",
-+    "Noto Sans Cuneiform", "Noto Sans Cypriot", "Noto Sans Deseret",
-+    "Noto Sans Devanagari", "Noto Sans Duployan",
-+    "Noto Sans Egyptian Hieroglyphs", "Noto Sans Elbasan",
-+    "Noto Sans Ethiopic", "Noto Sans Georgian", "Noto Sans Glagolitic",
-+    "Noto Sans Gothic", "Noto Sans Grantha", "Noto Sans Gujarati",
-+    "Noto Sans Gunjala Gondi", "Noto Sans Gurmukhi",
++    "Noto Sans Buginese", "Noto Sans Buhid",
++    "Noto Sans Canadian Aboriginal", "Noto Sans Carian",
++    "Noto Sans Caucasian Albanian", "Noto Sans Chakma", "Noto Sans Cham",
++    "Noto Sans Cherokee", "Noto Sans Coptic", "Noto Sans Cuneiform",
++    "Noto Sans Cypriot", "Noto Sans Deseret", "Noto Sans Devanagari",
++    "Noto Sans Duployan", "Noto Sans Egyptian Hieroglyphs",
++    "Noto Sans Elbasan", "Noto Sans Ethiopic", "Noto Sans Georgian",
++    "Noto Sans Glagolitic", "Noto Sans Gothic", "Noto Sans Grantha",
++    "Noto Sans Gujarati", "Noto Sans Gunjala Gondi", "Noto Sans Gurmukhi",
 +    "Noto Sans Hanifi Rohingya", "Noto Sans Hanunoo", "Noto Sans Hatran",
 +    "Noto Sans Hebrew", "Noto Sans Imperial Aramaic",
 +    "Noto Sans Inscriptional Pahlavi", "Noto Sans Inscriptional Parthian",
@@ -126,26 +150,26 @@ index 34603fc206..blutvine006 100644
 +    "Noto Sans Old Persian", "Noto Sans Old South Arabian",
 +    "Noto Sans Old Turkic", "Noto Sans Oriya", "Noto Sans Osage",
 +    "Noto Sans Pahawh Hmong", "Noto Sans Palmyrene", "Noto Sans Pau Cin Hau",
-+    "Noto Sans PhagsPa", "Noto Sans Phoenician", "Noto Sans Psalter Pahlavi",
-+    "Noto Sans Rejang", "Noto Sans Runic", "Noto Sans Samaritan",
-+    "Noto Sans Saurashtra", "Noto Sans Sharada", "Noto Sans Shavian",
-+    "Noto Sans Siddham", "Noto Sans Sinhala", "Noto Sans Sora Sompeng",
-+    "Noto Sans Soyombo", "Noto Sans Sundanese", "Noto Sans Syloti Nagri",
-+    "Noto Sans Symbols", "Noto Sans Symbols 2", "Noto Sans Syriac",
-+    "Noto Sans Tagalog", "Noto Sans Tagbanwa", "Noto Sans Tai Le",
-+    "Noto Sans Tai Tham", "Noto Sans Tai Viet", "Noto Sans Takri",
-+    "Noto Sans Tamil", "Noto Sans Telugu", "Noto Sans Thaana",
-+    "Noto Sans Thai", "Noto Sans Tifinagh",
-+    "Noto Sans Tifinagh Adrar", "Noto Sans Tifinagh Agraw Imazighen",
-+    "Noto Sans Tifinagh Ahaggar", "Noto Sans Tifinagh Air",
-+    "Noto Sans Tifinagh APT", "Noto Sans Tifinagh Azawagh",
-+    "Noto Sans Tifinagh Ghat", "Noto Sans Tifinagh Hawad",
-+    "Noto Sans Tifinagh Rhissa Ixa", "Noto Sans Tifinagh SIL",
-+    "Noto Sans Tifinagh Tawellemmet",
++    "Noto Sans PhagsPa", "Noto Sans Phoenician",
++    "Noto Sans Psalter Pahlavi", "Noto Sans Rejang", "Noto Sans Runic",
++    "Noto Sans Samaritan", "Noto Sans Saurashtra", "Noto Sans Sharada",
++    "Noto Sans Shavian", "Noto Sans Siddham", "Noto Sans Sinhala",
++    "Noto Sans Sora Sompeng", "Noto Sans Soyombo", "Noto Sans Sundanese",
++    "Noto Sans Syloti Nagri", "Noto Sans Symbols", "Noto Sans Symbols 2",
++    "Noto Sans Syriac", "Noto Sans Tagalog", "Noto Sans Tagbanwa",
++    "Noto Sans Tai Le", "Noto Sans Tai Tham", "Noto Sans Tai Viet",
++    "Noto Sans Takri", "Noto Sans Tamil", "Noto Sans Telugu",
++    "Noto Sans Thaana", "Noto Sans Thai",
++    "Noto Sans Tifinagh", "Noto Sans Tifinagh Adrar",
++    "Noto Sans Tifinagh Agraw Imazighen", "Noto Sans Tifinagh Ahaggar",
++    "Noto Sans Tifinagh Air", "Noto Sans Tifinagh APT",
++    "Noto Sans Tifinagh Azawagh", "Noto Sans Tifinagh Ghat",
++    "Noto Sans Tifinagh Hawad", "Noto Sans Tifinagh Rhissa Ixa",
++    "Noto Sans Tifinagh SIL", "Noto Sans Tifinagh Tawellemmet",
 +    "Noto Sans Tirhuta", "Noto Sans Ugaritic", "Noto Sans Vai",
 +    "Noto Sans Wancho", "Noto Sans Warang Citi", "Noto Sans Yi",
 +    "Noto Sans Zanabazar Square",
-+    // Noto Serif script variants
++    // Noto Serif scripts
 +    "Noto Serif Ahom", "Noto Serif Armenian", "Noto Serif Balinese",
 +    "Noto Serif Bengali", "Noto Serif Devanagari", "Noto Serif Dogra",
 +    "Noto Serif Ethiopic", "Noto Serif Georgian", "Noto Serif Grantha",
@@ -158,33 +182,30 @@ index 34603fc206..blutvine006 100644
 +    // Noto misc
 +    "Noto Kufi Arabic", "Noto Music", "Noto Naskh Arabic",
 +    "Noto Nastaliq Urdu",
-+    // CJK (present via noto-cjk or fonts-noto-cjk)
++    // CJK
 +    "Noto Sans CJK JP", "Noto Sans CJK KR", "Noto Sans CJK SC",
 +    "Noto Sans CJK TC", "Noto Sans CJK HK",
-+    "Noto Sans Mono CJK JP", "Noto Sans Mono CJK KR", "Noto Sans Mono CJK SC",
-+    "Noto Sans Mono CJK TC", "Noto Sans Mono CJK HK",
-+    "Noto Serif CJK JP", "Noto Serif CJK KR", "Noto Serif CJK SC",
-+    "Noto Serif CJK TC",
-+    // CJK aliases
-+    "MS Gothic", "MS PGothic", "MS PMincho",
-+    "SimSun", "PMingLiU",
-+    // Misc present on typical Ubuntu installs
-+    "Lato", "FreeSerif", "FreeSans", "FreeMono",
-+    "Droid Sans Fallback",
++    "Noto Sans Mono CJK JP", "Noto Sans Mono CJK KR",
++    "Noto Sans Mono CJK SC", "Noto Sans Mono CJK TC", "Noto Sans Mono CJK HK",
++    "Noto Serif CJK JP", "Noto Serif CJK KR",
++    "Noto Serif CJK SC", "Noto Serif CJK TC",
++    // CJK aliases (fontconfig maps these to Noto CJK)
++    "MS Gothic", "MS PGothic", "MS PMincho", "SimSun", "PMingLiU",
++    // Misc standard Ubuntu packages
++    "Lato", "FreeSerif", "FreeSans", "FreeMono", "Droid Sans Fallback",
 +  };
-+  return kLinuxAllowlist.count(family) > 0;
++  return kLinux.count(family) > 0;
 +}
 +
  const FontPlatformData* FontCache::GetFontPlatformData(
      const FontDescription& font_description,
      const FontFaceCreationParams& creation_params,
-@@ -165,6 +320,30 @@ const FontPlatformData* FontCache::GetFontPlatformData(
+@@ -165,6 +361,34 @@ const FontPlatformData* FontCache::GetFontPlatformData(
    }
  #endif
  
-+  // BlutVine: Linux font availability spoofing.
-+  // Only active when --fingerprint is set and we are resolving a named family
-+  // (not a last-resort fallback).
++  // BlutVine: font availability spoofing gated on --fingerprint.
++  // Normal builds (no --fingerprint) are completely unaffected.
 +  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 +  if (command_line->HasSwitch(switches::kFingerprint) &&
 +      creation_params.CreationType() == kCreateFontByFamily &&
@@ -192,22 +213,23 @@ index 34603fc206..blutvine006 100644
 +
 +    const std::string requested_family = creation_params.Family().Utf8();
 +
-+    // Always-allowed fonts: generics, web-safe faces, system aliases.
-+    // These must resolve normally or pages will break.
++    // CSS generics + universal web-safe faces always pass through.
 +    if (IsAlwaysAllowedFont(requested_family)) {
 +      return font_platform_data_cache_.GetOrCreateFontPlatformData(
 +          this, font_description, creation_params, alternate_font_name);
 +    }
 +
-+    // If the font is in the Linux allowlist, let it through normally.
-+    // This makes availability probes match stock Chrome on Linux exactly.
-+    if (IsLinuxAllowedFont(requested_family)) {
-+      return font_platform_data_cache_.GetOrCreateFontPlatformData(
-+          this, font_description, creation_params, alternate_font_name);
-+    }
++    // Branch on --fingerprint-platform.  Default to linux if not specified.
++    const std::string platform =
++        command_line->GetSwitchValueASCII(switches::kFingerprintPlatform);
 +
-+    // Everything else (Windows-only, macOS-only, unknown names): report absent.
-+    return nullptr;
++    const bool allowed = (platform == "windows")
++        ? IsWindowsFont(requested_family)
++        : IsLinuxFont(requested_family);
++
++    if (!allowed) {
++      return nullptr;
++    }
 +  }
 +
    return font_platform_data_cache_.GetOrCreateFontPlatformData(
