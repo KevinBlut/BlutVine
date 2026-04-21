@@ -1,0 +1,68 @@
+diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+index 34e8e70932..e4f521b9d8 100644
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -33,6 +33,9 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++
+ #include "base/feature_list.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/location.h"
+@@ -1313,6 +1316,53 @@ String HTMLCanvasElement::ToDataURLInternal(
+           mime_type, ImageEncoderUtils::kEncodeReasonToDataURL);
+ 
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
++
++  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++  if (readback_type == ReadbackType::kWebExposed &&
++      command_line->HasSwitch(switches::kFingerprint)) {
++      // 获取图像的像素数据进行修改（创建完全独立的副本）
++      SkImageInfo image_info = SkImageInfo::Make(
++          image_bitmap->width(),
++          image_bitmap->height(),
++          kRGBA_8888_SkColorType,  // 使用标准的RGBA格式
++          kUnpremul_SkAlphaType);
++
++      // 创建独立的像素缓冲区副本
++      size_t row_bytes = image_info.minRowBytes();
++      size_t buffer_size = image_info.computeMinByteSize();
++
++      if (buffer_size > 0 && buffer_size <= partition_alloc::MaxDirectMapped()) {
++        std::vector<uint8_t> pixel_buffer(buffer_size);
++
++        // 从原始图像读取像素数据到我们的副本中
++        PaintImage original_paint_image = image_bitmap->PaintImageForCurrentFrame();
++        if (original_paint_image.readPixels(image_info, pixel_buffer.data(), row_bytes, 0, 0)) {
++
++          // 对副本应用指纹保护修改（不影响原始数据）
++          StaticBitmapImage::ShuffleSubchannelColorData(
++              pixel_buffer.data(), image_info, 0, 0);
++
++          // 用修改后的像素数据创建完全新的图像对象
++          sk_sp<SkData> modified_data = SkData::MakeWithCopy(pixel_buffer.data(), buffer_size);
++          if (modified_data) {
++            sk_sp<SkImage> modified_sk_image = SkImages::RasterFromData(
++                image_info, modified_data, row_bytes);
++
++            if (modified_sk_image) {
++              // 创建新的 StaticBitmapImage，使用通用的创建方法
++              PaintImage modified_paint_image = PaintImageBuilder::WithDefault()
++                  .set_id(PaintImage::GetNextId())
++                  .set_image(modified_sk_image, PaintImage::GetNextContentId())
++                  .TakePaintImage();
++
++              image_bitmap = StaticBitmapImage::Create(
++                  modified_paint_image, image_bitmap->Orientation());
++            }
++          }
++        }
++      }
++    }
++
+   if (image_bitmap) {
+     std::unique_ptr<ImageDataBuffer> data_buffer =
+         ImageDataBuffer::Create(image_bitmap);
