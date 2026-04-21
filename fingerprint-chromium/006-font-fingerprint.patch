@@ -1,26 +1,19 @@
 diff --git a/third_party/blink/renderer/platform/fonts/font_cache.cc b/third_party/blink/renderer/platform/fonts/font_cache.cc
-index 34603fc206..blutvine006 100644
+index 7344fa93eb..56d3dfb840 100644
 --- a/third_party/blink/renderer/platform/fonts/font_cache.cc
 +++ b/third_party/blink/renderer/platform/fonts/font_cache.cc
-@@ -32,10 +32,13 @@
+@@ -32,6 +32,10 @@
  #include <limits>
  #include <memory>
  
 +#include "base/command_line.h"
++#include "base/strings/string_number_conversions.h"
++#include "components/ungoogled/ungoogled_switches.h"
++
  #include "base/debug/alias.h"
  #include "base/feature_list.h"
  #include "base/notreached.h"
- #include "base/strings/escape.h"
-+#include "base/strings/string_number_conversions.h"
- #include "base/system/sys_info.h"
- #include "base/timer/elapsed_timer.h"
- #include "base/trace_event/process_memory_dump.h"
- #include "base/trace_event/trace_event.h"
-+#include "components/ungoogled/ungoogled_switches.h"
- #include "build/build_config.h"
- #include "skia/ext/font_utils.h"
- #include "third_party/blink/public/common/features.h"
-@@ -147,6 +150,196 @@ const FontPlatformData* FontCache::SystemFontPlatformData(
+@@ -123,6 +127,239 @@ const FontPlatformData* FontCache::SystemFontPlatformData(
  }
  #endif
  
@@ -260,7 +253,7 @@ index 34603fc206..blutvine006 100644
  const FontPlatformData* FontCache::GetFontPlatformData(
      const FontDescription& font_description,
      const FontFaceCreationParams& creation_params,
-@@ -165,6 +361,34 @@ const FontPlatformData* FontCache::GetFontPlatformData(
+@@ -141,6 +378,34 @@ const FontPlatformData* FontCache::GetFontPlatformData(
    }
  #endif
  
