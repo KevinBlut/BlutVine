@@ -1,20 +1,21 @@
 diff --git a/src/gpu/ganesh/text/GrAtlasManager.cpp b/src/gpu/ganesh/text/GrAtlasManager.cpp
-index f1a2bd3..b4f6628 100644
+index f1a2bd3..1d79c6e 100644
 --- a/src/gpu/ganesh/text/GrAtlasManager.cpp
 +++ b/src/gpu/ganesh/text/GrAtlasManager.cpp
-@@ -25,6 +25,8 @@
- #include "src/text/gpu/GlyphUtils.h"
- #include "src/text/gpu/StrikeCache.h"
+@@ -7,6 +7,9 @@
+ 
+ #include "src/gpu/ganesh/text/GrAtlasManager.h"
  
 +#include "base/command_line.h"
 +#include "base/strings/string_number_conversions.h"
- #include <cstring>
- #include <tuple>
- 
-@@ -224,6 +226,31 @@ GrDrawOpAtlas::ErrorCode GrAtlasManager::addGlyphToAtlas(const SkGlyph& skGlyph,
-     }
++
+ #include "include/core/SkColorType.h"
+ #include "include/core/SkSize.h"
+ #include "include/core/SkSpan.h"
+@@ -225,6 +228,36 @@ GrDrawOpAtlas::ErrorCode GrAtlasManager::addGlyphToAtlas(const SkGlyph& skGlyph,
  
      get_packed_glyph_image(skGlyph, rowBytes, expectedMaskFormat, dataPtr);
+ 
 +    // BlutVine: inject noise into kA8 glyph coverage before GPU upload
 +    if (expectedMaskFormat == MaskFormat::kA8) {
 +        const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
@@ -44,6 +45,7 @@ index f1a2bd3..b4f6628 100644
 +            }
 +        }
 +    }
- 
++
      auto errorCode = this->addToAtlas(resourceProvider,
                                        uploadTarget,
+                                       expectedMaskFormat,
