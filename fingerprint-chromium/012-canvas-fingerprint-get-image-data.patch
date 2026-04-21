@@ -49,7 +49,7 @@ index 3006cad0fb..a419b85851 100644
  
  String BaseRenderingContext2D::lang() const {
 diff --git a/third_party/blink/renderer/platform/graphics/image_data_buffer.cc b/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
-index c76f6553e1..89a661b74d 100644
+index c76f6553e1..eaaad9530f 100644
 --- a/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
 +++ b/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
 @@ -32,6 +32,10 @@
@@ -63,7 +63,7 @@ index c76f6553e1..89a661b74d 100644
  #include "base/compiler_specific.h"
  #include "base/memory/ptr_util.h"
  #include "third_party/blink/renderer/platform/image-encoders/image_encoder_utils.h"
-@@ -130,6 +134,11 @@ base::span<const uint8_t> ImageDataBuffer::PixelData() const {
+@@ -130,6 +134,12 @@ base::span<const uint8_t> ImageDataBuffer::PixelData() const {
  bool ImageDataBuffer::EncodeImage(const ImageEncodingMimeType mime_type,
                                    const double& quality,
                                    Vector<unsigned char>* encoded_image) const {
@@ -72,11 +72,12 @@ index c76f6553e1..89a661b74d 100644
 +    // shuffle subchannel color data within the pixmap
 +    StaticBitmapImage::ShuffleSubchannelColorData(pixmap_.writable_addr(), pixmap_.info(), 0, 0);
 +  }
++
    return ImageEncoder::Encode(encoded_image, pixmap_, mime_type, quality);
  }
  
 diff --git a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
-index 7bd7cb5906..e0e76edde2 100644
+index 7bd7cb5906..118f5a68e0 100644
 --- a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
 +++ b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
 @@ -4,6 +4,13 @@
@@ -93,7 +94,7 @@ index 7bd7cb5906..e0e76edde2 100644
  #include "base/numerics/checked_math.h"
  #include "gpu/command_buffer/client/gles2_interface.h"
  #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
-@@ -114,4 +121,254 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
+@@ -114,4 +121,284 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
                          ToSkiaRectConstraint(draw_options.clamping_mode));
  }
  
@@ -138,17 +139,47 @@ index 7bd7cb5906..e0e76edde2 100644
 +  auto fRowBytes  = info.minRowBytes();
 +
 +  // Adaptive scan stride for large canvases (performance)
++  double area = static_cast<double>(w) * h;
 +  int stride = (area < 10000) ? 1 : std::max(2, static_cast<int>(area / 8000));
 +
++  // Anti-aliased pixels
 +  std::vector<std::pair<int,int>> aa_pixels;
-+  aa_pixels.reserve(64);
 +
-+  for (int y = 1; y < h - 1; y += stride) {
-+    for (int x = 1; x < w - 1; x += stride) {
-+      if (IsAntiAliasedPixel(addr, fRowBytes, x, y, w, h, colorType))
-+        aa_pixels.push_back({x, y});
++  // ── Cache lookup ──────────────────────────────────────────────────────────
++  struct AACacheEntry {
++    uint32_t key;
++    std::vector<std::pair<int,int>> pixels;
++  };
++  static thread_local std::vector<AACacheEntry> aa_cache;
++  static thread_local std::vector<uint32_t>     aa_cache_order;
++  constexpr size_t kCacheCapacity = 8;
++
++  auto cache_it = std::find_if(aa_cache.begin(), aa_cache.end(),
++      [&](const AACacheEntry& e){ return e.key == render_hash; });
++
++  if (cache_it != aa_cache.end()) {
++    aa_pixels = cache_it->pixels;
++  } else {
++    aa_pixels.reserve(64);
++
++    for (int y = 1; y < h - 1; y += stride) {
++      for (int x = 1; x < w - 1; x += stride) {
++        if (IsAntiAliasedPixel(addr, fRowBytes, x, y, w, h, colorType))
++          aa_pixels.push_back({x, y});
++      }
 +    }
-+  }
++
++    // Store in cache
++    if (aa_cache.size() >= kCacheCapacity) {
++      uint32_t oldest = aa_cache_order.front();
++      aa_cache_order.erase(aa_cache_order.begin());
++      aa_cache.erase(std::remove_if(aa_cache.begin(), aa_cache.end(),
++          [&](const AACacheEntry& e){ return e.key == oldest; }),
++          aa_cache.end());
++    }
++    aa_cache.push_back({render_hash, aa_pixels});
++    aa_cache_order.push_back(render_hash);
++  }  // end cache miss block
 +
 +  // Nothing to do — solid-fill canvas, undetectable
 +  if (aa_pixels.empty()) return;
@@ -160,11 +191,11 @@ index 7bd7cb5906..e0e76edde2 100644
 +
 +  for (const auto& [x, y] : aa_pixels) {
 +    // Per-pixel deterministic seed — spatially unique within session.
-+    uint64_t p_seed = render_hash
-+                    ^ (static_cast<uint64_t>(x) * 73856093ULL)
-+                    ^ (static_cast<uint64_t>(y) * 19349663ULL);
-+
-+    bool add = (p_seed >> 10) & 1;
++    uint32_t h2 = render_hash;
++    h2 ^= static_cast<uint32_t>(x) * 2654435761u;
++    h2 ^= static_cast<uint32_t>(y) * 2246822519u;
++    h2 ^= h2 >> 16; h2 *= 0x45d9f3bu; h2 ^= h2 >> 16;
++    bool add = h2 & 1;
 +
 +    switch (colorType) {
 +      case kRGBA_8888_SkColorType:
