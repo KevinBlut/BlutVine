@@ -12,14 +12,13 @@ index 34e8e70932..e4f521b9d8 100644
  #include "base/feature_list.h"
  #include "base/functional/callback_helpers.h"
  #include "base/location.h"
-@@ -1313,6 +1316,53 @@ String HTMLCanvasElement::ToDataURLInternal(
+@@ -1313,6 +1316,52 @@ String HTMLCanvasElement::ToDataURLInternal(
            mime_type, ImageEncoderUtils::kEncodeReasonToDataURL);
  
    scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
 +
 +  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-+  if (readback_type == ReadbackType::kWebExposed &&
-+      command_line->HasSwitch(switches::kFingerprint)) {
++  if (command_line->HasSwitch(switches::kFingerprint)) {
 +      // 获取图像的像素数据进行修改（创建完全独立的副本）
 +      SkImageInfo image_info = SkImageInfo::Make(
 +          image_bitmap->width(),
