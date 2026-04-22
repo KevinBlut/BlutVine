@@ -29,7 +29,7 @@ index 2784c342e9..837026b84f 100644
 +      SkImageInfo image_info = SkImageInfo::Make(width, height, color_type, alpha_type);
 +
 +      // 调用指纹保护函数修改已读取的像素数据
-+      StaticBitmapImage::ShuffleSubchannelColorData(data, image_info, 0, 0);
++      StaticBitmapImage::ShuffleWebGLPixelData(data, image_info);
 +    }
    }
  }
