@@ -55,11 +55,11 @@ index 7bd7cb5906..118f5a68e0 100644
 +#include <random>
 +#include "base/command_line.h"
 +#include "components/ungoogled/ungoogled_switches.h"
-+
++#include "base/strings/string_number_conversions.h"
  #include "base/numerics/checked_math.h"
  #include "gpu/command_buffer/client/gles2_interface.h"
  #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
-@@ -114,4 +121,284 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
+@@ -114,4 +121,283 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
                          ToSkiaRectConstraint(draw_options.clamping_mode));
  }
  
@@ -169,12 +169,12 @@ index 7bd7cb5906..118f5a68e0 100644
 +          static_cast<uint8_t*>(const_cast<void*>(addr)) + (y * fRowBytes) + (x * 4));
 +        uint8_t r, g, b, a;
 +        if (colorType == kRGBA_8888_SkColorType) {
-+          r = SkGetPackedR32(*pixel); g = SkGetPackedG32(*pixel);
-+          b = SkGetPackedB32(*pixel); a = SkGetPackedA32(*pixel);
++          r = ((*pixel >> 16) & 0xFF); g = ((*pixel >> 8) & 0xFF);
++          b = ((*pixel >> 0) & 0xFF);  a = ((*pixel >> 24) & 0xFF);
 +        } else {
 +          // BGRA: R and B are swapped in the packed representation
-+          b = SkGetPackedR32(*pixel); g = SkGetPackedG32(*pixel);
-+          r = SkGetPackedB32(*pixel); a = SkGetPackedA32(*pixel);
++          b = ((*pixel >> 16) & 0xFF); g = ((*pixel >> 8) & 0xFF);
++          r = ((*pixel >> 0) & 0xFF);  a = ((*pixel >> 24) & 0xFF);
 +        }
 +        // Belt-and-suspenders solid fill guard (IsAntiAliasedPixel already
 +        // rejects these, but cheap to double-check here)
@@ -182,35 +182,34 @@ index 7bd7cb5906..118f5a68e0 100644
 +        r = clamp8(add ? r + 1 : r - 1);
 +        g = clamp8(add ? g + 1 : g - 1);
 +        b = clamp8(add ? b + 1 : b - 1);
-+        if (colorType == kRGBA_8888_SkColorType)
-+          *pixel = (a<<SK_A32_SHIFT)|(r<<SK_R32_SHIFT)|(g<<SK_G32_SHIFT)|(b<<SK_B32_SHIFT);
-+        else
-+          *pixel = (a<<SK_BGRA_A32_SHIFT)|(r<<SK_BGRA_R32_SHIFT)|(g<<SK_BGRA_G32_SHIFT)|(b<<SK_BGRA_B32_SHIFT);
++        *pixel = (a<<24)|(r<<16)|(g<<8)|b;
 +        break;
 +      }
 +
 +      case kRGB_565_SkColorType: {
 +        uint16_t* p = reinterpret_cast<uint16_t*>(
 +          static_cast<uint8_t*>(const_cast<void*>(addr)) + (y * fRowBytes) + (x * 2));
-+        int r = SkPacked16ToR32(*p), g = SkPacked16ToG32(*p), b = SkPacked16ToB32(*p);
++        int r = ((int)(((*p >> 11) & 0x1F) * 255 / 31));
++        int g = ((int)(((*p >> 5) & 0x3F) * 255 / 63));
++        int b = ((int)((*p & 0x1F) * 255 / 31));
 +        if ((r < 2 && g < 2 && b < 2) || (r > 29 && g > 61 && b > 29)) continue;
 +        r = std::clamp(add ? r+1 : r-1, 0, 31);
 +        g = std::clamp(add ? g+1 : g-1, 0, 63);
 +        b = std::clamp(add ? b+1 : b-1, 0, 31);
-+        *p = (r<<SK_R16_SHIFT)|(g<<SK_G16_SHIFT)|(b<<SK_B16_SHIFT);
++        *p = (r<<11)|(g<<5)|b;
 +        break;
 +      }
 +
 +      case kARGB_4444_SkColorType: {
 +        uint16_t* p = reinterpret_cast<uint16_t*>(
 +          static_cast<uint8_t*>(const_cast<void*>(addr)) + (y * fRowBytes) + (x * 2));
-+        int a = SkGetPackedA4444(*p), r = SkGetPackedR4444(*p);
-+        int g = SkGetPackedG4444(*p),  b = SkGetPackedB4444(*p);
++        int a = ((*p >> 12) & 0xF), r = ((*p >> 8) & 0xF);
++        int g = ((*p >> 4) & 0xF),  b = (*p & 0xF);
 +        if ((r < 1 && g < 1 && b < 1) || (r > 14 && g > 14 && b > 14)) continue;
 +        r = std::clamp(add ? r+1 : r-1, 0, 15);
 +        g = std::clamp(add ? g+1 : g-1, 0, 15);
 +        b = std::clamp(add ? b+1 : b-1, 0, 15);
-+        *p = (a<<SK_A4444_SHIFT)|(r<<SK_R4444_SHIFT)|(g<<SK_G4444_SHIFT)|(b<<SK_B4444_SHIFT);
++        *p = (a<<12)|(r<<8)|(g<<4)|b;
 +        break;
 +      }
 +
@@ -282,16 +281,16 @@ index 7bd7cb5906..118f5a68e0 100644
 +      case kRGBA_8888_SkColorType:
 +      case kBGRA_8888_SkColorType: {
 +        uint32_t p = *reinterpret_cast<const uint32_t*>(row + px * 4);
-+        return (SkGetPackedR32(p) + SkGetPackedG32(p) + SkGetPackedB32(p)) / 3;
++        return (((p >> 16) & 0xFF) + ((p >> 8) & 0xFF) + (p & 0xFF)) / 3;
 +      }
 +      case kRGB_565_SkColorType: {
 +        uint16_t p = *reinterpret_cast<const uint16_t*>(row + px * 2);
-+        return (SkPacked16ToR32(p) + SkPacked16ToG32(p) + SkPacked16ToB32(p)) / 3;
++        return (((int)(((p >> 11) & 0x1F) * 255 / 31)) + ((int)(((p >> 5) & 0x3F) * 255 / 63)) + ((int)((p & 0x1F) * 255 / 31))) / 3;
 +      }
 +      case kARGB_4444_SkColorType: {
 +        uint16_t p = *reinterpret_cast<const uint16_t*>(row + px * 2);
 +        // Scale 0-15 → 0-255 (15 * 17 = 255)
-+        return ((SkGetPackedR4444(p) + SkGetPackedG4444(p) + SkGetPackedB4444(p)) / 3) * 17;
++        return ((((p >> 8) & 0xF) + ((p >> 4) & 0xF) + (p & 0xF)) / 3) * 17;
 +      }
 +      case kGray_8_SkColorType:
 +        return *(row + px);
