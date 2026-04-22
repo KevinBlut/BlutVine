@@ -42,10 +42,10 @@ index c76f6553e1..eaaad9530f 100644
  }
  
 diff --git a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
-index 7bd7cb5906..118f5a68e0 100644
+index 7bd7cb5906..8c3311e473 100644
 --- a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
 +++ b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
-@@ -4,6 +4,13 @@
+@@ -4,6 +4,14 @@
  
  #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
  
@@ -56,10 +56,11 @@ index 7bd7cb5906..118f5a68e0 100644
 +#include "base/command_line.h"
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include "base/strings/string_number_conversions.h"
++
  #include "base/numerics/checked_math.h"
  #include "gpu/command_buffer/client/gles2_interface.h"
  #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
-@@ -114,4 +121,283 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
+@@ -114,4 +122,346 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
                          ToSkiaRectConstraint(draw_options.clamping_mode));
  }
  
@@ -407,10 +408,10 @@ index 7bd7cb5906..118f5a68e0 100644
 +
  }  // namespace blink
 diff --git a/third_party/blink/renderer/platform/graphics/static_bitmap_image.h b/third_party/blink/renderer/platform/graphics/static_bitmap_image.h
-index d2fb75194b..db81a45189 100644
+index d2fb75194b..3f83327a90 100644
 --- a/third_party/blink/renderer/platform/graphics/static_bitmap_image.h
 +++ b/third_party/blink/renderer/platform/graphics/static_bitmap_image.h
-@@ -37,6 +37,12 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
+@@ -37,6 +37,13 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
  
    StaticBitmapImage(ImageOrientation orientation) : orientation_(orientation) {}
  
@@ -420,6 +421,7 @@ index d2fb75194b..db81a45189 100644
 +                                int x, int y, int w, int h,
 +                                SkColorType colorType);
 +  static void ShuffleWebGLPixelData(const void* addr, const SkImageInfo& info);
++
    bool IsStaticBitmapImage() const override { return true; }
  
    // Methods overridden by all sub-classes
