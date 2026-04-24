@@ -16,10 +16,10 @@ index 15e63407e1..d247b4317e 100644
 +//const char kFingerprintBrandVersion[] = "fingerprint-brand-version";
 +
 +// Specify if fingerprint GPU or not (DISABLED)
-+//const char kDisableGpuFingerprint[] = "disable-gpu-fingerprint";
++const char kDisableGpuFingerprint[] = "disable-gpu-fingerprint";
 +
-+
-+
++// Specify the database's path
++const char kFingerprintDatabase[] = "fingerprint-database";
 +
 +// Specify screen width
 +const char kFingerprintScreenWidth[] = "fingerprint-screen-width";
@@ -92,8 +92,8 @@ index b7a6a75e04..c8b05f6142 100644
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprint[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintBrand[];
 +//COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintBrandVersion[];
-+//COMPONENT_EXPORT(UNGOOGLED) extern const char kDisableGpuFingerprint[];
-+
++COMPONENT_EXPORT(UNGOOGLED) extern const char kDisableGpuFingerprint[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintDatabase[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenWidth[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenHeight[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenAvailWidth[];
@@ -120,7 +120,7 @@ diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content
 index bd954af691..6c6dbf21f6 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
-@@ -3741,6 +3741,28 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+@@ -3741,6 +3741,29 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
        switches::kEnableWebGLDraftExtensions,
        switches::kEnableWebGPUDeveloperFeatures,
        switches::kFileUrlPathAlias,
@@ -130,6 +130,7 @@ index bd954af691..6c6dbf21f6 100644
 +      switches::kFingerprint,
 +      switches::kFingerprintBrand,
 +      switches::kDisableGpuFingerprint,
++      switches::kFingerprintDatabase,
 +      switches::kFingerprintScreenWidth,
 +      switches::kFingerprintScreenHeight,
 +      switches::kFingerprintScreenAvailWidth,
