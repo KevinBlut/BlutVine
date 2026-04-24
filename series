@@ -17,7 +17,6 @@ fingerprint-chromium/011-gpu-info.patch
 fingerprint-chromium/012-canvas-collector.patch
 fingerprint-chromium/013-webgl-fingerprint.patch
 fingerprint-chromium/014-client-rects.patch
-fingerprint-chromium/015-canvas-measure-text.patch
 fingerprint-chromium/016-webgl-collector.patch
 fingerprint-chromium/017-mouse-event-fingerprint.patch
 fingerprint-chromium/018-timezone.patch
