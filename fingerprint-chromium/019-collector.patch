@@ -13,22 +13,26 @@ index 9ac48e164a..8250b0b812 100644
      "fingerprint_screen.h",
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
 new file mode 100644
-index 0000000000..324e5e95c8
+index 0000000000..413d8af2cd
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.cc
-@@ -0,0 +1,149 @@
+@@ -0,0 +1,175 @@
 +#include "components/ungoogled/fingerprint_collector.h"
 +
-+#include <fstream>
-+#include <sstream>
++#include <algorithm>
 +#include <atomic>
 +#include <chrono>
-+#include "base/files/file_path.h"
-+#include "base/path_service.h"
++#include <fstream>
++#include <sstream>
++#include <string>
++#include <vector>
++
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "third_party/skia/include/core/SkImageInfo.h"
 +
 +namespace fingerprint_collector {
 +
-+// Thread-local input log — accumulates draw calls between input and output
 +struct InputEntry {
 +    std::string op;
 +    std::string text;
@@ -44,9 +48,22 @@ index 0000000000..324e5e95c8
 +static std::atomic<int> g_dump_counter{0};
 +
 +static std::string GetOutputDir() {
-+    // Dumps go to ~/.config/blutvine/collect/
-+    const char* home = getenv("HOME");
-+    return std::string(home ? home : "/tmp") + "/.config/blutvine/collect/";
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++
++    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++        return "";
++
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
++
++    std::string gpu_model = "unknown";
++    if (cmd->HasSwitch(switches::kFingerprintGpuModel))
++        gpu_model = cmd->GetSwitchValueASCII(switches::kFingerprintGpuModel);
++
++    std::transform(gpu_model.begin(), gpu_model.end(),
++                   gpu_model.begin(), ::tolower);
++    std::replace(gpu_model.begin(), gpu_model.end(), ' ', '_');
++
++    return db_path + "/" + gpu_model + "/";
 +}
 +
 +static std::string SerializeInputLog() {
@@ -80,12 +97,15 @@ index 0000000000..324e5e95c8
 +    int width, int height,
 +    const std::string& extra_meta = ""
 +) {
++    std::string dir = GetOutputDir();
++    if (dir.empty()) return;
++
 +    int id = g_dump_counter.fetch_add(1);
 +    auto now = std::chrono::steady_clock::now().time_since_epoch().count();
-+    std::string base = GetOutputDir() + std::to_string(now) + "_" + std::to_string(id);
++    std::string base = dir + std::to_string(now) + "_" + std::to_string(id);
 +
-+    // Write metadata JSON
 +    std::ofstream meta(base + ".json");
++    if (!meta.is_open()) return;
 +    meta << "{"
 +         << "\"trigger\":\"" << trigger << "\","
 +         << "\"width\":" << width << ","
@@ -95,8 +115,8 @@ index 0000000000..324e5e95c8
 +         << "}";
 +    meta.close();
 +
-+    // Write raw pixel binary
 +    std::ofstream pixels(base + ".bin", std::ios::binary);
++    if (!pixels.is_open()) return;
 +    pixels.write(static_cast<const char*>(pixel_data), pixel_size);
 +    pixels.close();
 +}
@@ -110,18 +130,18 @@ index 0000000000..324e5e95c8
 +    int text_baseline,
 +    double max_width
 +) {
-+    g_input_log.push_back({
-+        op, text, x, y, font,
-+        text_align, text_baseline,
-+        max_width, 0.0, 0.0
-+    });
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
++    g_input_log.push_back({op, text, x, y, font,
++                            text_align, text_baseline,
++                            max_width, 0.0, 0.0});
 +}
 +
 +void LogRectInput(double x, double y, double width, double height) {
-+    g_input_log.push_back({
-+        "fillRect", "", x, y, "",
-+        0, 0, -1.0, width, height
-+    });
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
++    g_input_log.push_back({"fillRect", "", x, y, "",
++                            0, 0, -1.0, width, height});
 +}
 +
 +void DumpCanvasOutput(
@@ -129,14 +149,18 @@ index 0000000000..324e5e95c8
 +    const SkImageInfo& info,
 +    const std::string& trigger
 +) {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
 +    if (!addr) return;
++
 +    size_t size = info.computeMinByteSize();
 +    if (size == 0) return;
 +
 +    std::string input_json = SerializeInputLog();
 +    g_input_log.clear();
 +
-+    WriteDump(trigger, input_json, addr, size, info.width(), info.height());
++    WriteDump(trigger, input_json, addr, size,
++              info.width(), info.height());
 +}
 +
 +void DumpWebGLOutput(
@@ -146,8 +170,10 @@ index 0000000000..324e5e95c8
 +    unsigned int format,
 +    unsigned int type
 +) {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
 +    if (!data) return;
-+    // RGBA8 assumed — 4 bytes per pixel
++
 +    size_t size = static_cast<size_t>(width) * height * 4;
 +
 +    std::string input_json = SerializeInputLog();
