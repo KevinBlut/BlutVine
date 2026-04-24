@@ -9,7 +9,7 @@ index 34e8e70932..060b339cb3 100644
 +#include "base/command_line.h"
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include "components/ungoogled/fingerprint_collector.h"
-+
++#include <vector>
  #include "base/feature_list.h"
  #include "base/functional/callback_helpers.h"
  #include "base/location.h"
