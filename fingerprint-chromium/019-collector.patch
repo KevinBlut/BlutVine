@@ -1,0 +1,221 @@
+diff --git a/components/ungoogled/BUILD.gn b/components/ungoogled/BUILD.gn
+index 9ac48e164a..8250b0b812 100644
+--- a/components/ungoogled/BUILD.gn
++++ b/components/ungoogled/BUILD.gn
+@@ -4,6 +4,8 @@
+ 
+ component("ungoogled_switches") {
+   sources = [
++    "fingerprint_collector.cc",
++    "fingerprint_collector.h",
+     "fingerprint_data.h",
+     "fingerprint_screen.cc",
+     "fingerprint_screen.h",
+diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
+new file mode 100644
+index 0000000000..324e5e95c8
+--- /dev/null
++++ b/components/ungoogled/fingerprint_collector.cc
+@@ -0,0 +1,149 @@
++#include "components/ungoogled/fingerprint_collector.h"
++
++#include <fstream>
++#include <sstream>
++#include <atomic>
++#include <chrono>
++#include "base/files/file_path.h"
++#include "base/path_service.h"
++
++namespace fingerprint_collector {
++
++// Thread-local input log — accumulates draw calls between input and output
++struct InputEntry {
++    std::string op;
++    std::string text;
++    double x, y;
++    std::string font;
++    int text_align;
++    int text_baseline;
++    double max_width;
++    double rect_width, rect_height;
++};
++
++static thread_local std::vector<InputEntry> g_input_log;
++static std::atomic<int> g_dump_counter{0};
++
++static std::string GetOutputDir() {
++    // Dumps go to ~/.config/blutvine/collect/
++    const char* home = getenv("HOME");
++    return std::string(home ? home : "/tmp") + "/.config/blutvine/collect/";
++}
++
++static std::string SerializeInputLog() {
++    std::ostringstream ss;
++    ss << "[";
++    for (size_t i = 0; i < g_input_log.size(); i++) {
++        const auto& e = g_input_log[i];
++        if (i > 0) ss << ",";
++        ss << "{"
++           << "\"op\":\"" << e.op << "\","
++           << "\"text\":\"" << e.text << "\","
++           << "\"x\":" << e.x << ","
++           << "\"y\":" << e.y << ","
++           << "\"font\":\"" << e.font << "\","
++           << "\"text_align\":" << e.text_align << ","
++           << "\"text_baseline\":" << e.text_baseline << ","
++           << "\"max_width\":" << e.max_width << ","
++           << "\"rect_width\":" << e.rect_width << ","
++           << "\"rect_height\":" << e.rect_height
++           << "}";
++    }
++    ss << "]";
++    return ss.str();
++}
++
++static void WriteDump(
++    const std::string& trigger,
++    const std::string& input_json,
++    const void* pixel_data,
++    size_t pixel_size,
++    int width, int height,
++    const std::string& extra_meta = ""
++) {
++    int id = g_dump_counter.fetch_add(1);
++    auto now = std::chrono::steady_clock::now().time_since_epoch().count();
++    std::string base = GetOutputDir() + std::to_string(now) + "_" + std::to_string(id);
++
++    // Write metadata JSON
++    std::ofstream meta(base + ".json");
++    meta << "{"
++         << "\"trigger\":\"" << trigger << "\","
++         << "\"width\":" << width << ","
++         << "\"height\":" << height << ","
++         << "\"inputs\":" << input_json
++         << (extra_meta.empty() ? "" : "," + extra_meta)
++         << "}";
++    meta.close();
++
++    // Write raw pixel binary
++    std::ofstream pixels(base + ".bin", std::ios::binary);
++    pixels.write(static_cast<const char*>(pixel_data), pixel_size);
++    pixels.close();
++}
++
++void LogCanvasInput(
++    const std::string& op,
++    const std::string& text,
++    double x, double y,
++    const std::string& font,
++    int text_align,
++    int text_baseline,
++    double max_width
++) {
++    g_input_log.push_back({
++        op, text, x, y, font,
++        text_align, text_baseline,
++        max_width, 0.0, 0.0
++    });
++}
++
++void LogRectInput(double x, double y, double width, double height) {
++    g_input_log.push_back({
++        "fillRect", "", x, y, "",
++        0, 0, -1.0, width, height
++    });
++}
++
++void DumpCanvasOutput(
++    const void* addr,
++    const SkImageInfo& info,
++    const std::string& trigger
++) {
++    if (!addr) return;
++    size_t size = info.computeMinByteSize();
++    if (size == 0) return;
++
++    std::string input_json = SerializeInputLog();
++    g_input_log.clear();
++
++    WriteDump(trigger, input_json, addr, size, info.width(), info.height());
++}
++
++void DumpWebGLOutput(
++    const void* data,
++    int x, int y,
++    int width, int height,
++    unsigned int format,
++    unsigned int type
++) {
++    if (!data) return;
++    // RGBA8 assumed — 4 bytes per pixel
++    size_t size = static_cast<size_t>(width) * height * 4;
++
++    std::string input_json = SerializeInputLog();
++    g_input_log.clear();
++
++    std::string meta = "\"webgl_x\":" + std::to_string(x)
++        + ",\"webgl_y\":" + std::to_string(y)
++        + ",\"format\":" + std::to_string(format)
++        + ",\"type\":" + std::to_string(type);
++
++    WriteDump("readPixels", input_json, data, size, width, height, meta);
++}
++
++void ClearInputLog() {
++    g_input_log.clear();
++}
++
++}  // namespace fingerprint_collector
+\ No newline at end of file
+diff --git a/components/ungoogled/fingerprint_collector.h b/components/ungoogled/fingerprint_collector.h
+new file mode 100644
+index 0000000000..9b5ae1e8b5
+--- /dev/null
++++ b/components/ungoogled/fingerprint_collector.h
+@@ -0,0 +1,45 @@
++#pragma once
++
++#include <string>
++#include <vector>
++#include "third_party/skia/include/core/SkImageInfo.h"
++
++namespace fingerprint_collector {
++
++// Called at fillText hook points — logs input to thread-local buffer
++void LogCanvasInput(
++    const std::string& op,
++    const std::string& text,
++    double x, double y,
++    const std::string& font,
++    int text_align,
++    int text_baseline,
++    double max_width = -1.0
++);
++
++// Called at fillRect hook point
++void LogRectInput(
++    double x, double y,
++    double width, double height
++);
++
++// Called at toDataURL and getImageData output points
++void DumpCanvasOutput(
++    const void* addr,
++    const SkImageInfo& info,
++    const std::string& trigger
++);
++
++// Called at WebGL readPixels output point
++void DumpWebGLOutput(
++    const void* data,
++    int x, int y,
++    int width, int height,
++    unsigned int format,
++    unsigned int type
++);
++
++// Clears thread-local input log — call at page navigation
++void ClearInputLog();
++
++}  // namespace fingerprint_collector
+\ No newline at end of file
