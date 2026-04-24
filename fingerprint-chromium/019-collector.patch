@@ -24,7 +24,7 @@ new file mode 100644
 index 0000000000..b70d6d99ea
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.cc
-@@ -0,0 +1,210 @@
+@@ -0,0 +1,180 @@
 +#include "components/ungoogled/fingerprint_collector.h"
 +
 +#include <algorithm>
@@ -34,7 +34,6 @@ index 0000000000..b70d6d99ea
 +#include <sstream>
 +#include <string>
 +#include <vector>
-+#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 +
 +#include "base/command_line.h"
 +#include "components/ungoogled/ungoogled_switches.h"
@@ -177,35 +176,6 @@ index 0000000000..b70d6d99ea
 +              info.width(), info.height());
 +}
 +
-+void DumpCanvasOutput(
-+    const blink::StaticBitmapImage* image,
-+    const std::string& trigger
-+) {
-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
-+    if (!image) return;
-+
-+    SkImageInfo info = SkImageInfo::Make(
-+        image->width(), image->height(),
-+        kRGBA_8888_SkColorType,
-+        kUnpremul_SkAlphaType);
-+
-+    size_t row_bytes = info.minRowBytes();
-+    size_t buffer_size = info.computeMinByteSize();
-+    if (buffer_size == 0) return;
-+
-+    std::vector<uint8_t> pixel_buffer(buffer_size);
-+    if (!image->PaintImageForCurrentFrame().readPixels(
-+            info, pixel_buffer.data(), row_bytes, 0, 0))
-+        return;
-+
-+    std::string input_json = SerializeInputLog();
-+    g_input_log.clear();
-+
-+    WriteDump(trigger, input_json, pixel_buffer.data(),
-+              buffer_size, info.width(), info.height());
-+}
-+
 +void DumpWebGLOutput(
 +    const void* data,
 +    int x, int y,
@@ -241,7 +211,7 @@ new file mode 100644
 index 0000000000..0afd226b35
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.h
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,45 @@
 +#pragma once
 +
 +#include <string>
@@ -271,11 +241,6 @@ index 0000000000..0afd226b35
 +void DumpCanvasOutput(
 +    const void* addr,
 +    const SkImageInfo& info,
-+    const std::string& trigger
-+);
-+
-+void DumpCanvasOutput(
-+    const blink::StaticBitmapImage* image,
 +    const std::string& trigger
 +);
 +
