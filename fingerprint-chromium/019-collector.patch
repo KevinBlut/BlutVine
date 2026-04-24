@@ -1,5 +1,5 @@
 diff --git a/components/ungoogled/BUILD.gn b/components/ungoogled/BUILD.gn
-index 9ac48e164a..8250b0b812 100644
+index 9ac48e164a..4c974b5fe8 100644
 --- a/components/ungoogled/BUILD.gn
 +++ b/components/ungoogled/BUILD.gn
 @@ -4,6 +4,8 @@
@@ -11,12 +11,21 @@ index 9ac48e164a..8250b0b812 100644
      "fingerprint_data.h",
      "fingerprint_screen.cc",
      "fingerprint_screen.h",
+@@ -13,5 +15,6 @@ component("ungoogled_switches") {
+ 
+   defines = [ "IS_UNGOOGLED_IMPL" ]
+ 
+-  deps = [ "//base", "//ui/display", "//ui/gfx/geometry" ]
++  deps = [ "//base", "//ui/display", "//ui/gfx/geometry", "//skia",
++         "//third_party/blink/renderer/platform/graphics" ]
+ }
+\ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
 new file mode 100644
-index 0000000000..413d8af2cd
+index 0000000000..b70d6d99ea
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.cc
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,210 @@
 +#include "components/ungoogled/fingerprint_collector.h"
 +
 +#include <algorithm>
@@ -26,10 +35,14 @@ index 0000000000..413d8af2cd
 +#include <sstream>
 +#include <string>
 +#include <vector>
++#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 +
 +#include "base/command_line.h"
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include "third_party/skia/include/core/SkImageInfo.h"
++
++#include "base/files/file_util.h"
++#include "base/files/file_path.h"
 +
 +namespace fingerprint_collector {
 +
@@ -100,6 +113,8 @@ index 0000000000..413d8af2cd
 +    std::string dir = GetOutputDir();
 +    if (dir.empty()) return;
 +
++    base::CreateDirectory(base::FilePath(dir));
++
 +    int id = g_dump_counter.fetch_add(1);
 +    auto now = std::chrono::steady_clock::now().time_since_epoch().count();
 +    std::string base = dir + std::to_string(now) + "_" + std::to_string(id);
@@ -163,6 +178,35 @@ index 0000000000..413d8af2cd
 +              info.width(), info.height());
 +}
 +
++void DumpCanvasOutput(
++    const blink::StaticBitmapImage* image,
++    const std::string& trigger
++) {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
++    if (!image) return;
++
++    SkImageInfo info = SkImageInfo::Make(
++        image->width(), image->height(),
++        kRGBA_8888_SkColorType,
++        kUnpremul_SkAlphaType);
++
++    size_t row_bytes = info.minRowBytes();
++    size_t buffer_size = info.computeMinByteSize();
++    if (buffer_size == 0) return;
++
++    std::vector<uint8_t> pixel_buffer(buffer_size);
++    if (!image->PaintImageForCurrentFrame().readPixels(
++            info, pixel_buffer.data(), row_bytes, 0, 0))
++        return;
++
++    std::string input_json = SerializeInputLog();
++    g_input_log.clear();
++
++    WriteDump(trigger, input_json, pixel_buffer.data(),
++              buffer_size, info.width(), info.height());
++}
++
 +void DumpWebGLOutput(
 +    const void* data,
 +    int x, int y,
@@ -195,10 +239,10 @@ index 0000000000..413d8af2cd
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.h b/components/ungoogled/fingerprint_collector.h
 new file mode 100644
-index 0000000000..9b5ae1e8b5
+index 0000000000..0afd226b35
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.h
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,50 @@
 +#pragma once
 +
 +#include <string>
@@ -228,6 +272,11 @@ index 0000000000..9b5ae1e8b5
 +void DumpCanvasOutput(
 +    const void* addr,
 +    const SkImageInfo& info,
++    const std::string& trigger
++);
++
++void DumpCanvasOutput(
++    const blink::StaticBitmapImage* image,
 +    const std::string& trigger
 +);
 +
