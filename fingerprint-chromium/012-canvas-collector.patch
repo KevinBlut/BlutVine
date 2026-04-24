@@ -13,24 +13,22 @@ index 34e8e70932..060b339cb3 100644
  #include "base/feature_list.h"
  #include "base/functional/callback_helpers.h"
  #include "base/location.h"
-@@ -1313,7 +1317,22 @@ String HTMLCanvasElement::ToDataURLInternal(
+@@ -1313,7 +1317,20 @@ String HTMLCanvasElement::ToDataURLInternal(
            mime_type, ImageEncoderUtils::kEncodeReasonToDataURL);
  
    scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
 +
    if (image_bitmap) {
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+      if (image_bitmap) {
-+        SkImageInfo info = SkImageInfo::Make(
-+         image_bitmap->width(), image_bitmap->height(),
-+         kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
-+         size_t row_bytes = info.minRowBytes();
-+         std::vector<uint8_t> buf(info.computeMinByteSize());
++      SkImageInfo info = SkImageInfo::Make(
++          image_bitmap->width(), image_bitmap->height(),
++          kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++      size_t row_bytes = info.minRowBytes();
++      std::vector<uint8_t> buf(info.computeMinByteSize());
 +      if (image_bitmap->PaintImageForCurrentFrame().readPixels(
-+          info, buf.data(), row_bytes, 0, 0)) {
-+          FingerprintCollector::DumpCanvasOutput(buf.data(), info, "toDataURL");
++              info, buf.data(), row_bytes, 0, 0)) {
++        FingerprintCollector::DumpCanvasOutput(buf.data(), info, "toDataURL");
 +      }
-+    }
 +    }
 +
      std::unique_ptr<ImageDataBuffer> data_buffer =
