@@ -1,0 +1,123 @@
+diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+index 34e8e70932..060b339cb3 100644
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -33,6 +33,10 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++
+ #include "base/feature_list.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/location.h"
+@@ -1313,7 +1317,12 @@ String HTMLCanvasElement::ToDataURLInternal(
+           mime_type, ImageEncoderUtils::kEncodeReasonToDataURL);
+ 
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
++
+   if (image_bitmap) {
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++      FingerprintCollector::DumpCanvasOutput(image_bitmap.get(), "toDataURL");
++    }
++
+     std::unique_ptr<ImageDataBuffer> data_buffer =
+         ImageDataBuffer::Create(image_bitmap);
+     if (!data_buffer)
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 3006cad0fb..c9bcf07265 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -11,6 +11,13 @@
+ #include <optional>
+ #include <utility>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include "third_party/blink/renderer/core/style/computed_style.h"
++#include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++
+ #include "base/check.h"
+ #include "base/check_op.h"
+ #include "base/location.h"
+@@ -523,6 +530,14 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+           snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
+       DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
+     }
++
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++      FingerprintCollector::DumpCanvasOutput(
++          image_data_pixmap.addr(),
++          image_data_pixmap.info(),
++          "getImageData"
++      );
++    }
+   }
+ 
+   return image_data;
+@@ -882,6 +897,14 @@ void BaseRenderingContext2D::setDirection(const V8CanvasDirection direction) {
+ 
+ void BaseRenderingContext2D::fillText(const String& text, double x, double y) {
+   CanvasRenderingContext2DState& state = GetState();
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    FingerprintCollector::LogCanvasInput("fillText", text.Utf8(), x, y,
++      state.UnparsedFont().Utf8(),
++      static_cast<int>(state.GetTextAlign()),
++      static_cast<int>(state.GetTextBaseline()));
++  }
++
+   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kFillPaintType,
+                    state.GetTextAlign(), state.GetTextBaseline(), 0,
+                    text.length());
+@@ -892,6 +915,15 @@ void BaseRenderingContext2D::fillText(const String& text,
+                                       double y,
+                                       double max_width) {
+   CanvasRenderingContext2DState& state = GetState();
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    FingerprintCollector::LogCanvasInput("fillText", text.Utf8(), x, y,
++      state.UnparsedFont().Utf8(),
++      static_cast<int>(state.GetTextAlign()),
++      static_cast<int>(state.GetTextBaseline()),
++      max_width);
++  }
++
+   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kFillPaintType,
+                    state.GetTextAlign(), state.GetTextBaseline(), 0,
+                    text.length(), &max_width);
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc b/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc
+index 9723c850b7..42f8ef2e19 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc
+@@ -18,6 +18,10 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++
+ #include "base/check.h"
+ #include "base/check_deref.h"
+ #include "base/check_op.h"
+@@ -1741,6 +1745,15 @@ void Canvas2DRecorderContext::fillRect(double x,
+   AdjustRectForCanvas(x, y, width, height);
+   gfx::RectF rect(ClampTo<float>(x), ClampTo<float>(y), ClampTo<float>(width),
+                   ClampTo<float>(height));
++  
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    FingerprintCollector::LogCanvasInput(
++        "fillRect",
++        "", x, y, "", 0, 0,
++        width, height
++    );
++  }
++
+   Draw<OverdrawOp::kNone>(
+       /*draw_func=*/
+       [rect](MemoryManagedPaintCanvas* c, const cc::PaintFlags* flags) {
