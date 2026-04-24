@@ -11,13 +11,12 @@ index 9ac48e164a..4c974b5fe8 100644
      "fingerprint_data.h",
      "fingerprint_screen.cc",
      "fingerprint_screen.h",
-@@ -13,5 +15,6 @@ component("ungoogled_switches") {
+@@ -13,5 +15,5 @@ component("ungoogled_switches") {
  
    defines = [ "IS_UNGOOGLED_IMPL" ]
  
 -  deps = [ "//base", "//ui/display", "//ui/gfx/geometry" ]
-+  deps = [ "//base", "//ui/display", "//ui/gfx/geometry", "//skia",
-+         "//third_party/blink/renderer/platform/graphics" ]
++  deps = [ "//base", "//ui/display", "//ui/gfx/geometry", "//skia" ]
  }
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
