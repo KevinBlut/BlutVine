@@ -20,7 +20,7 @@ index 2784c342e9..a99f92898a 100644
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
 +
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+      FingerprintCollector::DumpWebGLOutput(
++      fingerprint_collector::DumpWebGLOutput(
 +          data, x, y, width, height, format, type
 +      );
 +    }
