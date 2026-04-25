@@ -67,6 +67,37 @@ index 3006cad0fb..c9bcf07265 100644
    }
  
    return image_data;
+   
+void BaseRenderingContext2D::strokeText(const String& text,
+                                         double x,
+                                         double y) {
+   CanvasRenderingContext2DState& state = GetState();
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput("strokeText", text.Utf8(), x, y,
++      state.UnparsedFont().Utf8(),
++      static_cast<int>(state.GetTextAlign()),
++      static_cast<int>(state.GetTextBaseline()));
++  }
+
+   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
+
+
+void BaseRenderingContext2D::strokeText(const String& text,
+                                         double x,
+                                         double y,
+                                         double max_width) {
+   CanvasRenderingContext2DState& state = GetState();
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput("strokeText", text.Utf8(), x, y,
++      state.UnparsedFont().Utf8(),
++      static_cast<int>(state.GetTextAlign()),
++      static_cast<int>(state.GetTextBaseline()),
++      max_width);
++  }
+   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
+
+
+   
 @@ -882,6 +897,14 @@ void BaseRenderingContext2D::setDirection(const V8CanvasDirection direction) {
  
  void BaseRenderingContext2D::fillText(const String& text, double x, double y) {
@@ -125,3 +156,11 @@ index 9723c850b7..42f8ef2e19 100644
    Draw<OverdrawOp::kNone>(
        /*draw_func=*/
        [rect](MemoryManagedPaintCanvas* c, const cc::PaintFlags* flags) {
+
+
+In 012-canvas-collector.patch — canvas_2d_recorder_context.cc section
+
+AdjustRectForCanvas(dx, dy, dw, dh);
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogRectInput(dx, dy, dw, dh);
++  }
