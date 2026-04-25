@@ -6,8 +6,8 @@ index 35fb2e5880..6834991c55 100644
  
  #include "base/files/file_util.h"
  #include "base/files/file_path.h"
-+#include "v8/include/v8.h"
-+#include "v8/include/v8-debug.h"
++
++
  
  namespace fingerprint_collector {
  
