@@ -1,8 +1,8 @@
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-index 34e8e70932..060b339cb3 100644
+index 34e8e70932..b55eb4d9d4 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-@@ -33,6 +33,10 @@
+@@ -33,6 +33,11 @@
  #include <memory>
  #include <utility>
  
@@ -10,10 +10,11 @@ index 34e8e70932..060b339cb3 100644
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include "components/ungoogled/fingerprint_collector.h"
 +#include <vector>
++
  #include "base/feature_list.h"
  #include "base/functional/callback_helpers.h"
  #include "base/location.h"
-@@ -1313,7 +1317,20 @@ String HTMLCanvasElement::ToDataURLInternal(
+@@ -1313,7 +1318,20 @@ String HTMLCanvasElement::ToDataURLInternal(
            mime_type, ImageEncoderUtils::kEncodeReasonToDataURL);
  
    scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
@@ -35,7 +36,7 @@ index 34e8e70932..060b339cb3 100644
          ImageDataBuffer::Create(image_bitmap);
      if (!data_buffer)
 diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
-index 3006cad0fb..c9bcf07265 100644
+index 3006cad0fb..046ad3379a 100644
 --- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
 +++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
 @@ -11,6 +11,13 @@
@@ -67,37 +68,6 @@ index 3006cad0fb..c9bcf07265 100644
    }
  
    return image_data;
-   
-void BaseRenderingContext2D::strokeText(const String& text,
-                                         double x,
-                                         double y) {
-   CanvasRenderingContext2DState& state = GetState();
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+    fingerprint_collector::LogCanvasInput("strokeText", text.Utf8(), x, y,
-+      state.UnparsedFont().Utf8(),
-+      static_cast<int>(state.GetTextAlign()),
-+      static_cast<int>(state.GetTextBaseline()));
-+  }
-
-   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
-
-
-void BaseRenderingContext2D::strokeText(const String& text,
-                                         double x,
-                                         double y,
-                                         double max_width) {
-   CanvasRenderingContext2DState& state = GetState();
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+    fingerprint_collector::LogCanvasInput("strokeText", text.Utf8(), x, y,
-+      state.UnparsedFont().Utf8(),
-+      static_cast<int>(state.GetTextAlign()),
-+      static_cast<int>(state.GetTextBaseline()),
-+      max_width);
-+  }
-   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
-
-
-   
 @@ -882,6 +897,14 @@ void BaseRenderingContext2D::setDirection(const V8CanvasDirection direction) {
  
  void BaseRenderingContext2D::fillText(const String& text, double x, double y) {
@@ -129,8 +99,35 @@ void BaseRenderingContext2D::strokeText(const String& text,
    DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kFillPaintType,
                     state.GetTextAlign(), state.GetTextBaseline(), 0,
                     text.length(), &max_width);
+@@ -938,6 +970,12 @@ void BaseRenderingContext2D::strokeText(const String& text,
+                                         double x,
+                                         double y) {
+   CanvasRenderingContext2DState& state = GetState();
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput("strokeText", text.Utf8(), x, y,
++      state.UnparsedFont().Utf8(),
++      static_cast<int>(state.GetTextAlign()),
++      static_cast<int>(state.GetTextBaseline()));
++  }
+   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
+                    state.GetTextAlign(), state.GetTextBaseline(), 0,
+                    text.length());
+@@ -948,6 +986,13 @@ void BaseRenderingContext2D::strokeText(const String& text,
+                                         double y,
+                                         double max_width) {
+   CanvasRenderingContext2DState& state = GetState();
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput("strokeText", text.Utf8(), x, y,
++      state.UnparsedFont().Utf8(),
++      static_cast<int>(state.GetTextAlign()),
++      static_cast<int>(state.GetTextBaseline()),
++      max_width);
++  }
+   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
+                    state.GetTextAlign(), state.GetTextBaseline(), 0,
+                    text.length(), &max_width);
 diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc b/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc
-index 9723c850b7..42f8ef2e19 100644
+index 9723c850b7..45d1b67fe9 100644
 --- a/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc
 +++ b/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc
 @@ -18,6 +18,10 @@
@@ -156,11 +153,13 @@ index 9723c850b7..42f8ef2e19 100644
    Draw<OverdrawOp::kNone>(
        /*draw_func=*/
        [rect](MemoryManagedPaintCanvas* c, const cc::PaintFlags* flags) {
-
-
-In 012-canvas-collector.patch — canvas_2d_recorder_context.cc section
-
-AdjustRectForCanvas(dx, dy, dw, dh);
+@@ -2229,6 +2238,9 @@ void Canvas2DRecorderContext::drawImage(CanvasImageSource* image_source,
+   // clamp to float to avoid float cast overflow when used as SkScalar
+   AdjustRectForCanvas(sx, sy, sw, sh);
+   AdjustRectForCanvas(dx, dy, dw, dh);
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
 +    fingerprint_collector::LogRectInput(dx, dy, dw, dh);
 +  }
+   float fsx = ClampTo<float>(sx);
+   float fsy = ClampTo<float>(sy);
+   float fsw = ClampTo<float>(sw);
