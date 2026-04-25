@@ -1,0 +1,64 @@
+diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
+index 35fb2e5880..6834991c55 100644
+--- a/components/ungoogled/fingerprint_collector.cc
++++ b/components/ungoogled/fingerprint_collector.cc
+@@ -14,6 +14,8 @@
+ 
+ #include "base/files/file_util.h"
+ #include "base/files/file_path.h"
++#include "v8/include/v8.h"
++#include "v8/include/v8-debug.h"
+ 
+ namespace fingerprint_collector {
+ 
+@@ -144,6 +146,23 @@ void LogRectInput(double x, double y, double width, double height) {
+                             0, 0, -1.0, width, height});
+ }
+ 
++static std::string GetCallerUrl() {
++    v8::Isolate* isolate = v8::Isolate::TryGetCurrent();
++    if (!isolate) return "";
++    std::array<v8::StackTrace::ScriptData, 8> stack_buffer;
++    auto stack = v8::StackTrace::CurrentScriptData(isolate, stack_buffer);
++    for (auto& frame : stack) {
++        if (frame.function.IsEmpty()) continue;
++        v8::ScriptOrigin origin = frame.function->GetScriptOrigin();
++        v8::Local<v8::Value> name = origin.ResourceName();
++        if (name.IsEmpty() || !name->IsString()) continue;
++        v8::String::Utf8Value url(isolate, name);
++        std::string s(*url, url.length());
++        if (s.rfind("http", 0) == 0) return s;
++    }
++    return "";
++}
++
+ void DumpCanvasOutput(
+     const void* addr,
+     const SkImageInfo& info,
+@@ -159,8 +178,11 @@ void DumpCanvasOutput(
+     std::string input_json = SerializeInputLog();
+     g_input_log.clear();
+ 
++    std::string caller = GetCallerUrl();
++    std::string caller_meta = caller.empty() ? "" :
++        ""caller":"" + caller + """;
+     WriteDump(trigger, input_json, addr, size,
+-              info.width(), info.height());
++              info.width(), info.height(), caller_meta);
+ }
+ 
+ void DumpWebGLOutput(
+@@ -179,10 +201,12 @@ void DumpWebGLOutput(
+     std::string input_json = SerializeInputLog();
+     g_input_log.clear();
+ 
++    std::string caller = GetCallerUrl();
+     std::string meta = "\"webgl_x\":" + std::to_string(x)
+         + ",\"webgl_y\":" + std::to_string(y)
+         + ",\"format\":" + std::to_string(format)
+-        + ",\"type\":" + std::to_string(type);
++        + ",\"type\":" + std::to_string(type)
++        + (caller.empty() ? "" : ",\"caller\":\"" + caller + "\"");
+ 
+     WriteDump("readPixels", input_json, data, size, width, height, meta);
+ }
