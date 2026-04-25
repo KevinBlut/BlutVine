@@ -113,17 +113,13 @@ index 9723c850b7..42f8ef2e19 100644
  #include "base/check.h"
  #include "base/check_deref.h"
  #include "base/check_op.h"
-@@ -1741,6 +1745,15 @@ void Canvas2DRecorderContext::fillRect(double x,
+@@ -1741,6 +1745,11 @@ void Canvas2DRecorderContext::fillRect(double x,
    AdjustRectForCanvas(x, y, width, height);
    gfx::RectF rect(ClampTo<float>(x), ClampTo<float>(y), ClampTo<float>(width),
                    ClampTo<float>(height));
 +  
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+    fingerprint_collector::LogCanvasInput(
-+        "fillRect",
-+        "", x, y, "", 0, 0,
-+        width, height
-+    );
++    fingerprint_collector::LogRectInput(x, y, width, height);
 +  }
 +
    Draw<OverdrawOp::kNone>(
