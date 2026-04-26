@@ -38,7 +38,7 @@ index 15e63407e1..d247b4317e 100644
 +
 +// Specify what API was called (canvas, webgl)
 +const char kFingerprintCollect[] = "fingerprint-collect";
-+
++const char kFingerprintCollectorScript[] = "fingerprint-collector-script";
 +// Specify the GPU VENDOR (explicit override, takes priority over gpu-model) (DISABLED)
 +const char kFingerprintGpuVendor[] = "fingerprint-gpu-vendor";
 +
