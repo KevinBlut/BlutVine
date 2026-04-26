@@ -44,7 +44,7 @@ index 15e63407e1..d247b4317e 100644
 +
 +// Specify the GPU RENDERER (explicit override, takes priority over gpu-model) (DISABLED)
 +const char kFingerprintGpuRenderer[] = "fingerprint-gpu-renderer";
-+
++const char kFingerprintReplay[] = "fingerprint-replay";
 +// Specify GPU model name for auto-derivation of vendor/renderer/limits
 +// e.g. "RTX 3060", "GTX 1660 Ti", "RTX 4090"
 +// The code will search kGpuModels[] for matching entries and pick one
@@ -109,7 +109,7 @@ index b7a6a75e04..c8b05f6142 100644
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintDeviceMemory[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPlatform[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPlatformVersion[];
-+
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintReplay[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintLocation[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintTimezone[];
  }
@@ -138,6 +138,7 @@ index bd954af691..6c6dbf21f6 100644
 +      switches::kFingerprintScreenDevicePixelRatio,
 +      switches::kFingerprintCollect,
 +      switches::kFingerprintCollectorScript,
++      switches::kFingerprintReplay,
 +      switches::kFingerprintGpuVendor,
 +      switches::kFingerprintGpuRenderer,
 +      switches::kFingerprintGpuModel,
