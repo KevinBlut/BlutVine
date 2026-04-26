@@ -1,5 +1,38 @@
+diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+index 18aaa25ad7..46297ebabc 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+@@ -6,6 +6,10 @@
+ 
+ #include <memory>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++
+ #include "base/compiler_specific.h"
+ #include "base/containers/heap_array.h"
+ #include "base/numerics/checked_math.h"
+@@ -457,6 +461,17 @@ void WebGL2RenderingContextBase::getBufferSubData(
+                      static_cast<size_t>(destination_byte_length)));
+ 
+   ContextGL()->UnmapBuffer(target);
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintCollect)) {
++    fingerprint_collector::SetCurrentSite(
++      Host()->GetDocument()->Url().GetString().Utf8());
++    fingerprint_collector::DumpWebGLOutput(
++        destination_data_ptr,
++        0, 0,
++        static_cast<int>(destination_byte_length), 1,
++        0, 0);
++  }
+ }
+ 
+ void WebGL2RenderingContextBase::blitFramebuffer(GLint src_x0,
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index a99f92898a..d79376413c 100644
+index 2784c342e9..441182869a 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 @@ -34,6 +34,7 @@
@@ -10,16 +43,41 @@ index a99f92898a..d79376413c 100644
  
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
-diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index 2784c342e9..a99f92898a 100644
---- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-+++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-@@ -5241,6 +5242,12 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+@@ -745,8 +746,24 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+     return nullptr;
+   }
+ 
+-  return MakeGarbageCollected<ImageBitmap>(
+-      GetDrawingBuffer()->TransferToStaticBitmapImage());
++  scoped_refptr<StaticBitmapImage> sbi =
++      GetDrawingBuffer()->TransferToStaticBitmapImage();
++  if (sbi && base::CommandLine::ForCurrentProcess()->HasSwitch(
++                 switches::kFingerprintCollect)) {
++    SkImageInfo info = SkImageInfo::Make(
++        sbi->width(), sbi->height(),
++        kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++    size_t row_bytes = info.minRowBytes();
++    std::vector<uint8_t> buf(info.computeMinByteSize());
++    if (sbi->PaintImageForCurrentFrame().readPixels(
++            info, buf.data(), row_bytes, 0, 0)) {
++      fingerprint_collector::SetCurrentSite(
++        Host()->GetDocument()->Url().GetString().Utf8());
++      fingerprint_collector::DumpCanvasOutput(
++          buf.data(), info, "transferToImageBitmap");
++    }
++  }
++  return MakeGarbageCollected<ImageBitmap>(std::move(sbi));
+ }
+ 
+ void WebGLRenderingContextBase::drawingBufferStorage(GLenum sizedformat,
+@@ -5241,6 +5258,14 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
        return;
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
 +
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++      fingerprint_collector::SetCurrentSite(
++        Host()->GetDocument()->Url().GetString().Utf8());
 +      fingerprint_collector::DumpWebGLOutput(
 +          data, x, y, width, height, format, type
 +      );
