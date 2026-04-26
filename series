@@ -22,3 +22,4 @@ fingerprint-chromium/017-mouse-event-fingerprint.patch
 fingerprint-chromium/018-timezone.patch
 fingerprint-chromium/019-collector.patch
 fingerprint-chromium/020-collector-interception.patch
+fingerprint-chromium/021-collector-hash-logic.patch
