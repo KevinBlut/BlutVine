@@ -21,3 +21,4 @@ fingerprint-chromium/016-webgl-collector.patch
 fingerprint-chromium/017-mouse-event-fingerprint.patch
 fingerprint-chromium/018-timezone.patch
 fingerprint-chromium/019-collector.patch
+fingerprint-chromium/020-collector-interception.patch
