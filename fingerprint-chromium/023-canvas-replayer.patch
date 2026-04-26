@@ -1,0 +1,155 @@
+diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+index 2a142a1dea..233f55fa09 100644
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -38,6 +38,8 @@
+ #include "components/ungoogled/fingerprint_collector.h"
+ #include <vector>
+ 
++#include "third_party/blink/renderer/core/fileapi/blob.h"
++
+ #include "base/feature_list.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/location.h"
+@@ -1319,6 +1321,20 @@ String HTMLCanvasElement::ToDataURLInternal(
+ 
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
+   if (image_bitmap) {
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++      fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
++      std::vector<uint8_t> pixels = fingerprint_collector::ReplayCanvasOutput("toDataURL");
++      if (!pixels.empty()) {
++        SkImageInfo info = SkImageInfo::Make(
++            image_bitmap->width(), image_bitmap->height(),
++            kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++        SkPixmap pixmap(info, pixels.data(), info.minRowBytes());
++        auto buffer = ImageDataBuffer::Create(pixmap);
++        if (buffer)
++          return buffer->ToDataURL(encoding_mime_type, quality);
++      }
++    }
++
+     if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
+       SkImageInfo info = SkImageInfo::Make(
+           image_bitmap->width(), image_bitmap->height(),
+@@ -1443,6 +1459,33 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
+   CanvasAsyncBlobCreator* async_creator = nullptr;
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(kBackBuffer);
+   if (image_bitmap) {
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++      fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
++      std::vector<uint8_t> pixels = fingerprint_collector::ReplayCanvasOutput("toBlob");
++      if (!pixels.empty()) {
++        SkImageInfo info = SkImageInfo::Make(
++            image_bitmap->width(), image_bitmap->height(),
++            kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++        SkPixmap pixmap(info, pixels.data(), info.minRowBytes());
++        auto buffer = ImageDataBuffer::Create(pixmap);
++        if (buffer) {
++          Vector<unsigned char> encoded;
++          if (buffer->EncodeImage(encoding_mime_type, 1.0, &encoded)) {
++            Blob* blob = Blob::Create(
++                base::span<const uint8_t>(encoded.data(), encoded.size()),
++                ImageEncoderUtils::MimeTypeName(encoding_mime_type));
++            GetDocument()
++                .GetTaskRunner(TaskType::kCanvasBlobSerialization)
++                ->PostTask(FROM_HERE,
++                           BindOnce(&V8BlobCallback::InvokeAndReportException,
++                                    WrapPersistent(callback), nullptr,
++                                    WrapPersistent(blob)));
++            return;
++          }
++        }
++      }
++    }
++
+     if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
+       SkImageInfo info = SkImageInfo::Make(
+           image_bitmap->width(), image_bitmap->height(),
+diff --git a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
+index ce34e485f8..726661bd49 100644
+--- a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
++++ b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
+@@ -229,6 +229,27 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
+                                       "ImageBitmap construction failed");
+   }
+ 
++  if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(
++                   switches::kFingerprintReplay)) {
++    fingerprint_collector::SetCurrentSite(Url().GetString().Utf8());
++    std::vector<uint8_t> pixels =
++        fingerprint_collector::ReplayCanvasOutput("transferToImageBitmap");
++    if (!pixels.empty()) {
++      scoped_refptr<StaticBitmapImage> sbi = image->BitmapImage();
++      if (sbi) {
++        SkImageInfo info = SkImageInfo::Make(
++            sbi->width(), sbi->height(),
++            kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++        sk_sp<SkData> sk_data = SkData::MakeWithCopy(pixels.data(), pixels.size());
++        sk_sp<SkImage> sk_image = SkImages::RasterFromData(
++            info, sk_data, info.minRowBytes());
++        if (sk_image)
++          return MakeGarbageCollected<ImageBitmap>(
++              UnacceleratedStaticBitmapImage::Create(std::move(sk_image)));
++      }
++    }
++  }
++
+   if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(
+                    switches::kFingerprintCollect)) {
+     scoped_refptr<StaticBitmapImage> sbi = image->BitmapImage();
+@@ -359,6 +380,31 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
+   base::TimeTicks start_time = base::TimeTicks::Now();
+   scoped_refptr<StaticBitmapImage> image_bitmap = context_->GetImage();
+   if (image_bitmap) {
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++      fingerprint_collector::SetCurrentSite(Url().GetString().Utf8());
++      std::vector<uint8_t> pixels =
++          fingerprint_collector::ReplayCanvasOutput("convertToBlob");
++      if (!pixels.empty()) {
++        SkImageInfo info = SkImageInfo::Make(
++            image_bitmap->width(), image_bitmap->height(),
++            kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++        SkPixmap pixmap(info, pixels.data(), info.minRowBytes());
++        auto buffer = ImageDataBuffer::Create(pixmap);
++        if (buffer) {
++          Vector<unsigned char> encoded;
++          if (buffer->EncodeImage(encoding_mime_type, options->quality(), &encoded)) {
++            Blob* blob = Blob::Create(
++                base::span<const uint8_t>(encoded.data(), encoded.size()),
++                ImageEncoderUtils::MimeTypeName(encoding_mime_type));
++            auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<Blob>>(
++                script_state, exception_state.GetContext());
++            resolver->Resolve(blob);
++            return resolver->Promise();
++          }
++        }
++      }
++    }
++
+     if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
+       SkImageInfo info = SkImageInfo::Make(
+           image_bitmap->width(), image_bitmap->height(),
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 7ffe01a11e..944e0b861c 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -531,6 +531,18 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+       DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
+     }
+ 
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++      fingerprint_collector::SetCurrentSite(
++          GetTopExecutionContext()->Url().GetString().Utf8());
++      std::vector<uint8_t> pixels =
++          fingerprint_collector::ReplayCanvasOutput("getImageData");
++      if (!pixels.empty()) {
++        SkPixmap pm = image_data->GetSkPixmap();
++        memcpy(pm.writable_addr(), pixels.data(),
++               std::min(pixels.size(), pm.rowBytes() * static_cast<size_t>(pm.height())));
++      }
++    }
++
+     if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
+       fingerprint_collector::SetCurrentSite(
+         GetTopExecutionContext()->Url().GetString().Utf8());
