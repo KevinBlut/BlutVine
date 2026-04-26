@@ -1,0 +1,71 @@
+diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
+index d33fc7aece..7a135bd97b 100644
+--- a/components/ungoogled/fingerprint_collector.cc
++++ b/components/ungoogled/fingerprint_collector.cc
+@@ -44,6 +44,32 @@ static std::string SanitizeForPath(const std::string& s) {
+     return out;
+ }
+ 
++static uint64_t FNV64(uint64_t hash, const void* data, size_t len) {
++    const uint8_t* p = static_cast<const uint8_t*>(data);
++    for (size_t i = 0; i < len; i++) {
++        hash ^= p[i];
++        hash *= 0x00000100000001B3ULL;
++    }
++    return hash;
++}
++
++static uint64_t HashInputLog() {
++    uint64_t h = 0xcbf29ce484222325ULL; // FNV offset basis
++    for (const auto& e : g_input_log) {
++        h = FNV64(h, e.op.data(), e.op.size());
++        h = FNV64(h, e.text.data(), e.text.size());
++        h = FNV64(h, e.font.data(), e.font.size());
++        h = FNV64(h, &e.x, sizeof(e.x));
++        h = FNV64(h, &e.y, sizeof(e.y));
++        h = FNV64(h, &e.text_align, sizeof(e.text_align));
++        h = FNV64(h, &e.text_baseline, sizeof(e.text_baseline));
++        h = FNV64(h, &e.max_width, sizeof(e.max_width));
++        h = FNV64(h, &e.rect_width, sizeof(e.rect_width));
++        h = FNV64(h, &e.rect_height, sizeof(e.rect_height));
++    }
++    return h;
++}
++
+ static std::string GetOutputDir() {
+     const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+ 
+@@ -170,11 +196,16 @@ void DumpCanvasOutput(
+     size_t size = info.computeMinByteSize();
+     if (size == 0) return;
+ 
++    uint64_t hash = HashInputLog();
+     std::string input_json = SerializeInputLog();
+     g_input_log.clear();
+ 
++    char hash_hex[17];
++    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)hash);
++    std::string extra = std::string("\"hash\":\"") + hash_hex + "\"";
++
+     WriteDump(trigger, input_json, addr, size,
+-              info.width(), info.height());
++              info.width(), info.height(), extra);
+ }
+ 
+ void DumpWebGLOutput(
+@@ -190,10 +221,14 @@ void DumpWebGLOutput(
+ 
+     size_t size = static_cast<size_t>(width) * height * 4;
+ 
++    uint64_t hash = HashInputLog();
+     std::string input_json = SerializeInputLog();
+     g_input_log.clear();
+ 
+-    std::string meta = "\"webgl_x\":" + std::to_string(x)
++    char hash_hex[17];
++    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)hash);
++    std::string meta = std::string("\"hash\":\"") + hash_hex + "\""
++        + ",\"webgl_x\":" + std::to_string(x)
+         + ",\"webgl_y\":" + std::to_string(y)
+         + ",\"format\":" + std::to_string(format)
+         + ",\"type\":" + std::to_string(type);
