@@ -1,0 +1,46 @@
+diff --git a/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc b/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
+index d293c49e67..0799d4da57 100644
+--- a/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
++++ b/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
+@@ -32,6 +32,13 @@
+ 
+ #include <tuple>
+ 
++#include "base/command_line.h"
++#include "base/files/file_util.h"
++#include "base/files/file_path.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "third_party/blink/renderer/core/script/classic_script.h"
++#include "components/ungoogled/fingerprint_collector.h"
++
+ #include "base/debug/crash_logging.h"
+ #include "base/debug/dump_without_crashing.h"
+ #include "base/memory/scoped_refptr.h"
+@@ -218,6 +225,27 @@ void LocalWindowProxy::Initialize() {
+   InstallConditionalFeatures();
+ 
+   if (World().IsMainWorld()) {
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++            switches::kFingerprintCollect)) {
++      fingerprint_collector::ClearInputLog();
++      const base::CommandLine* cmd =
++          base::CommandLine::ForCurrentProcess();
++      std::string script_path =
++          cmd->GetSwitchValueASCII(switches::kFingerprintCollectorScript);
++      if (!script_path.empty()) {
++        std::string script_content;
++        if (base::ReadFileToString(
++                base::FilePath(script_path), &script_content)) {
++          ClassicScript::CreateUnspecifiedScript(
++              String::FromUTF8(script_content.c_str()),
++              ScriptSourceLocationType::kInternal)
++              ->RunScript(
++                  GetFrame()->DomWindow(),
++                  ExecuteScriptPolicy::
++                      kExecuteScriptWhenScriptsDisabled);
++        }
++      }
++    }
+     probe::DidCreateMainWorldContext(GetFrame());
+     GetFrame()->Loader().DispatchDidClearWindowObjectInMainWorld();
+   }
