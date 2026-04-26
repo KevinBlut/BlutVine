@@ -103,7 +103,7 @@ index b7a6a75e04..c8b05f6142 100644
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuVendor[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuRenderer[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuModel[];
-+
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCollectorScript[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintLaptop[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintHardwareConcurrency[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintDeviceMemory[];
