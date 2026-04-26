@@ -25,3 +25,4 @@ fingerprint-chromium/020-collector-interception.patch
 fingerprint-chromium/021-collector-hash-logic.patch
 fingerprint-chromium/022-replayer.patch
 fingerprint-chromium/023-canvas-replayer.patch
+fingerprint-chromium/024-webgl-replayer.patch
