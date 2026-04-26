@@ -1,0 +1,167 @@
+diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
+index 7a135bd97b..6e4c66a7fe 100644
+--- a/components/ungoogled/fingerprint_collector.cc
++++ b/components/ungoogled/fingerprint_collector.cc
+@@ -15,6 +15,9 @@
+ #include "base/files/file_util.h"
+ #include "base/files/file_path.h"
+ 
++#include <unordered_map>
++#include "base/files/file_enumerator.h"
++
+ namespace fingerprint_collector {
+ 
+ struct InputEntry {
+@@ -244,4 +247,128 @@ void ClearInputLog() {
+     g_input_log.clear();
+ }
+ 
++
++// ---------------------------------------------------------------------------
++// Replay
++// ---------------------------------------------------------------------------
++
++struct ReplayEntry {
++    std::string bin_path;
++    int width;
++    int height;
++    std::string trigger;
++};
++
++static thread_local std::unordered_map<uint64_t, ReplayEntry> g_replay_map;
++static thread_local std::string g_replay_loaded_site;
++
++static std::string GetReplayDir() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++
++    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++        return "";
++
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
++
++    std::string gpu_model = "unknown";
++    if (cmd->HasSwitch(switches::kFingerprintGpuModel))
++        gpu_model = cmd->GetSwitchValueASCII(switches::kFingerprintGpuModel);
++
++    std::transform(gpu_model.begin(), gpu_model.end(),
++                   gpu_model.begin(), ::tolower);
++    std::replace(gpu_model.begin(), gpu_model.end(), ' ', '_');
++
++    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
++    return db_path + "/" + gpu_model + "/" + site + "/";
++}
++
++// Minimal JSON string field extractor — no dependencies
++static std::string JsonGetString(const std::string& json, const std::string& key) {
++    std::string needle = "\"" + key + "\":\"";
++    size_t pos = json.find(needle);
++    if (pos == std::string::npos) return "";
++    pos += needle.size();
++    size_t end = json.find('"', pos);
++    if (end == std::string::npos) return "";
++    return json.substr(pos, end - pos);
++}
++
++static int JsonGetInt(const std::string& json, const std::string& key) {
++    std::string needle = "\"" + key + "\":";
++    size_t pos = json.find(needle);
++    if (pos == std::string::npos) return 0;
++    pos += needle.size();
++    return std::stoi(json.substr(pos));
++}
++
++static void ReplayLoad() {
++    g_replay_map.clear();
++    g_replay_loaded_site = g_current_site;
++
++    std::string dir = GetReplayDir();
++    if (dir.empty()) return;
++
++    base::FilePath dir_path(dir);
++    base::FileEnumerator enumerator(dir_path, false, base::FileEnumerator::FILES,
++                                    FILE_PATH_LITERAL("*.json"));
++
++    for (base::FilePath json_path = enumerator.Next();
++         !json_path.empty();
++         json_path = enumerator.Next()) {
++
++        std::string contents;
++        if (!base::ReadFileToString(json_path, &contents)) continue;
++
++        std::string hash_str = JsonGetString(contents, "hash");
++        if (hash_str.empty()) continue;
++
++        uint64_t hash = std::stoull(hash_str, nullptr, 16);
++
++        std::string bin_path = json_path.RemoveFinalExtension().value() + ".bin";
++
++        ReplayEntry entry;
++        entry.bin_path = bin_path;
++        entry.width    = JsonGetInt(contents, "width");
++        entry.height   = JsonGetInt(contents, "height");
++        entry.trigger  = JsonGetString(contents, "trigger");
++
++        g_replay_map[hash] = std::move(entry);
++    }
++}
++
++static std::vector<uint8_t> ReplayLookup(const std::string& trigger) {
++    if (g_replay_loaded_site != g_current_site)
++        ReplayLoad();
++
++    uint64_t hash = HashInputLog();
++    g_input_log.clear();
++
++    auto it = g_replay_map.find(hash);
++    if (it == g_replay_map.end()) {
++        fprintf(stderr, "[FP-REPLAY MISS] site=%s trigger=%s\n",
++                g_current_site.c_str(), trigger.c_str());
++        return {};
++    }
++
++    const ReplayEntry& entry = it->second;
++    std::ifstream f(entry.bin_path, std::ios::binary);
++    if (!f.is_open()) {
++        fprintf(stderr, "[FP-REPLAY MISS] site=%s trigger=%s (bin missing: %s)\n",
++                g_current_site.c_str(), trigger.c_str(), entry.bin_path.c_str());
++        return {};
++    }
++
++    return std::vector<uint8_t>(
++        std::istreambuf_iterator<char>(f),
++        std::istreambuf_iterator<char>());
++}
++
++std::vector<uint8_t> ReplayCanvasOutput(const std::string& trigger) {
++    return ReplayLookup(trigger);
++}
++
++std::vector<uint8_t> ReplayWebGLOutput() {
++    return ReplayLookup("readPixels");
++}
++
+ }  // namespace fingerprint_collector
+\ No newline at end of file
+diff --git a/components/ungoogled/fingerprint_collector.h b/components/ungoogled/fingerprint_collector.h
+index b3ca6871e7..3feea56635 100644
+--- a/components/ungoogled/fingerprint_collector.h
++++ b/components/ungoogled/fingerprint_collector.h
+@@ -44,4 +44,17 @@ COMPONENT_EXPORT(UNGOOGLED) void SetCurrentSite(const std::string& url);
+ // Clears thread-local input log — call at page navigation
+ COMPONENT_EXPORT(UNGOOGLED) void ClearInputLog();
+ 
++
++
++
++
++
++// Replay — returns stored pixels or empty on miss
++// Caller must check empty() and fall through to real GPU if so
++COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayCanvasOutput(
++    const std::string& trigger
++);
++
++COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayWebGLOutput();
++
+ }  // namespace fingerprint_collector
+\ No newline at end of file
