@@ -114,10 +114,10 @@ index ce34e485f8..726661bd49 100644
 +        auto buffer = ImageDataBuffer::Create(pixmap);
 +        if (buffer) {
 +          Vector<unsigned char> encoded;
-+          if (buffer->EncodeImage(encoding_mime_type, options->quality(), &encoded)) {
++          if (buffer->EncodeImage(ImageEncoderUtils::ToEncodingMimeType(options->type(), ImageEncoderUtils::kEncodeReasonConvertToBlobPromise), options->quality(), &encoded)) {
 +            Blob* blob = Blob::Create(
 +                base::span<const uint8_t>(encoded.data(), encoded.size()),
-+                ImageEncoderUtils::MimeTypeName(encoding_mime_type));
++                options->type());
 +            auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<Blob>>(
 +                script_state, exception_state.GetContext());
 +            resolver->Resolve(blob);
