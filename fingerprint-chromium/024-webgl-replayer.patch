@@ -9,7 +9,7 @@ index 46297ebabc..dc90ddb5c0 100644
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
 +          switches::kFingerprintReplay)) {
 +    fingerprint_collector::SetCurrentSite(
-+        Host()->GetDocument()->Url().GetString().Utf8());
++        Host()->GetExecutionContextUrl().GetString().Utf8();
 +    std::vector<uint8_t> pixels = fingerprint_collector::ReplayWebGLOutput();
 +    if (!pixels.empty() && destination_data_ptr) {
 +      memcpy(destination_data_ptr, pixels.data(),
@@ -33,7 +33,7 @@ index 441182869a..fb54df0ed8 100644
 +  if (sbi && base::CommandLine::ForCurrentProcess()->HasSwitch(
 +                 switches::kFingerprintReplay)) {
 +    fingerprint_collector::SetCurrentSite(
-+        Host()->GetDocument()->Url().GetString().Utf8());
++        Host()->GetExecutionContextUrl().GetString().Utf8();
 +    std::vector<uint8_t> pixels =
 +        fingerprint_collector::ReplayCanvasOutput("transferToImageBitmap");
 +    if (!pixels.empty()) {
@@ -58,14 +58,14 @@ index 441182869a..fb54df0ed8 100644
  
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
 +      fingerprint_collector::SetCurrentSite(
-+          Host()->GetDocument()->Url().GetString().Utf8());
-+      std::vector<uint8_t> pixels = fingerprint_collector::ReplayWebGLOutput();
-+      if (!pixels.empty() && data) {
++          Host()->GetExecutionContextUrl().GetString().Utf8();
++      std::vector<uint8_t> replay_pixels = fingerprint_collector::ReplayWebGLOutput();
++      if (!replay_pixels.empty() && data) {
 +        size_t expected = static_cast<size_t>(width) * height * 4;
-+        memcpy(data, pixels.data(), std::min(pixels.size(), expected));
++        memcpy(data, replay_pixels.data(), std::min(replay_pixels.size(), expected));
 +      }
 +    }
 +
      if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
        fingerprint_collector::SetCurrentSite(
-         Host()->GetDocument()->Url().GetString().Utf8());
+         Host()->GetExecutionContextUrl().GetString().Utf8();
