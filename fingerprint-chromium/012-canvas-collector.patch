@@ -66,7 +66,7 @@ index bc38366a99..ce34e485f8 100644
 +#include "components/ungoogled/fingerprint_collector.h"
 +#include <vector>
 +#include "third_party/skia/include/core/SkImageInfo.h"
-+
++#include "third_party/blink/renderer/platform/graphics/image_data_buffer.h"
  #include "base/metrics/histogram_functions.h"
  #include "base/numerics/safe_conversions.h"
  #include "base/task/single_thread_task_runner.h"
