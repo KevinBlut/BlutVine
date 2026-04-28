@@ -24,7 +24,7 @@ new file mode 100644
 index 0000000000..d33fc7aece
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.cc
-@@ -0,0 +1,212 @@
+@@ -0,0 +1,220 @@
 +#include "components/ungoogled/fingerprint_collector.h"
 +
 +#include <algorithm>
@@ -134,6 +134,7 @@ index 0000000000..d33fc7aece
 +    const void* pixel_data,
 +    size_t pixel_size,
 +    int width, int height,
++    const std::string& hash_hex,
 +    const std::string& extra_meta = ""
 +) {
 +    std::string dir = GetOutputDir();
@@ -141,9 +142,7 @@ index 0000000000..d33fc7aece
 +
 +    base::CreateDirectory(base::FilePath(dir));
 +
-+    int id = g_dump_counter.fetch_add(1);
-+    auto now = std::chrono::steady_clock::now().time_since_epoch().count();
-+    std::string base = dir + std::to_string(now) + "_" + std::to_string(id);
++    std::string base = dir + hash_hex + "_" + trigger;
 +
 +    std::ofstream meta(base + ".json");
 +    if (!meta.is_open()) return;
@@ -151,6 +150,7 @@ index 0000000000..d33fc7aece
 +         << "\"trigger\":\"" << trigger << "\","
 +         << "\"width\":" << width << ","
 +         << "\"height\":" << height << ","
++         << "\"hash\":\"" << hash_hex << "\","
 +         << "\"inputs\":" << input_json
 +         << (extra_meta.empty() ? "" : "," + extra_meta)
 +         << "}";
@@ -197,11 +197,15 @@ index 0000000000..d33fc7aece
 +    size_t size = info.computeMinByteSize();
 +    if (size == 0) return;
 +
++    uint64_t hash = HashInputLog();
 +    std::string input_json = SerializeInputLog();
 +    g_input_log.clear();
 +
++    char hash_hex[17];
++    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)hash);
++
 +    WriteDump(trigger, input_json, addr, size,
-+              info.width(), info.height());
++              info.width(), info.height(), hash_hex);
 +}
 +
 +void DumpWebGLOutput(
@@ -217,15 +221,19 @@ index 0000000000..d33fc7aece
 +
 +    size_t size = static_cast<size_t>(width) * height * 4;
 +
++    uint64_t hash = HashInputLog();
 +    std::string input_json = SerializeInputLog();
 +    g_input_log.clear();
 +
-+    std::string meta = "\"webgl_x\":" + std::to_string(x)
++    char hash_hex[17];
++    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)hash);
++
++    std::string meta = std::string("\"webgl_x\":" ) + std::to_string(x)
 +        + ",\"webgl_y\":" + std::to_string(y)
 +        + ",\"format\":" + std::to_string(format)
 +        + ",\"type\":" + std::to_string(type);
 +
-+    WriteDump("readPixels", input_json, data, size, width, height, meta);
++    WriteDump("readPixels", input_json, data, size, width, height, hash_hex, meta);
 +}
 +
 +void SetCurrentSite(const std::string& url) {
