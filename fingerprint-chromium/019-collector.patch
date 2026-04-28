@@ -24,7 +24,7 @@ new file mode 100644
 index 0000000000..d33fc7aece
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.cc
-@@ -0,0 +1,228 @@
+@@ -0,0 +1,235 @@
 +#include "components/ungoogled/fingerprint_collector.h"
 +
 +#include <algorithm>
@@ -82,21 +82,28 @@ index 0000000000..d33fc7aece
 +    std::string gpu_model = "unknown_gpu";
 +    if (cmd->HasSwitch(switches::kFingerprintGpuModel))
 +        gpu_model = cmd->GetSwitchValueASCII(switches::kFingerprintGpuModel);
-+
-+    std::transform(gpu_model.begin(), gpu_model.end(),
-+                   gpu_model.begin(), ::tolower);
++    std::transform(gpu_model.begin(), gpu_model.end(), gpu_model.begin(), ::tolower);
 +    std::replace(gpu_model.begin(), gpu_model.end(), ' ', '_');
 +
 +    std::string os_version = "unknown_os";
 +    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
 +        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
-+
-+    std::transform(os_version.begin(), os_version.end(),
-+                   os_version.begin(), ::tolower);
++    std::transform(os_version.begin(), os_version.end(), os_version.begin(), ::tolower);
 +    std::replace(os_version.begin(), os_version.end(), ' ', '_');
 +
++    std::string driver = "unknown_driver";
++    if (cmd->HasSwitch(switches::kFingerprintGpuDriver))
++        driver = cmd->GetSwitchValueASCII(switches::kFingerprintGpuDriver);
++    std::replace(driver.begin(), driver.end(), '.', '_');
++
++    std::string dpr = "1_0";
++    if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
++        dpr = cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio);
++        std::replace(dpr.begin(), dpr.end(), '.', '_');
++    }
++
 +    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
-+    return db_path + "/" + gpu_model + "/" + os_version + "/" + site + "/";
++    return db_path + "/" + gpu_model + "/" + os_version + "/" + driver + "/" + dpr + "/" + site + "/";
 +}
 +
 +static std::string EscapeJson(const std::string& s) {
