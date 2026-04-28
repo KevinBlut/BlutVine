@@ -39,7 +39,7 @@ index 7a135bd97b..6e4c66a7fe 100644
 +
 +    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
 +
-+    std::string gpu_model = "unknown";
++    std::string gpu_model = "unknown_gpu";
 +    if (cmd->HasSwitch(switches::kFingerprintGpuModel))
 +        gpu_model = cmd->GetSwitchValueASCII(switches::kFingerprintGpuModel);
 +
@@ -47,8 +47,16 @@ index 7a135bd97b..6e4c66a7fe 100644
 +                   gpu_model.begin(), ::tolower);
 +    std::replace(gpu_model.begin(), gpu_model.end(), ' ', '_');
 +
++    std::string os_version = "unknown_os";
++    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
++        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
++
++    std::transform(os_version.begin(), os_version.end(),
++                   os_version.begin(), ::tolower);
++    std::replace(os_version.begin(), os_version.end(), ' ', '_');
++
 +    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
-+    return db_path + "/" + gpu_model + "/" + site + "/";
++    return db_path + "/" + gpu_model + "/" + os_version + "/" + site + "/";
 +}
 +
 +// Minimal JSON string field extractor — no dependencies
