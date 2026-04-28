@@ -1,5 +1,5 @@
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
-index 7a135bd97b..6e4c66a7fe 100644
+index c1e3cffadc..4f41fbf897 100644
 --- a/components/ungoogled/fingerprint_collector.cc
 +++ b/components/ungoogled/fingerprint_collector.cc
 @@ -15,6 +15,9 @@
@@ -12,10 +12,12 @@ index 7a135bd97b..6e4c66a7fe 100644
  namespace fingerprint_collector {
  
  struct InputEntry {
-@@ -244,4 +247,142 @@ void ClearInputLog() {
+@@ -262,4 +265,145 @@ void ClearInputLog() {
      g_input_log.clear();
  }
  
++
++
 +
 +// ---------------------------------------------------------------------------
 +// Replay
@@ -158,15 +160,13 @@ index 7a135bd97b..6e4c66a7fe 100644
  }  // namespace fingerprint_collector
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.h b/components/ungoogled/fingerprint_collector.h
-index b3ca6871e7..3feea56635 100644
+index b3ca6871e7..fd66e50b01 100644
 --- a/components/ungoogled/fingerprint_collector.h
 +++ b/components/ungoogled/fingerprint_collector.h
-@@ -44,4 +44,17 @@ COMPONENT_EXPORT(UNGOOGLED) void SetCurrentSite(const std::string& url);
+@@ -44,4 +44,15 @@ COMPONENT_EXPORT(UNGOOGLED) void SetCurrentSite(const std::string& url);
  // Clears thread-local input log — call at page navigation
  COMPONENT_EXPORT(UNGOOGLED) void ClearInputLog();
  
-+
-+
 +
 +
 +
