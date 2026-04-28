@@ -1,5 +1,5 @@
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
-index d33fc7aece..7a135bd97b 100644
+index fd627373b7..757dabe8fa 100644
 --- a/components/ungoogled/fingerprint_collector.cc
 +++ b/components/ungoogled/fingerprint_collector.cc
 @@ -44,6 +44,32 @@ static std::string SanitizeForPath(const std::string& s) {
@@ -35,37 +35,30 @@ index d33fc7aece..7a135bd97b 100644
  static std::string GetOutputDir() {
      const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
  
-@@ -170,11 +196,16 @@ void DumpCanvasOutput(
+@@ -170,6 +196,8 @@ void DumpCanvasOutput(
      size_t size = info.computeMinByteSize();
      if (size == 0) return;
  
-+    uint64_t hash = HashInputLog();
++    if (g_input_log.empty()) return;
++
+     uint64_t hash = HashInputLog();
      std::string input_json = SerializeInputLog();
      g_input_log.clear();
- 
-+    char hash_hex[17];
-+    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)hash);
-+    std::string extra = std::string("\"hash\":\"") + hash_hex + "\"";
-+
-     WriteDump(trigger, input_json, addr, size,
--              info.width(), info.height());
-+              info.width(), info.height(), extra);
- }
- 
- void DumpWebGLOutput(
-@@ -190,10 +221,14 @@ void DumpWebGLOutput(
+@@ -194,6 +222,8 @@ void DumpWebGLOutput(
  
      size_t size = static_cast<size_t>(width) * height * 4;
  
-+    uint64_t hash = HashInputLog();
++    if (g_input_log.empty()) return;
++
+     uint64_t hash = HashInputLog();
      std::string input_json = SerializeInputLog();
      g_input_log.clear();
+@@ -201,7 +231,7 @@ void DumpWebGLOutput(
+     char hash_hex[17];
+     snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)hash);
  
--    std::string meta = "\"webgl_x\":" + std::to_string(x)
-+    char hash_hex[17];
-+    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)hash);
-+    std::string meta = std::string("\"hash\":\"") + hash_hex + "\""
-+        + ",\"webgl_x\":" + std::to_string(x)
+-    std::string meta = std::string("\"webgl_x\":" ) + std::to_string(x)
++    std::string meta = std::string("\"webgl_x\":") + std::to_string(x)
          + ",\"webgl_y\":" + std::to_string(y)
          + ",\"format\":" + std::to_string(format)
          + ",\"type\":" + std::to_string(type);
