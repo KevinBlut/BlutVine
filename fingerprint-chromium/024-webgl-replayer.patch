@@ -1,5 +1,5 @@
 diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
-index 46297ebabc..dc90ddb5c0 100644
+index 46297ebabc..b42407d07c 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
 @@ -462,6 +462,18 @@ void WebGL2RenderingContextBase::getBufferSubData(
@@ -9,7 +9,7 @@ index 46297ebabc..dc90ddb5c0 100644
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
 +          switches::kFingerprintReplay)) {
 +    fingerprint_collector::SetCurrentSite(
-+        Host()->GetExecutionContextUrl().GetString().Utf8();
++        Host()->GetExecutionContextUrl().GetString().Utf8());
 +    std::vector<uint8_t> pixels = fingerprint_collector::ReplayWebGLOutput();
 +    if (!pixels.empty() && destination_data_ptr) {
 +      memcpy(destination_data_ptr, pixels.data(),
@@ -22,7 +22,7 @@ index 46297ebabc..dc90ddb5c0 100644
            switches::kFingerprintCollect)) {
      fingerprint_collector::SetCurrentSite(
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index 441182869a..fb54df0ed8 100644
+index 441182869a..90c54a5a62 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 @@ -748,6 +748,26 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
@@ -33,7 +33,7 @@ index 441182869a..fb54df0ed8 100644
 +  if (sbi && base::CommandLine::ForCurrentProcess()->HasSwitch(
 +                 switches::kFingerprintReplay)) {
 +    fingerprint_collector::SetCurrentSite(
-+        Host()->GetExecutionContextUrl().GetString().Utf8();
++        Host()->GetExecutionContextUrl().GetString().Utf8());
 +    std::vector<uint8_t> pixels =
 +        fingerprint_collector::ReplayCanvasOutput("transferToImageBitmap");
 +    if (!pixels.empty()) {
@@ -58,7 +58,7 @@ index 441182869a..fb54df0ed8 100644
  
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
 +      fingerprint_collector::SetCurrentSite(
-+          Host()->GetExecutionContextUrl().GetString().Utf8();
++          Host()->GetExecutionContextUrl().GetString().Utf8());
 +      std::vector<uint8_t> replay_pixels = fingerprint_collector::ReplayWebGLOutput();
 +      if (!replay_pixels.empty() && data) {
 +        size_t expected = static_cast<size_t>(width) * height * 4;
@@ -68,4 +68,4 @@ index 441182869a..fb54df0ed8 100644
 +
      if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
        fingerprint_collector::SetCurrentSite(
-         Host()->GetExecutionContextUrl().GetString().Utf8();
+         Host()->GetDocument()->Url().GetString().Utf8());
