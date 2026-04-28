@@ -12,7 +12,7 @@ index 7a135bd97b..6e4c66a7fe 100644
  namespace fingerprint_collector {
  
  struct InputEntry {
-@@ -244,4 +247,128 @@ void ClearInputLog() {
+@@ -244,4 +247,135 @@ void ClearInputLog() {
      g_input_log.clear();
  }
  
