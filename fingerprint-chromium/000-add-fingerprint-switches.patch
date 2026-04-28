@@ -64,8 +64,8 @@ index 15e63407e1..6c57b19942 100644
 +// deterministically using the fingerprint seed.
 +const char kFingerprintGpuModel[] = "fingerprint-gpu-model";
 +
-+
-+
++// Specify the GPU driver version
++const char kFingerprintGpuDriver[] = "fingerprint-gpu-driver";
 +
 +// If present, prefer laptop GPU variants when selecting from kGpuModels[].
 +// If absent (default), prefer desktop GPU variants.
@@ -121,7 +121,7 @@ index b7a6a75e04..a53d47d331 100644
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuVendor[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuRenderer[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuModel[];
-+
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuDriver[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintLaptop[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintHardwareConcurrency[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintDeviceMemory[];
@@ -138,7 +138,7 @@ diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content
 index bd954af691..719af0fbeb 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
-@@ -3741,6 +3741,31 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+@@ -3741,6 +3741,32 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
        switches::kEnableWebGLDraftExtensions,
        switches::kEnableWebGPUDeveloperFeatures,
        switches::kFileUrlPathAlias,
@@ -160,6 +160,7 @@ index bd954af691..719af0fbeb 100644
 +      switches::kFingerprintGpuVendor,
 +      switches::kFingerprintGpuRenderer,
 +      switches::kFingerprintGpuModel,
++      switches::kFingerprintGpuDriver,
 +      switches::kFingerprintLaptop,
 +      switches::kFingerprintHardwareConcurrency,
 +      switches::kFingerprintDeviceMemory,
