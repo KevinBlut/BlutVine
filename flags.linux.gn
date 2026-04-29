@@ -45,6 +45,9 @@ use_ozone = true
 ozone_platform_wayland = true
 ozone_platform_x11 = true
 
+dawn_use_built_in_vulkan_loader = false
+angle_shared_libvulkan = true
+
 # =========================
 # Chrome-like behavior
 # =========================
