@@ -1,0 +1,411 @@
+diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
+index 4f41fbf897..2ab0ea8d00 100644
+--- a/components/ungoogled/fingerprint_collector.cc
++++ b/components/ungoogled/fingerprint_collector.cc
+@@ -17,6 +17,7 @@
+ 
+ #include <unordered_map>
+ #include "base/files/file_enumerator.h"
++#include "base/threading/platform_thread.h"
+ 
+ namespace fingerprint_collector {
+ 
+@@ -145,15 +146,10 @@ static std::string SerializeInputLog() {
+     return ss.str();
+ }
+ 
+-static void WriteDump(
+-    const std::string& trigger,
+-    const std::string& input_json,
+-    const void* pixel_data,
+-    size_t pixel_size,
+-    int width, int height,
+-    const std::string& hash_hex,
+-    const std::string& extra_meta = ""
+-) {
++static void WriteDump(const std::string& trigger, const std::string& input_json,
++    const void* pixel_data, size_t pixel_size, int width, int height,
++    const std::string& hash_hex, double render_ms, const std::string& extra_meta = "") {
++    
+     std::string dir = GetOutputDir();
+     if (dir.empty()) return;
+ 
+@@ -168,6 +164,7 @@ static void WriteDump(
+          << "\"width\":" << width << ","
+          << "\"height\":" << height << ","
+          << "\"hash\":\"" << hash_hex << "\","
++         << "\"render_ms\":" << render_ms << ","
+          << "\"inputs\":" << input_json
+          << (extra_meta.empty() ? "" : "," + extra_meta)
+          << "}";
+@@ -205,7 +202,8 @@ void LogRectInput(double x, double y, double width, double height) {
+ void DumpCanvasOutput(
+     const void* addr,
+     const SkImageInfo& info,
+-    const std::string& trigger
++    const std::string& trigger,
++    double render_ms
+ ) {
+     const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+     if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
+@@ -224,7 +222,7 @@ void DumpCanvasOutput(
+     snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)hash);
+ 
+     WriteDump(trigger, input_json, addr, size,
+-              info.width(), info.height(), hash_hex);
++              info.width(), info.height(), hash_hex, render_ms);
+ }
+ 
+ void DumpWebGLOutput(
+@@ -232,7 +230,8 @@ void DumpWebGLOutput(
+     int x, int y,
+     int width, int height,
+     unsigned int format,
+-    unsigned int type
++    unsigned int type,
++    double render_ms
+ ) {
+     const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+     if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
+@@ -254,7 +253,7 @@ void DumpWebGLOutput(
+         + ",\"format\":" + std::to_string(format)
+         + ",\"type\":" + std::to_string(type);
+ 
+-    WriteDump("readPixels", input_json, data, size, width, height, hash_hex, meta);
++    WriteDump("readPixels", input_json, data, size, width, height, hash_hex, render_ms, meta);
+ }
+ 
+ void SetCurrentSite(const std::string& url) {
+@@ -277,10 +276,12 @@ struct ReplayEntry {
+     int width;
+     int height;
+     std::string trigger;
++    double render_ms;
+ };
+ 
+ static thread_local std::unordered_map<uint64_t, ReplayEntry> g_replay_map;
+ static thread_local std::string g_replay_loaded_site;
++static thread_local double g_last_replay_render_ms = 0.0;
+ 
+ static std::string GetReplayDir() {
+     const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+@@ -336,6 +337,14 @@ static int JsonGetInt(const std::string& json, const std::string& key) {
+     return std::stoi(json.substr(pos));
+ }
+ 
++static double JsonGetDouble(const std::string& json, const std::string& key) {
++    std::string needle = "\"" + key + "\":";
++    size_t pos = json.find(needle);
++    if (pos == std::string::npos) return 0.0;
++    pos += needle.size();
++    return std::stod(json.substr(pos));
++}
++
+ static void ReplayLoad() {
+     g_replay_map.clear();
+     g_replay_loaded_site = g_current_site;
+@@ -366,6 +375,7 @@ static void ReplayLoad() {
+         entry.width    = JsonGetInt(contents, "width");
+         entry.height   = JsonGetInt(contents, "height");
+         entry.trigger  = JsonGetString(contents, "trigger");
++        entry.render_ms = JsonGetDouble(contents, "render_ms");
+ 
+         g_replay_map[hash] = std::move(entry);
+     }
+@@ -386,6 +396,11 @@ static std::vector<uint8_t> ReplayLookup(const std::string& trigger) {
+     }
+ 
+     const ReplayEntry& entry = it->second;
++
++    // Measure time to load the bin from disk — subtract from stored render_ms
++    // to compute how long we still need to sleep to match recorded GPU timing.
++    auto t0 = base::TimeTicks::Now();
++
+     std::ifstream f(entry.bin_path, std::ios::binary);
+     if (!f.is_open()) {
+         fprintf(stderr, "[FP-REPLAY MISS] site=%s trigger=%s (bin missing: %s)\n",
+@@ -393,9 +408,22 @@ static std::vector<uint8_t> ReplayLookup(const std::string& trigger) {
+         return {};
+     }
+ 
+-    return std::vector<uint8_t>(
++    std::vector<uint8_t> pixels(
+         std::istreambuf_iterator<char>(f),
+         std::istreambuf_iterator<char>());
++
++    double elapsed_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++    g_last_replay_render_ms = entry.render_ms;
++
++    if (entry.render_ms > 0.0) {
++        double delta_ms = entry.render_ms - elapsed_ms;
++        if (delta_ms > 1.0) {
++            base::PlatformThread::Sleep(
++                base::Milliseconds(static_cast<int64_t>(delta_ms)));
++        }
++    }
++
++    return pixels;
+ }
+ 
+ std::vector<uint8_t> ReplayCanvasOutput(const std::string& trigger) {
+@@ -406,4 +434,8 @@ std::vector<uint8_t> ReplayWebGLOutput() {
+     return ReplayLookup("readPixels");
+ }
+ 
++double ReplayGetLastRenderMs() {
++    return g_last_replay_render_ms;
++}
++
+ }  // namespace fingerprint_collector
+\ No newline at end of file
+diff --git a/components/ungoogled/fingerprint_collector.h b/components/ungoogled/fingerprint_collector.h
+index fd66e50b01..466dc9566b 100644
+--- a/components/ungoogled/fingerprint_collector.h
++++ b/components/ungoogled/fingerprint_collector.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <string>
++#include <cstdint>
+ #include <vector>
+ #include "third_party/skia/include/core/SkImageInfo.h"
+ #include "base/component_export.h"
+@@ -24,20 +25,10 @@ COMPONENT_EXPORT(UNGOOGLED) void LogRectInput(
+ );
+ 
+ // Called at toDataURL and getImageData output points
+-COMPONENT_EXPORT(UNGOOGLED) void DumpCanvasOutput(
+-    const void* addr,
+-    const SkImageInfo& info,
+-    const std::string& trigger
+-);
++COMPONENT_EXPORT(UNGOOGLED) void DumpCanvasOutput(const void* addr, const SkImageInfo& info, const std::string& trigger, double render_ms = 0.0);
+ 
+ // Called at WebGL readPixels output point
+-COMPONENT_EXPORT(UNGOOGLED) void DumpWebGLOutput(
+-    const void* data,
+-    int x, int y,
+-    int width, int height,
+-    unsigned int format,
+-    unsigned int type
+-);
++COMPONENT_EXPORT(UNGOOGLED) void DumpWebGLOutput(const void* data, int x, int y, int width, int height, unsigned int format, unsigned int type, double render_ms = 0.0);
+ 
+ COMPONENT_EXPORT(UNGOOGLED) void SetCurrentSite(const std::string& url);
+ 
+@@ -55,4 +46,7 @@ COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayCanvasOutput(
+ 
+ COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayWebGLOutput();
+ 
++// Returns the render_ms recorded for the last successful replay hit.
++// Valid immediately after ReplayCanvasOutput / ReplayWebGLOutput returns non-empty.
++COMPONENT_EXPORT(UNGOOGLED) double ReplayGetLastRenderMs();
+ }  // namespace fingerprint_collector
+\ No newline at end of file
+diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+index 233f55fa09..389fd92816 100644
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -37,7 +37,7 @@
+ #include "components/ungoogled/ungoogled_switches.h"
+ #include "components/ungoogled/fingerprint_collector.h"
+ #include <vector>
+-
++#include "base/time/time.h"
+ #include "third_party/blink/renderer/core/fileapi/blob.h"
+ 
+ #include "base/feature_list.h"
+@@ -1341,10 +1341,13 @@ String HTMLCanvasElement::ToDataURLInternal(
+           kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
+       size_t row_bytes = info.minRowBytes();
+       std::vector<uint8_t> buf(info.computeMinByteSize());
+-      if (image_bitmap->PaintImageForCurrentFrame().readPixels(
+-              info, buf.data(), row_bytes, 0, 0)) {
++      auto _fp_t0 = base::TimeTicks::Now();
++      bool _fp_ok = image_bitmap->PaintImageForCurrentFrame().readPixels(
++              info, buf.data(), row_bytes, 0, 0);
++      double _fp_ms = (base::TimeTicks::Now() - _fp_t0).InMillisecondsF();
++      if (_fp_ok) {
+         fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
+-        fingerprint_collector::DumpCanvasOutput(buf.data(), info, "toDataURL");
++        fingerprint_collector::DumpCanvasOutput(buf.data(), info, "toDataURL", _fp_ms);
+       }
+     }
+ 
+@@ -1492,10 +1495,13 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
+           kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
+       size_t row_bytes = info.minRowBytes();
+       std::vector<uint8_t> buf(info.computeMinByteSize());
+-      if (image_bitmap->PaintImageForCurrentFrame().readPixels(
+-              info, buf.data(), row_bytes, 0, 0)) {
++      auto _fp_t0 = base::TimeTicks::Now();
++      bool _fp_ok = image_bitmap->PaintImageForCurrentFrame().readPixels(
++              info, buf.data(), row_bytes, 0, 0);
++      double _fp_ms = (base::TimeTicks::Now() - _fp_t0).InMillisecondsF();
++      if (_fp_ok) {
+         fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
+-        fingerprint_collector::DumpCanvasOutput(buf.data(), info, "toBlob");
++        fingerprint_collector::DumpCanvasOutput(buf.data(), info, "toBlob", _fp_ms);
+       }
+     }
+     auto* options = ImageEncodeOptions::Create();
+diff --git a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
+index f1ac9c68d6..b73ba6507f 100644
+--- a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
++++ b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
+@@ -6,7 +6,7 @@
+ 
+ #include <memory>
+ #include <utility>
+-
++#include "base/time/time.h"
+ #include "base/command_line.h"
+ #include "components/ungoogled/ungoogled_switches.h"
+ #include "components/ungoogled/fingerprint_collector.h"
+@@ -259,11 +259,14 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
+           kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
+       size_t row_bytes = info.minRowBytes();
+       std::vector<uint8_t> buf(info.computeMinByteSize());
+-      if (sbi->PaintImageForCurrentFrame().readPixels(
+-              info, buf.data(), row_bytes, 0, 0)) {
++      auto _fp_t0 = base::TimeTicks::Now();
++      bool _fp_ok = sbi->PaintImageForCurrentFrame().readPixels(
++              info, buf.data(), row_bytes, 0, 0);
++      double _fp_ms = (base::TimeTicks::Now() - _fp_t0).InMillisecondsF();
++      if (_fp_ok) {
+         fingerprint_collector::SetCurrentSite(Url().GetString().Utf8());
+         fingerprint_collector::DumpCanvasOutput(
+-            buf.data(), info, "transferToImageBitmap");
++            buf.data(), info, "transferToImageBitmap", _fp_ms);
+       }
+     }
+   }
+@@ -411,10 +414,13 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
+           kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
+       size_t row_bytes = info.minRowBytes();
+       std::vector<uint8_t> buf(info.computeMinByteSize());
+-      if (image_bitmap->PaintImageForCurrentFrame().readPixels(
+-              info, buf.data(), row_bytes, 0, 0)) {
++      auto _fp_t0 = base::TimeTicks::Now();
++      bool _fp_ok = image_bitmap->PaintImageForCurrentFrame().readPixels(
++              info, buf.data(), row_bytes, 0, 0);
++      double _fp_ms = (base::TimeTicks::Now() - _fp_t0).InMillisecondsF();
++      if (_fp_ok) {
+         fingerprint_collector::SetCurrentSite(Url().GetString().Utf8());
+-        fingerprint_collector::DumpCanvasOutput(buf.data(), info, "convertToBlob");
++        fingerprint_collector::DumpCanvasOutput(buf.data(), info, "convertToBlob", _fp_ms);
+       }
+     }
+ 
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 944e0b861c..d3d9d6bd50 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -546,10 +546,17 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+     if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
+       fingerprint_collector::SetCurrentSite(
+         GetTopExecutionContext()->Url().GetString().Utf8());
++      // image_data_pixmap.addr() is already a CPU-side pointer at this point;
++      // the GPU->CPU readback happened inside GetImageDataInternal before we
++      // arrive here. Time the addr() access as a proxy for the sync cost.
++      auto _fp_t0 = base::TimeTicks::Now();
++      const void* _fp_addr = image_data_pixmap.addr();
++      double _fp_ms = (base::TimeTicks::Now() - _fp_t0).InMillisecondsF();
+       fingerprint_collector::DumpCanvasOutput(
+-          image_data_pixmap.addr(),
++          _fp_addr,
+           image_data_pixmap.info(),
+-          "getImageData"
++          "getImageData",
++          _fp_ms
+       );
+     }
+   }
+diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+index b42407d07c..8d41083540 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+@@ -5,7 +5,7 @@
+ #include "third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.h"
+ 
+ #include <memory>
+-
++#include "base/time/time.h"
+ #include "base/command_line.h"
+ #include "components/ungoogled/ungoogled_switches.h"
+ #include "components/ungoogled/fingerprint_collector.h"
+@@ -461,6 +461,9 @@ void WebGL2RenderingContextBase::getBufferSubData(
+                      static_cast<size_t>(destination_byte_length)));
+ 
+   ContextGL()->UnmapBuffer(target);
++  // getBufferSubData has no discrete readback call — the data arrives via
++  // UnmapBuffer. Time the UnmapBuffer->collect gap as a conservative proxy.
++  auto _fp_t0 = base::TimeTicks::Now();
+ 
+   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+           switches::kFingerprintReplay)) {
+@@ -478,11 +481,12 @@ void WebGL2RenderingContextBase::getBufferSubData(
+           switches::kFingerprintCollect)) {
+     fingerprint_collector::SetCurrentSite(
+       Host()->GetDocument()->Url().GetString().Utf8());
++    double _fp_ms = (base::TimeTicks::Now() - _fp_t0).InMillisecondsF();
+     fingerprint_collector::DumpWebGLOutput(
+         destination_data_ptr,
+         0, 0,
+         static_cast<int>(destination_byte_length), 1,
+-        0, 0);
++        0, 0, _fp_ms);
+   }
+ }
+ 
+diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+index 90c54a5a62..e361d55b22 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -27,7 +27,7 @@
+ 
+ #include <memory>
+ #include <utility>
+-
++#include "base/time/time.h"
+ #include "third_party/blink/renderer/modules/webgl/gpu_fingerprint.h"
+ #include "base/command_line.h"
+ #include "base/strings/string_util.h"
+@@ -775,12 +775,15 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+         kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
+     size_t row_bytes = info.minRowBytes();
+     std::vector<uint8_t> buf(info.computeMinByteSize());
+-    if (sbi->PaintImageForCurrentFrame().readPixels(
+-            info, buf.data(), row_bytes, 0, 0)) {
++    auto _fp_t0 = base::TimeTicks::Now();
++    bool _fp_ok = sbi->PaintImageForCurrentFrame().readPixels(
++            info, buf.data(), row_bytes, 0, 0);
++    double _fp_ms = (base::TimeTicks::Now() - _fp_t0).InMillisecondsF();
++    if (_fp_ok) {
+       fingerprint_collector::SetCurrentSite(
+         Host()->GetDocument()->Url().GetString().Utf8());
+       fingerprint_collector::DumpCanvasOutput(
+-          buf.data(), info, "transferToImageBitmap");
++          buf.data(), info, "transferToImageBitmap", _fp_ms);
+     }
+   }
+   return MakeGarbageCollected<ImageBitmap>(std::move(sbi));
+@@ -5277,7 +5280,9 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+     if (!binder.Succeeded()) {
+       return;
+     }
++    auto _fp_t0 = base::TimeTicks::Now();
+     ContextGL()->ReadPixels(x, y, width, height, format, type, data);
++    double _fp_ms = (base::TimeTicks::Now() - _fp_t0).InMillisecondsF();
+ 
+     if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
+       fingerprint_collector::SetCurrentSite(
+@@ -5293,7 +5298,7 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+       fingerprint_collector::SetCurrentSite(
+         Host()->GetDocument()->Url().GetString().Utf8());
+       fingerprint_collector::DumpWebGLOutput(
+-          data, x, y, width, height, format, type
++          data, x, y, width, height, format, type, _fp_ms
+       );
+     }
+   }
