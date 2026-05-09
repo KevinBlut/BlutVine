@@ -1,17 +1,16 @@
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-index 2a142a1dea..233f55fa09 100644
+index 57baec87ce..0b3c4d8c19 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-@@ -38,6 +38,8 @@
+@@ -37,6 +37,7 @@
+ #include "components/ungoogled/ungoogled_switches.h"
  #include "components/ungoogled/fingerprint_collector.h"
  #include <vector>
- 
 +#include "third_party/blink/renderer/core/fileapi/blob.h"
-+
+ 
  #include "base/feature_list.h"
  #include "base/functional/callback_helpers.h"
- #include "base/location.h"
-@@ -1319,6 +1321,20 @@ String HTMLCanvasElement::ToDataURLInternal(
+@@ -1319,6 +1320,19 @@ String HTMLCanvasElement::ToDataURLInternal(
  
    scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
    if (image_bitmap) {
@@ -28,11 +27,10 @@ index 2a142a1dea..233f55fa09 100644
 +          return buffer->ToDataURL(encoding_mime_type, quality);
 +      }
 +    }
-+
+ 
      if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-       SkImageInfo info = SkImageInfo::Make(
-           image_bitmap->width(), image_bitmap->height(),
-@@ -1443,6 +1459,33 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
+       fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
+@@ -1436,6 +1450,32 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
    CanvasAsyncBlobCreator* async_creator = nullptr;
    scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(kBackBuffer);
    if (image_bitmap) {
@@ -62,18 +60,17 @@ index 2a142a1dea..233f55fa09 100644
 +        }
 +      }
 +    }
-+
+ 
      if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-       SkImageInfo info = SkImageInfo::Make(
-           image_bitmap->width(), image_bitmap->height(),
+       fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
 diff --git a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
-index ce34e485f8..726661bd49 100644
+index 54f591f731..cd73a1b86f 100644
 --- a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
 +++ b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
-@@ -229,6 +229,27 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
+@@ -229,6 +229,26 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
+     exception_state.ThrowDOMException(DOMExceptionCode::kUnknownError,
                                        "ImageBitmap construction failed");
    }
- 
 +  if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(
 +                   switches::kFingerprintReplay)) {
 +    fingerprint_collector::SetCurrentSite(Url().GetString().Utf8());
@@ -94,14 +91,14 @@ index ce34e485f8..726661bd49 100644
 +      }
 +    }
 +  }
+ 
+   if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
+     fingerprint_collector::SetCurrentSite(GetExecutionContext()->Url().GetString().Utf8());
+@@ -355,6 +375,31 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
+     auto* async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
+         image_bitmap, options, function_type, start_time, execution_context,
+         resolver);
 +
-   if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(
-                    switches::kFingerprintCollect)) {
-     scoped_refptr<StaticBitmapImage> sbi = image->BitmapImage();
-@@ -359,6 +380,31 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
-   base::TimeTicks start_time = base::TimeTicks::Now();
-   scoped_refptr<StaticBitmapImage> image_bitmap = context_->GetImage();
-   if (image_bitmap) {
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
 +      fingerprint_collector::SetCurrentSite(Url().GetString().Utf8());
 +      std::vector<uint8_t> pixels =
@@ -126,18 +123,17 @@ index ce34e485f8..726661bd49 100644
 +        }
 +      }
 +    }
-+
+     
      if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-       SkImageInfo info = SkImageInfo::Make(
-           image_bitmap->width(), image_bitmap->height(),
+       fingerprint_collector::SetCurrentSite(execution_context->Url().GetString().Utf8());
 diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
-index 7ffe01a11e..944e0b861c 100644
+index e8207dbd6a..1b68533385 100644
 --- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
 +++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
-@@ -531,6 +531,18 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+@@ -530,6 +530,18 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+           snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
        DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
      }
- 
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
 +      fingerprint_collector::SetCurrentSite(
 +          GetTopExecutionContext()->Url().GetString().Utf8());
