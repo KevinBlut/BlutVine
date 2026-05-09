@@ -1,11 +1,11 @@
 diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
-index 46297ebabc..b42407d07c 100644
+index f0467fa380..298348b6be 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
-@@ -462,6 +462,18 @@ void WebGL2RenderingContextBase::getBufferSubData(
+@@ -461,6 +461,18 @@ void WebGL2RenderingContextBase::getBufferSubData(
+                      static_cast<size_t>(destination_byte_length)));
  
    ContextGL()->UnmapBuffer(target);
- 
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
 +          switches::kFingerprintReplay)) {
 +    fingerprint_collector::SetCurrentSite(
@@ -18,22 +18,24 @@ index 46297ebabc..b42407d07c 100644
 +    }
 +  }
 +
-   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-           switches::kFingerprintCollect)) {
-     fingerprint_collector::SetCurrentSite(
+   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
+     fingerprint_collector::SetCurrentSite(Host()->GetDocument()->Url().GetString().Utf8());
+     fingerprint_collector::FlushTestIfNew("getBufferSubData");
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index 441182869a..90c54a5a62 100644
+index 8099c87bed..db16cecdda 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-@@ -748,6 +748,26 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+@@ -751,8 +751,27 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+     fingerprint_collector::FlushTestIfNew("transferToImageBitmap");
+   }
  
-   scoped_refptr<StaticBitmapImage> sbi =
-       GetDrawingBuffer()->TransferToStaticBitmapImage();
+-  return MakeGarbageCollected<ImageBitmap>(
+-      GetDrawingBuffer()->TransferToStaticBitmapImage());
++  scoped_refptr<StaticBitmapImage> sbi =
++      GetDrawingBuffer()->TransferToStaticBitmapImage();
 +
-+  if (sbi && base::CommandLine::ForCurrentProcess()->HasSwitch(
-+                 switches::kFingerprintReplay)) {
-+    fingerprint_collector::SetCurrentSite(
-+        Host()->GetExecutionContextUrl().GetString().Utf8());
++  if (sbi && base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++    fingerprint_collector::SetCurrentSite(Host()->GetExecutionContextUrl().GetString().Utf8());
 +    std::vector<uint8_t> pixels =
 +        fingerprint_collector::ReplayCanvasOutput("transferToImageBitmap");
 +    if (!pixels.empty()) {
@@ -49,13 +51,14 @@ index 441182869a..90c54a5a62 100644
 +    }
 +  }
 +
-   if (sbi && base::CommandLine::ForCurrentProcess()->HasSwitch(
-                  switches::kFingerprintCollect)) {
-     SkImageInfo info = SkImageInfo::Make(
-@@ -5259,6 +5279,16 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
++  return MakeGarbageCollected<ImageBitmap>(std::move(sbi));
+ }
+ 
+ void WebGLRenderingContextBase::drawingBufferStorage(GLenum sizedformat,
+@@ -5247,6 +5266,16 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+       return;
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
- 
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
 +      fingerprint_collector::SetCurrentSite(
 +          Host()->GetExecutionContextUrl().GetString().Utf8());
@@ -67,5 +70,5 @@ index 441182869a..90c54a5a62 100644
 +    }
 +
      if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-       fingerprint_collector::SetCurrentSite(
-         Host()->GetDocument()->Url().GetString().Utf8());
+       fingerprint_collector::SetCurrentSite(Host()->GetDocument()->Url().GetString().Utf8());
+       fingerprint_collector::FlushTestIfNew("readPixels");
