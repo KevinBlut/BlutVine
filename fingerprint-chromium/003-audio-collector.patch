@@ -1,0 +1,40 @@
+diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+index 464fbd122c..5a93f6ee14 100644
+--- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
++++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+@@ -28,6 +28,7 @@
+ #include <cmath>
+ #include "base/command_line.h"
+ #include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
+ 
+ #include "base/metrics/histogram_functions.h"
+ #include "base/metrics/histogram_macros.h"
+@@ -202,6 +203,16 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
+   destination_node_ = OfflineAudioDestinationNode::Create(
+       this, number_of_channels, number_of_frames, sample_rate);
+   Initialize();
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::SetCurrentSite(window->Url().GetString().Utf8());
++    fingerprint_collector::LogCanvasInput(
++        "OfflineAudioContext",
++        "",
++        static_cast<double>(number_of_channels),
++        static_cast<double>(number_of_frames),
++        std::to_string(sample_rate),
++        0, 0);
++  }
+ }
+ 
+ OfflineAudioContext::~OfflineAudioContext() {
+@@ -471,6 +482,10 @@ void OfflineAudioContext::FireCompletionEvent() {
+       }
+     }
+ 
++    if (command_line->HasSwitch(switches::kFingerprintCollect)) {
++      fingerprint_collector::FlushTestIfNew("audio");
++    }
++
+     // Call the offline rendering completion event listener and resolve the
+     // promise too.
+     DispatchEvent(*OfflineAudioCompletionEvent::Create(rendered_buffer));
