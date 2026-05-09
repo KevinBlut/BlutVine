@@ -1,21 +1,22 @@
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
-index c1e3cffadc..4f41fbf897 100644
+index 7c0e2231e7..6738225b9e 100644
 --- a/components/ungoogled/fingerprint_collector.cc
 +++ b/components/ungoogled/fingerprint_collector.cc
-@@ -15,6 +15,9 @@
- #include "base/files/file_util.h"
- #include "base/files/file_path.h"
+@@ -5,6 +5,9 @@
+ #include <string>
+ #include <vector>
  
 +#include <unordered_map>
 +#include "base/files/file_enumerator.h"
 +
- namespace fingerprint_collector {
- 
- struct InputEntry {
-@@ -262,4 +265,145 @@ void ClearInputLog() {
+ #include "base/command_line.h"
+ #include "base/files/file_path.h"
+ #include "base/files/file_util.h"
+@@ -177,4 +180,159 @@ void ClearInputLog() {
      g_input_log.clear();
  }
  
++
 +
 +
 +
@@ -126,7 +127,20 @@ index c1e3cffadc..4f41fbf897 100644
 +    if (g_replay_loaded_site != g_current_site)
 +        ReplayLoad();
 +
-+    uint64_t hash = HashInputLog();
++    uint64_t h = 0xcbf29ce484222325ULL;
++    for (const auto& e : g_input_log) {
++        h = FNV64(h, e.op.data(), e.op.size());
++        h = FNV64(h, e.text.data(), e.text.size());
++        h = FNV64(h, e.font.data(), e.font.size());
++        h = FNV64(h, &e.x, sizeof(e.x));
++        h = FNV64(h, &e.y, sizeof(e.y));
++        h = FNV64(h, &e.text_align, sizeof(e.text_align));
++        h = FNV64(h, &e.text_baseline, sizeof(e.text_baseline));
++        h = FNV64(h, &e.max_width, sizeof(e.max_width));
++        h = FNV64(h, &e.rect_width, sizeof(e.rect_width));
++        h = FNV64(h, &e.rect_height, sizeof(e.rect_height));
++    }
++    uint64_t hash = h;
 +    g_input_log.clear();
 +
 +    auto it = g_replay_map.find(hash);
@@ -160,14 +174,13 @@ index c1e3cffadc..4f41fbf897 100644
  }  // namespace fingerprint_collector
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.h b/components/ungoogled/fingerprint_collector.h
-index b3ca6871e7..fd66e50b01 100644
+index 21482a76b8..9ca94707a7 100644
 --- a/components/ungoogled/fingerprint_collector.h
 +++ b/components/ungoogled/fingerprint_collector.h
-@@ -44,4 +44,15 @@ COMPONENT_EXPORT(UNGOOGLED) void SetCurrentSite(const std::string& url);
- // Clears thread-local input log — call at page navigation
+@@ -27,4 +27,14 @@ COMPONENT_EXPORT(UNGOOGLED) void SetCurrentSite(const std::string& url);
+ 
  COMPONENT_EXPORT(UNGOOGLED) void ClearInputLog();
  
-+
 +
 +
 +// Replay — returns stored pixels or empty on miss
