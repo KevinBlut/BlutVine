@@ -21,26 +21,21 @@ index 9ac48e164a..c6cf4438b4 100644
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
 new file mode 100644
-index 0000000000..d33fc7aece
+index 0000000000..7c0e2231e7
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.cc
-@@ -0,0 +1,235 @@
+@@ -0,0 +1,180 @@
 +#include "components/ungoogled/fingerprint_collector.h"
 +
-+#include <algorithm>
-+#include <atomic>
-+#include <chrono>
 +#include <fstream>
 +#include <sstream>
 +#include <string>
 +#include <vector>
 +
 +#include "base/command_line.h"
-+#include "components/ungoogled/ungoogled_switches.h"
-+#include "third_party/skia/include/core/SkImageInfo.h"
-+
-+#include "base/files/file_util.h"
 +#include "base/files/file_path.h"
++#include "base/files/file_util.h"
++#include "components/ungoogled/ungoogled_switches.h"
 +
 +namespace fingerprint_collector {
 +
@@ -57,7 +52,6 @@ index 0000000000..d33fc7aece
 +
 +static thread_local std::vector<InputEntry> g_input_log;
 +static thread_local std::string g_current_site;
-+static std::atomic<int> g_dump_counter{0};
 +
 +static std::string SanitizeForPath(const std::string& s) {
 +    std::string out;
@@ -71,110 +65,36 @@ index 0000000000..d33fc7aece
 +    return out;
 +}
 +
-+static std::string GetOutputDir() {
-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+
-+    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
-+        return "";
-+
-+    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
-+
-+    std::string gpu_model = "unknown_gpu";
-+    if (cmd->HasSwitch(switches::kFingerprintGpuModel))
-+        gpu_model = cmd->GetSwitchValueASCII(switches::kFingerprintGpuModel);
-+    std::transform(gpu_model.begin(), gpu_model.end(), gpu_model.begin(), ::tolower);
-+    std::replace(gpu_model.begin(), gpu_model.end(), ' ', '_');
-+
-+    std::string os_version = "unknown_os";
-+    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
-+        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
-+    std::transform(os_version.begin(), os_version.end(), os_version.begin(), ::tolower);
-+    std::replace(os_version.begin(), os_version.end(), ' ', '_');
-+
-+    std::string driver = "unknown_driver";
-+    if (cmd->HasSwitch(switches::kFingerprintGpuDriver))
-+        driver = cmd->GetSwitchValueASCII(switches::kFingerprintGpuDriver);
-+    std::replace(driver.begin(), driver.end(), '.', '_');
-+
-+    std::string dpr = "1_0";
-+    if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
-+        dpr = cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio);
-+        std::replace(dpr.begin(), dpr.end(), '.', '_');
-+    }
-+
-+    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
-+    return db_path + "/" + gpu_model + "/" + os_version + "/" + driver + "/" + dpr + "/" + site + "/";
-+}
-+
 +static std::string EscapeJson(const std::string& s) {
 +    std::string out;
 +    for (unsigned char c : s) {
-+        if (c == '"')        out += "\\\"";
-+        else if (c == '\\')  out += "\\\\";
-+        else if (c == '\n')  out += "\\n";
-+        else if (c == '\r')  out += "\\r";
-+        else if (c == '\t')  out += "\\t";
-+        else if (c < 0x20)   { /* skip control chars */ }
++        if (c == '"')       out += "\\\"";
++        else if (c == '\\') out += "\\\\";
++        else if (c == '\n') out += "\\n";
++        else if (c == '\r') out += "\\r";
++        else if (c == '\t') out += "\\t";
++        else if (c < 0x20)  { /* skip control chars */ }
 +        else out += c;
 +    }
 +    return out;
 +}
 +
-+static std::string SerializeInputLog() {
-+    std::ostringstream ss;
-+    ss << "[";
-+    for (size_t i = 0; i < g_input_log.size(); i++) {
-+        const auto& e = g_input_log[i];
-+        if (i > 0) ss << ",";
-+        ss << "{"
-+           << "\"op\":\"" << EscapeJson(e.op) << "\","
-+           << "\"text\":\"" << EscapeJson(e.text) << "\","
-+           << "\"x\":" << e.x << ","
-+           << "\"y\":" << e.y << ","
-+           << "\"font\":\"" << EscapeJson(e.font) << "\","
-+           << "\"text_align\":" << e.text_align << ","
-+           << "\"text_baseline\":" << e.text_baseline << ","
-+           << "\"max_width\":" << e.max_width << ","
-+           << "\"rect_width\":" << e.rect_width << ","
-+           << "\"rect_height\":" << e.rect_height
-+           << "}";
++static uint64_t FNV64(uint64_t hash, const void* data, size_t len) {
++    const uint8_t* p = static_cast<const uint8_t*>(data);
++    for (size_t i = 0; i < len; i++) {
++        hash ^= p[i];
++        hash *= 0x00000100000001B3ULL;
 +    }
-+    ss << "]";
-+    return ss.str();
++    return hash;
 +}
 +
-+static void WriteDump(
-+    const std::string& trigger,
-+    const std::string& input_json,
-+    const void* pixel_data,
-+    size_t pixel_size,
-+    int width, int height,
-+    const std::string& hash_hex,
-+    const std::string& extra_meta = ""
-+) {
-+    std::string dir = GetOutputDir();
-+    if (dir.empty()) return;
-+
-+    base::CreateDirectory(base::FilePath(dir));
-+
-+    std::string base = dir + hash_hex + "_" + trigger;
-+
-+    std::ofstream meta(base + ".json");
-+    if (!meta.is_open()) return;
-+    meta << "{"
-+         << "\"trigger\":\"" << trigger << "\","
-+         << "\"width\":" << width << ","
-+         << "\"height\":" << height << ","
-+         << "\"hash\":\"" << hash_hex << "\","
-+         << "\"inputs\":" << input_json
-+         << (extra_meta.empty() ? "" : "," + extra_meta)
-+         << "}";
-+    meta.close();
-+
-+    std::ofstream pixels(base + ".bin", std::ios::binary);
-+    if (!pixels.is_open()) return;
-+    pixels.write(static_cast<const char*>(pixel_data), pixel_size);
-+    pixels.close();
++static std::string GetOutputDir() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++        return "";
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
++    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
++    return db_path + "/" + site + "/";
 +}
 +
 +void LogCanvasInput(
@@ -200,55 +120,80 @@ index 0000000000..d33fc7aece
 +                            0, 0, -1.0, width, height});
 +}
 +
-+void DumpCanvasOutput(
-+    const void* addr,
-+    const SkImageInfo& info,
-+    const std::string& trigger
-+) {
++void FlushTestIfNew(const std::string& trigger) {
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
-+    if (!addr) return;
++    if (g_input_log.empty()) return;
 +
-+    size_t size = info.computeMinByteSize();
-+    if (size == 0) return;
++    std::string dir = GetOutputDir();
++    if (dir.empty()) return;
 +
-+    uint64_t hash = HashInputLog();
-+    std::string input_json = SerializeInputLog();
-+    g_input_log.clear();
-+
++    // compute hash over input log for dedup filename
++    uint64_t h = 0xcbf29ce484222325ULL;
++    for (const auto& e : g_input_log) {
++        h = FNV64(h, e.op.data(), e.op.size());
++        h = FNV64(h, e.text.data(), e.text.size());
++        h = FNV64(h, e.font.data(), e.font.size());
++        h = FNV64(h, &e.x, sizeof(e.x));
++        h = FNV64(h, &e.y, sizeof(e.y));
++        h = FNV64(h, &e.text_align, sizeof(e.text_align));
++        h = FNV64(h, &e.text_baseline, sizeof(e.text_baseline));
++        h = FNV64(h, &e.max_width, sizeof(e.max_width));
++        h = FNV64(h, &e.rect_width, sizeof(e.rect_width));
++        h = FNV64(h, &e.rect_height, sizeof(e.rect_height));
++    }
 +    char hash_hex[17];
-+    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)hash);
++    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)h);
 +
-+    WriteDump(trigger, input_json, addr, size,
-+              info.width(), info.height(), hash_hex);
-+}
++    base::CreateDirectory(base::FilePath(dir));
 +
-+void DumpWebGLOutput(
-+    const void* data,
-+    int x, int y,
-+    int width, int height,
-+    unsigned int format,
-+    unsigned int type
-+) {
-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
-+    if (!data) return;
++    std::string filepath = dir + hash_hex + "_" + trigger + ".json";
 +
-+    size_t size = static_cast<size_t>(width) * height * 4;
++    // dedup — skip if file already exists
++    if (base::PathExists(base::FilePath(filepath))) {
++        g_input_log.clear();
++        return;
++    }
 +
-+    uint64_t hash = HashInputLog();
-+    std::string input_json = SerializeInputLog();
++    // serialize call sequence
++    std::ostringstream ss;
++    ss << "{\n"
++       << "  \"site\": \"" << EscapeJson(g_current_site) << "\",\n"
++       << "  \"trigger\": \"" << trigger << "\",\n"
++       << "  \"calls\": [\n";
++    for (size_t i = 0; i < g_input_log.size(); i++) {
++        const auto& e = g_input_log[i];
++        ss << "    {\"op\":\"" << EscapeJson(e.op) << "\"";
++        if (!e.text.empty())
++            ss << ",\"text\":\"" << EscapeJson(e.text) << "\"";
++        if (!e.font.empty())
++            ss << ",\"font\":\"" << EscapeJson(e.font) << "\"";
++        if (e.op == "fillRect" || e.op == "drawImage") {
++            ss << ",\"x\":" << e.x
++               << ",\"y\":" << e.y
++               << ",\"w\":" << e.rect_width
++               << ",\"h\":" << e.rect_height;
++        } else {
++            ss << ",\"x\":" << e.x
++               << ",\"y\":" << e.y;
++            if (e.text_align != 0)
++                ss << ",\"text_align\":" << e.text_align;
++            if (e.text_baseline != 0)
++                ss << ",\"text_baseline\":" << e.text_baseline;
++            if (e.max_width >= 0)
++                ss << ",\"max_width\":" << e.max_width;
++        }
++        ss << "}";
++        if (i + 1 < g_input_log.size()) ss << ",";
++        ss << "\n";
++    }
++    ss << "  ]\n}";
++
++    std::ofstream f(filepath);
++    if (f.is_open())
++        f << ss.str();
++
 +    g_input_log.clear();
-+
-+    char hash_hex[17];
-+    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)hash);
-+
-+    std::string meta = std::string("\"webgl_x\":" ) + std::to_string(x)
-+        + ",\"webgl_y\":" + std::to_string(y)
-+        + ",\"format\":" + std::to_string(format)
-+        + ",\"type\":" + std::to_string(type);
-+
-+    WriteDump("readPixels", input_json, data, size, width, height, hash_hex, meta);
 +}
 +
 +void SetCurrentSite(const std::string& url) {
@@ -263,19 +208,18 @@ index 0000000000..d33fc7aece
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.h b/components/ungoogled/fingerprint_collector.h
 new file mode 100644
-index 0000000000..b3ca6871e7
+index 0000000000..21482a76b8
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.h
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,30 @@
 +#pragma once
 +
 +#include <string>
 +#include <vector>
-+#include "third_party/skia/include/core/SkImageInfo.h"
 +#include "base/component_export.h"
++
 +namespace fingerprint_collector {
 +
-+// Called at fillText hook points — logs input to thread-local buffer
 +COMPONENT_EXPORT(UNGOOGLED) void LogCanvasInput(
 +    const std::string& op,
 +    const std::string& text,
@@ -286,31 +230,15 @@ index 0000000000..b3ca6871e7
 +    double max_width = -1.0
 +);
 +
-+// Called at fillRect hook point
 +COMPONENT_EXPORT(UNGOOGLED) void LogRectInput(
 +    double x, double y,
 +    double width, double height
 +);
 +
-+// Called at toDataURL and getImageData output points
-+COMPONENT_EXPORT(UNGOOGLED) void DumpCanvasOutput(
-+    const void* addr,
-+    const SkImageInfo& info,
-+    const std::string& trigger
-+);
-+
-+// Called at WebGL readPixels output point
-+COMPONENT_EXPORT(UNGOOGLED) void DumpWebGLOutput(
-+    const void* data,
-+    int x, int y,
-+    int width, int height,
-+    unsigned int format,
-+    unsigned int type
-+);
++COMPONENT_EXPORT(UNGOOGLED) void FlushTestIfNew(const std::string& trigger);
 +
 +COMPONENT_EXPORT(UNGOOGLED) void SetCurrentSite(const std::string& url);
 +
-+// Clears thread-local input log — call at page navigation
 +COMPONENT_EXPORT(UNGOOGLED) void ClearInputLog();
 +
 +}  // namespace fingerprint_collector
