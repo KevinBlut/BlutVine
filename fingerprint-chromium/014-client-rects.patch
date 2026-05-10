@@ -1,0 +1,197 @@
+diff --git a/third_party/blink/renderer/core/dom/element.cc b/third_party/blink/renderer/core/dom/element.cc
+index 2364b96c44..76e8edde38 100644
+--- a/third_party/blink/renderer/core/dom/element.cc
++++ b/third_party/blink/renderer/core/dom/element.cc
+@@ -32,6 +32,11 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include "third_party/blink/renderer/core/style/computed_style.h"
++
+ #include "base/containers/adapters.h"
+ #include "base/feature_list.h"
+ #include "cc/input/snap_selection_strategy.h"
+@@ -3424,35 +3429,75 @@ DOMRectList* Element::getClientRects() {
+ }
+ 
+ Vector<gfx::RectF> Element::GetClientRectsNoAdjustment() {
+-  // TODO(crbug.com/1499981): This should be removed once synchronized scrolling
+-  // impact is understood.
+   SyncScrollAttemptHeuristic::DidAccessScrollOffset();
+   GetDocument().EnsurePaintLocationDataValidForNode(
+       this, DocumentUpdateReason::kJavaScript);
+-
+   Vector<gfx::QuadF> quads;
+   ClientQuads(quads);
+-  if (quads.empty()) {
++  if (quads.empty())
+     return {};
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
++    fingerprint_collector::LogCanvasInput("getClientRects", "", 0.0, 0.0,
++        GetComputedStyle() ? GetComputedStyle()->GetFontDescription()
++                                 .Family().FamilyName().Utf8() : "",
++        0, 0);
++    fingerprint_collector::FlushTestIfNew("getClientRects");
++  }
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++    fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
++    std::vector<float> offsets = fingerprint_collector::ReplayClientRects("getClientRects");
++    if (!offsets.empty() && offsets.size() >= 2) {
++      Vector<gfx::RectF> result;
++      for (auto& quad : quads)
++        result.emplace_back(quad.BoundingBox());
++      size_t n = std::min(result.size(), offsets.size() / 2);
++      for (size_t i = 0; i < n; i++)
++        result[i].Offset(offsets[i * 2], offsets[i * 2 + 1]);
++      return result;
++    }
+   }
++
+   Vector<gfx::RectF> result;
+-  for (auto& quad : quads) {
++  for (auto& quad : quads)
+     result.emplace_back(quad.BoundingBox());
+-  }
+   return result;
+ }
+ 
+ gfx::RectF Element::GetBoundingClientRectNoLifecycleUpdateNoAdjustment() const {
+   Vector<gfx::QuadF> quads;
+   ClientQuads(quads);
+-  if (quads.empty()) {
++  if (quads.empty())
+     return gfx::RectF();
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::SetCurrentSite(
++        const_cast<Element*>(this)->GetDocument().Url().GetString().Utf8());
++    fingerprint_collector::LogCanvasInput("getBoundingClientRect", "", 0.0, 0.0,
++        GetComputedStyle() ? GetComputedStyle()->GetFontDescription()
++                                 .Family().FamilyName().Utf8() : "",
++        0, 0);
++    fingerprint_collector::FlushTestIfNew("getBoundingClientRect");
++  }
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++    fingerprint_collector::SetCurrentSite(
++        const_cast<Element*>(this)->GetDocument().Url().GetString().Utf8());
++    std::vector<float> offsets = fingerprint_collector::ReplayClientRects("getBoundingClientRect");
++    if (!offsets.empty() && offsets.size() >= 2) {
++      gfx::RectF result;
++      for (auto& quad : quads)
++        result.Union(quad.BoundingBox());
++      result.Offset(offsets[0], offsets[1]);
++      return result;
++    }
+   }
+ 
+   gfx::RectF result;
+-  for (auto& quad : quads) {
++  for (auto& quad : quads)
+     result.Union(quad.BoundingBox());
+-  }
+   return result;
+ }
+ 
+diff --git a/third_party/blink/renderer/core/dom/range.cc b/third_party/blink/renderer/core/dom/range.cc
+index 5fb159f8e3..3a253531db 100644
+--- a/third_party/blink/renderer/core/dom/range.cc
++++ b/third_party/blink/renderer/core/dom/range.cc
+@@ -25,6 +25,12 @@
+ 
+ #include "third_party/blink/renderer/core/dom/range.h"
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include "third_party/blink/renderer/core/style/computed_style.h"
++#include <cmath>
++
+ #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
+ #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
+ #include "third_party/blink/renderer/core/dom/character_data.h"
+@@ -1662,14 +1668,38 @@ DOMRectList* Range::getClientRects() const {
+   Vector<gfx::QuadF> quads;
+   GetBorderAndTextQuads(quads);
+ 
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput("range.getClientRects", "", 0.0, 0.0, "", 0, 0);
++    fingerprint_collector::FlushTestIfNew("range.getClientRects");
++  }
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++    std::vector<float> offsets = fingerprint_collector::ReplayClientRects("range.getClientRects");
++    if (!offsets.empty() && offsets.size() >= 2) {
++      size_t n = std::min(quads.size(), offsets.size() / 2);
++      for (size_t i = 0; i < n; i++)
++        quads[i].Offset(offsets[i * 2], offsets[i * 2 + 1]);
++    }
++  }
++
+   return MakeGarbageCollected<DOMRectList>(quads);
+ }
+ 
+ DOMRect* Range::getBoundingClientRect() const {
+-  // TODO(crbug.com/1499981): This should be removed once synchronized scrolling
+-  // impact is understood.
+   SyncScrollAttemptHeuristic::DidAccessScrollOffset();
+-  return DOMRect::FromRectF(BoundingRect());
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput("range.getBoundingClientRect", "", 0.0, 0.0, "", 0, 0);
++    fingerprint_collector::FlushTestIfNew("range.getBoundingClientRect");
++  }
++
++  auto rect = BoundingRect();
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++    std::vector<float> offsets = fingerprint_collector::ReplayClientRects("range.getBoundingClientRect");
++    if (!offsets.empty() && offsets.size() >= 2)
++      rect.Offset(offsets[0], offsets[1]);
++  }
++  return DOMRect::FromRectF(rect);
+ }
+ 
+ // TODO(editing-dev): We should make
+diff --git a/ui/gfx/geometry/quad_f.cc b/ui/gfx/geometry/quad_f.cc
+index b6306c2cc5..5547a60dd5 100644
+--- a/ui/gfx/geometry/quad_f.cc
++++ b/ui/gfx/geometry/quad_f.cc
+@@ -137,6 +137,18 @@ void QuadF::Scale(float x_scale, float y_scale) {
+   p4_.Scale(x_scale, y_scale);
+ }
+ 
++void QuadF::Offset(float x_offset, float y_offset) {
++  const auto [min, max] = Extents();
++  float width = max.x() - min.x();
++  float height = max.y() - min.y();
++  if (WithinEpsilon(width, 0.0f) || WithinEpsilon(height, 0.0f))
++    return;
++  p1_.Offset(x_offset, y_offset);
++  p2_.Offset(x_offset, y_offset);
++  p3_.Offset(x_offset, y_offset);
++  p4_.Offset(x_offset, y_offset);
++}
++
+ void QuadF::operator+=(const Vector2dF& rhs) {
+   p1_ += rhs;
+   p2_ += rhs;
+diff --git a/ui/gfx/geometry/quad_f.h b/ui/gfx/geometry/quad_f.h
+index c9d21e3519..ff8c7f3a5b 100644
+--- a/ui/gfx/geometry/quad_f.h
++++ b/ui/gfx/geometry/quad_f.h
+@@ -106,6 +106,9 @@ class COMPONENT_EXPORT(GEOMETRY) QuadF {
+   // Scale each point in the quad by the scale factors along each axis.
+   void Scale(float x_scale, float y_scale);
+ 
++  void Offset(float offset) { Offset(offset, offset); }
++  void Offset(float x_offset, float y_offset);
++
+   // Tests whether any part of the rectangle intersects with this quad.
+   // This only works for convex quads.
+   // This intersection is edge-inclusive and will return true even if the
