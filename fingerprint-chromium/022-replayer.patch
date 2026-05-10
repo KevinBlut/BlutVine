@@ -12,7 +12,7 @@ index 7c0e2231e7..6738225b9e 100644
  #include "base/command_line.h"
  #include "base/files/file_path.h"
  #include "base/files/file_util.h"
-@@ -177,4 +180,159 @@ void ClearInputLog() {
+@@ -177,4 +180,167 @@ void ClearInputLog() {
      g_input_log.clear();
  }
  
@@ -167,6 +167,14 @@ index 7c0e2231e7..6738225b9e 100644
 +    return ReplayLookup(trigger);
 +}
 +
++std::vector<float> ReplayClientRects(const std::string& trigger) {
++    std::vector<uint8_t> raw = ReplayLookup(trigger);
++    if (raw.empty()) return {};
++    std::vector<float> result(raw.size() / sizeof(float));
++    memcpy(result.data(), raw.data(), result.size() * sizeof(float));
++    return result;
++}
++
 +std::vector<uint8_t> ReplayWebGLOutput() {
 +    return ReplayLookup("readPixels");
 +}
@@ -177,7 +185,7 @@ diff --git a/components/ungoogled/fingerprint_collector.h b/components/ungoogled
 index 21482a76b8..9ca94707a7 100644
 --- a/components/ungoogled/fingerprint_collector.h
 +++ b/components/ungoogled/fingerprint_collector.h
-@@ -27,4 +27,14 @@ COMPONENT_EXPORT(UNGOOGLED) void SetCurrentSite(const std::string& url);
+@@ -27,4 +27,15 @@ COMPONENT_EXPORT(UNGOOGLED) void SetCurrentSite(const std::string& url);
  
  COMPONENT_EXPORT(UNGOOGLED) void ClearInputLog();
  
@@ -188,7 +196,8 @@ index 21482a76b8..9ca94707a7 100644
 +COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayCanvasOutput(
 +    const std::string& trigger
 +);
-+
++COMPONENT_EXPORT(UNGOOGLED) std::vector<float> ReplayClientRects(
++    const std::string& trigger);
 +COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayWebGLOutput();
 +
  }  // namespace fingerprint_collector
