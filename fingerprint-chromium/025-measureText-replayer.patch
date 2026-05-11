@@ -1,0 +1,181 @@
+diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
+index 6738225b9e..859314ec25 100644
+--- a/components/ungoogled/fingerprint_collector.cc
++++ b/components/ungoogled/fingerprint_collector.cc
+@@ -335,4 +335,101 @@ std::vector<uint8_t> ReplayWebGLOutput() {
+     return ReplayLookup("readPixels");
+ }
+ 
++
++
++
++// ---------------------------------------------------------------------------
++// measureText Replay — OS + DPR path (CPU/font driven, not GPU)
++// ---------------------------------------------------------------------------
++
++static thread_local std::unordered_map<uint64_t, ReplayEntry> g_replay_map_measuretext;
++static thread_local std::string g_replay_loaded_site_measuretext;
++
++static std::string GetReplayDirMeasureText() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++        return "";
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
++    std::string platform = "unknown_os";
++    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
++        platform = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
++    std::transform(platform.begin(), platform.end(), platform.begin(), ::tolower);
++    std::replace(platform.begin(), platform.end(), ' ', '_');
++    std::string dpr = "1_0";
++    if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
++        dpr = cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio);
++        std::replace(dpr.begin(), dpr.end(), '.', '_');
++    }
++    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
++    return db_path + "/" + platform + "/" + dpr + "/" + site + "/";
++}
++
++static void ReplayLoadMeasureText() {
++    g_replay_map_measuretext.clear();
++    g_replay_loaded_site_measuretext = g_current_site;
++    std::string dir = GetReplayDirMeasureText();
++    if (dir.empty()) return;
++    base::FilePath dir_path(dir);
++    base::FileEnumerator enumerator(dir_path, false, base::FileEnumerator::FILES,
++                                    FILE_PATH_LITERAL("*.json"));
++    for (base::FilePath json_path = enumerator.Next();
++         !json_path.empty();
++         json_path = enumerator.Next()) {
++        std::string contents;
++        if (!base::ReadFileToString(json_path, &contents)) continue;
++        std::string hash_str = JsonGetString(contents, "hash");
++        if (hash_str.empty()) continue;
++        uint64_t hash = std::stoull(hash_str, nullptr, 16);
++        std::string bin_path = json_path.RemoveFinalExtension().value() + ".bin";
++        ReplayEntry entry;
++        entry.bin_path = bin_path;
++        entry.width    = JsonGetInt(contents, "width");
++        entry.height   = JsonGetInt(contents, "height");
++        entry.trigger  = JsonGetString(contents, "trigger");
++        g_replay_map_measuretext[hash] = std::move(entry);
++    }
++}
++
++static std::vector<double> ReplayLookupMeasureText() {
++    if (g_replay_loaded_site_measuretext != g_current_site)
++        ReplayLoadMeasureText();
++    uint64_t h = 0xcbf29ce484222325ULL;
++    for (const auto& e : g_input_log) {
++        h = FNV64(h, e.op.data(), e.op.size());
++        h = FNV64(h, e.text.data(), e.text.size());
++        h = FNV64(h, e.font.data(), e.font.size());
++        h = FNV64(h, &e.x, sizeof(e.x));
++        h = FNV64(h, &e.y, sizeof(e.y));
++        h = FNV64(h, &e.text_align, sizeof(e.text_align));
++        h = FNV64(h, &e.text_baseline, sizeof(e.text_baseline));
++        h = FNV64(h, &e.max_width, sizeof(e.max_width));
++        h = FNV64(h, &e.rect_width, sizeof(e.rect_width));
++        h = FNV64(h, &e.rect_height, sizeof(e.rect_height));
++    }
++    g_input_log.clear();
++    auto it = g_replay_map_measuretext.find(h);
++    if (it == g_replay_map_measuretext.end()) {
++        fprintf(stderr, "[FP-REPLAY-MEASURETEXT MISS] site=%s\n",
++                g_current_site.c_str());
++        return {};
++    }
++    const ReplayEntry& entry = it->second;
++    std::ifstream f(entry.bin_path, std::ios::binary);
++    if (!f.is_open()) {
++        fprintf(stderr, "[FP-REPLAY-MEASURETEXT MISS] bin missing: %s\n",
++                entry.bin_path.c_str());
++        return {};
++    }
++    std::vector<uint8_t> raw(
++        std::istreambuf_iterator<char>(f),
++        std::istreambuf_iterator<char>());
++    std::vector<double> result(raw.size() / sizeof(double));
++    memcpy(result.data(), raw.data(), result.size() * sizeof(double));
++    return result;
++}
++
++std::vector<double> ReplayMeasureText() {
++    return ReplayLookupMeasureText();
++}
++
+ }  // namespace fingerprint_collector
+\ No newline at end of file
+diff --git a/components/ungoogled/fingerprint_collector.h b/components/ungoogled/fingerprint_collector.h
+index 9ca94707a7..3acc1b9a58 100644
+--- a/components/ungoogled/fingerprint_collector.h
++++ b/components/ungoogled/fingerprint_collector.h
+@@ -37,4 +37,7 @@ COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayCanvasOutput(
+ 
+ COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayWebGLOutput();
+ 
++
++COMPONENT_EXPORT(UNGOOGLED) std::vector<double> ReplayMeasureText();
++
+ }  // namespace fingerprint_collector
+\ No newline at end of file
+diff --git a/third_party/blink/renderer/core/html/canvas/text_metrics.cc b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+index 5ddc877d7d..622d033d1a 100644
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.cc
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+@@ -80,6 +80,19 @@ void TextMetrics::Trace(Visitor* visitor) const {
+ 
+ TextMetrics::TextMetrics() : baselines_(Baselines::Create()) {}
+ 
++TextMetrics::TextMetrics(double width, double bbox_left, double bbox_right,
++                          double font_ascent, double font_descent,
++                          double actual_ascent, double actual_descent)
++    : baselines_(Baselines::Create()) {
++  width_ = width;
++  actual_bounding_box_left_ = bbox_left;
++  actual_bounding_box_right_ = bbox_right;
++  font_bounding_box_ascent_ = font_ascent;
++  font_bounding_box_descent_ = font_descent;
++  actual_bounding_box_ascent_ = actual_ascent;
++  actual_bounding_box_descent_ = actual_descent;
++}
++
+ TextMetrics::TextMetrics(const Font* font,
+                          const TextDirection& direction,
+                          const V8CanvasTextBaseline::Enum baseline,
+diff --git a/third_party/blink/renderer/core/html/canvas/text_metrics.h b/third_party/blink/renderer/core/html/canvas/text_metrics.h
+index 7b3147047c..077b522684 100644
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.h
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.h
+@@ -57,6 +57,10 @@ class CORE_EXPORT TextMetrics final : public ScriptWrappable {
+               const String& text,
+               PlainTextPainter& text_painter);
+ 
++  TextMetrics(double width, double bbox_left, double bbox_right,
++            double font_ascent, double font_descent,
++            double actual_ascent, double actual_descent);
++
+   double width() const { return width_; }
+   double actualBoundingBoxLeft() const { return actual_bounding_box_left_; }
+   double actualBoundingBoxRight() const { return actual_bounding_box_right_; }
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 1b68533385..9be2f17194 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -1232,6 +1232,17 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
+         static_cast<int>(state.GetTextAlign()),
+         static_cast<int>(state.GetTextBaseline()));
+   }
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++    fingerprint_collector::SetCurrentSite(
++        GetTopExecutionContext()->Url().GetString().Utf8());
++    std::vector<double> values = fingerprint_collector::ReplayMeasureText();
++    if (!values.empty() && values.size() >= 7) {
++      return MakeGarbageCollected<TextMetrics>(
++          values[0], values[1], values[2],
++          values[3], values[4], values[5], values[6]);
++    }
++  }
+   
+   return MakeGarbageCollected<TextMetrics>(
+       font, direction, state.GetTextBaseline(), state.GetTextAlign(), text,
