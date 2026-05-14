@@ -1,31 +1,57 @@
 diff --git a/components/embedder_support/user_agent_utils.cc b/components/embedder_support/user_agent_utils.cc
-index 557eadb182..ff71278fe4 100644
+index 557eadb182..df378ef4e5 100644
 --- a/components/embedder_support/user_agent_utils.cc
 +++ b/components/embedder_support/user_agent_utils.cc
-@@ -12,6 +12,9 @@
+@@ -12,6 +12,10 @@
  #include <string>
  #include <vector>
  
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include "base/strings/string_util.h"
++#include "components/ungoogled/fingerprint_mobile.h"
 +
  #include "base/android/device_info.h"
  #include "base/command_line.h"
  #include "base/compiler_specific.h"
-@@ -215,9 +218,9 @@ const blink::UserAgentBrandList GetUserAgentBrandFullVersionListInternal(
+@@ -214,20 +218,46 @@ const blink::UserAgentBrandList GetUserAgentBrandFullVersionListInternal(
+ // Internal function to handle return the full or "reduced" user agent string,
  // depending on the Reduce User-Agent reduction phase features.
  std::string GetUserAgentInternal() {
-   std::string product = GetProductAndVersion();
+-  std::string product = GetProductAndVersion();
 -  if (base::CommandLine::ForCurrentProcess()->HasSwitch(kHeadless)) {
 -    product.insert(0, "Headless");
--  }
++  // Android UA — short-circuit before normal product/platform assembly.
++  // Produces the canonical Chrome-on-Android format:
++  //   Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36
++  //     (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36
++  // GetUserAgentFingerprintBrandInfo() appends e.g. " Edg/147.0.0.0"
++  // if --fingerprint-brand=edge is set, otherwise returns "".
++  {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (cmd->HasSwitch(switches::kFingerprintPlatform)) {
++      std::string pv = base::ToLowerASCII(
++          cmd->GetSwitchValueASCII(switches::kFingerprintPlatform));
++      if (pv.find("android") != std::string::npos) {
++        fingerprint_mobile::AndroidProfile p =
++            fingerprint_mobile::ResolveAndroidProfile(pv);
++        std::string major = GetMajorVersion(GetChromiumVersion());
++        return "Mozilla/5.0 (Linux; Android " + p.android_version +
++               "; " + p.model_ua + ") AppleWebKit/537.36"
++               " (KHTML, like Gecko) Chrome/" + major + ".0.0.0"
++               " Mobile Safari/537.36" +
++               blink::GetUserAgentFingerprintBrandInfo();
++      }
++    }
+   }
+ 
++  std::string product = GetProductAndVersion();
 +  //if (base::CommandLine::ForCurrentProcess()->HasSwitch(kHeadless)) {
 +  //  product.insert(0, "Headless");
 +  //}
- 
++
  #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
    if (base::CommandLine::ForCurrentProcess()->HasSwitch(kUseMobileUserAgent)) {
-@@ -225,9 +228,11 @@ std::string GetUserAgentInternal() {
+     product += " Mobile";
    }
  #endif
  
@@ -38,7 +64,7 @@ index 557eadb182..ff71278fe4 100644
  }
  
  // Generate random order list based on the input size and seed.
-@@ -279,6 +284,23 @@ blink::UserAgentBrandList ShuffleBrandList(
+@@ -279,6 +309,33 @@ blink::UserAgentBrandList ShuffleBrandList(
  }
  
  std::string GetUserAgentPlatform() {
@@ -51,6 +77,16 @@ index 557eadb182..ff71278fe4 100644
 +
 +    if (platform_value.find("win") != std::string::npos)
 +      return "";
++    // Android: GetUserAgentInternal() short-circuits before this is reached
++    // on the main UA path, but guard here for any codepath that calls this
++    // function directly (e.g. worker/service worker fetch contexts).
++    // Trailing "; " is intentional — BuildUserAgentFromProduct expects the
++    // prefix to include the separator after the last token.
++    if (platform_value.find("android") != std::string::npos) {
++      fingerprint_mobile::AndroidProfile p =
++          fingerprint_mobile::ResolveAndroidProfile(platform_value);
++      return "Linux; Android " + p.android_version + "; " + p.model_ua + "; ";
++    }
 +    if (platform_value.find("linux") != std::string::npos ||
 +        platform_value.find("x11") != std::string::npos ||
 +        platform_value.find("ubuntu") != std::string::npos ||
@@ -62,7 +98,7 @@ index 557eadb182..ff71278fe4 100644
  #if BUILDFLAG(IS_WIN)
    return "";
  #elif BUILDFLAG(IS_MAC)
-@@ -299,6 +321,27 @@ std::string GetUserAgentPlatform() {
+@@ -299,6 +356,35 @@ std::string GetUserAgentPlatform() {
  }
  
  std::string GetUnifiedPlatform() {
@@ -75,6 +111,14 @@ index 557eadb182..ff71278fe4 100644
 +
 +    if (platform_value.find("win") != std::string::npos)
 +      return "Windows NT 10.0; Win64; x64";
++    // Android: full platform token placed inside Mozilla/5.0 (HERE).
++    // No trailing separator — BuildUnifiedPlatformUserAgentFromProduct wraps
++    // the entire return value as-is inside the parentheses.
++    if (platform_value.find("android") != std::string::npos) {
++      fingerprint_mobile::AndroidProfile p =
++          fingerprint_mobile::ResolveAndroidProfile(platform_value);
++      return "Linux; Android " + p.android_version + "; " + p.model_ua;
++    }
 +    if (platform_value.find("linux") != std::string::npos ||
 +        platform_value.find("x11") != std::string::npos ||
 +        platform_value.find("ubuntu") != std::string::npos ||
@@ -90,24 +134,43 @@ index 557eadb182..ff71278fe4 100644
  #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
    // This constant is only used on Android (desktop) and Linux.
    constexpr char kUnifiedPlatformLinuxX64[] = "X11; Linux x86_64";
+@@ -579,6 +665,17 @@ bool GetMobileBitForUAMetadata() {
+ }
+ 
+ std::string GetPlatformVersion() {
++  // Fingerprint override — return spoofed Android platform version.
++  {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (cmd->HasSwitch(switches::kFingerprintPlatform)) {
++      std::string pv = base::ToLowerASCII(
++          cmd->GetSwitchValueASCII(switches::kFingerprintPlatform));
++      if (pv.find("android") != std::string::npos)
++        return fingerprint_mobile::ResolveAndroidProfile(pv).ch_version;
++    }
++  }
++
+ #if BUILDFLAG(IS_LINUX)
+   // TODO(crbug.com/40245146): Remove this Blink feature
+   if (base::FeatureList::IsEnabled(
 diff --git a/components/ungoogled/BUILD.gn b/components/ungoogled/BUILD.gn
-index 8b910a0cc8..5d330670e9 100644
+index 8b910a0cc8..54f54ad017 100644
 --- a/components/ungoogled/BUILD.gn
 +++ b/components/ungoogled/BUILD.gn
-@@ -4,6 +4,7 @@
+@@ -4,6 +4,8 @@
  
  component("ungoogled_switches") {
    sources = [
 +    "fingerprint_data.h",
++    "fingerprint_mobile.h",
      "ungoogled_switches.h",
      "ungoogled_switches.cc",
    ]
 diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
 new file mode 100644
-index 0000000000..0fbf669ac3
+index 0000000000..b28ea0fb5e
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_data.h
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,118 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -177,13 +240,145 @@ index 0000000000..0fbf669ac3
 +constexpr const char* kX86Architecture = "x86";
 +constexpr const char* kArmArchitecture = "arm";
 +
++// =============================================================================
++// Android Constants
++// =============================================================================
++
++constexpr const char* kAndroidPlatform = "Android";
++
++// Android version strings for the UA token "Linux; Android X; Model"
++// Index 0 = default for that major version
++struct AndroidVersionEntry {
++  int major;
++  const char* ua_version;   // e.g. "14"
++  const char* ch_version;   // e.g. "14.0.0" for Sec-CH-UA-Platform-Version
++  const char* default_model_ua;  // UA display name
++  const char* default_model_key; // normalized key for --fingerprint-mobile-model
++};
++
++constexpr AndroidVersionEntry kAndroidVersions[] = {
++  { 15, "15", "15.0.0", "Pixel 9",   "pixel9"  },
++  { 14, "14", "14.0.0", "Pixel 8",   "pixel8"  },
++  { 13, "13", "13.0.0", "Pixel 7",   "pixel7"  },
++  { 12, "12", "12.0.0", "Pixel 6",   "pixel6"  },
++};
++constexpr int kAndroidDefaultMajor = 14;
++
++// Device model table: normalized key -> UA display string
++struct AndroidModel {
++  const char* key;
++  const char* ua_name;
++};
++
++constexpr AndroidModel kAndroidModels[] = {
++  { "pixel9pro",  "Pixel 9 Pro"  },
++  { "pixel9",     "Pixel 9"      },
++  { "pixel8pro",  "Pixel 8 Pro"  },
++  { "pixel8",     "Pixel 8"      },
++  { "pixel7pro",  "Pixel 7 Pro"  },
++  { "pixel7",     "Pixel 7"      },
++  { "pixel6",     "Pixel 6"      },
++  { "s24ultra",   "SM-S928B"     },
++  { "s24",        "SM-S921B"     },
++  { "s23",        "SM-S911B"     },
++  { "s22",        "SM-S901B"     },
++  { "a54",        "SM-A546B"     },
++};
++
 +}  // namespace fingerprint
 +}  // namespace ungoogled
 +
 +#endif  // COMPONENTS_UNGOOGLED_FINGERPRINT_DATA_H_
 \ No newline at end of file
+diff --git a/components/ungoogled/fingerprint_mobile.h b/components/ungoogled/fingerprint_mobile.h
+new file mode 100644
+index 0000000000..9298a8d221
+--- /dev/null
++++ b/components/ungoogled/fingerprint_mobile.h
+@@ -0,0 +1,80 @@
++// fingerprint_mobile.h
++//
++// Shared Android profile resolver used by both user_agent_utils.cc and
++// user_agent_metadata.cc. Header-only so both TUs get the same definition
++// without a new link dependency.
++
++#pragma once
++
++#include <string>
++
++#include "base/command_line.h"
++#include "base/strings/string_util.h"
++#include "components/ungoogled/fingerprint_data.h"
++#include "components/ungoogled/ungoogled_switches.h"
++
++namespace fingerprint_mobile {
++
++struct AndroidProfile {
++  std::string android_version;  // e.g. "14"     — UA string token
++  std::string ch_version;       // e.g. "14.0.0" — Sec-CH-UA-Platform-Version
++  std::string model_ua;         // e.g. "Pixel 8" — UA string model token
++};
++
++// Resolves Android version and device model from --fingerprint-platform value
++// plus the optional --fingerprint-mobile-model override.
++//
++// platform_value must already be lowercased by the caller.
++//
++// Version parsing examples:
++//   "android"    -> kAndroidDefaultMajor (14)
++//   "android14"  -> 14
++//   "android13"  -> 13
++//   "android 15" -> 15  (space between token and number is fine)
++//
++// Model key normalization (--fingerprint-mobile-model):
++//   "pixel8pro", "pixel 8 pro", "pixel-8-pro" all resolve to key "pixel8pro".
++//   Unknown keys fall back silently to the version default model.
++inline AndroidProfile ResolveAndroidProfile(const std::string& platform_value) {
++  using namespace ungoogled::fingerprint;
++
++  // --- resolve version ---
++  int requested_major = kAndroidDefaultMajor;
++  for (const auto& av : kAndroidVersions) {
++    if (platform_value.find(std::to_string(av.major)) != std::string::npos) {
++      requested_major = av.major;
++      break;
++    }
++  }
++
++  const AndroidVersionEntry* ver = nullptr;
++  for (const auto& av : kAndroidVersions) {
++    if (av.major == requested_major) {
++      ver = &av;
++      break;
++    }
++  }
++  // kAndroidVersions always contains kAndroidDefaultMajor so ver is never null,
++  // but guard anyway to keep static analysis happy.
++  if (!ver) ver = &kAndroidVersions[1];  // Android 14
++
++  // --- resolve model ---
++  std::string model_ua = ver->default_model_ua;
++
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprintMobileModel)) {
++    std::string raw = base::ToLowerASCII(
++        cmd->GetSwitchValueASCII(switches::kFingerprintMobileModel));
++    // Normalize: drop spaces and dashes so "pixel 8 pro" == "pixel-8-pro" == "pixel8pro"
++    std::string key;
++    for (char c : raw)
++      if (c != ' ' && c != '-') key += c;
++    for (const auto& m : kAndroidModels) {
++      if (key == m.key) { model_ua = m.ua_name; break; }
++    }
++  }
++
++  return { ver->ua_version, ver->ch_version, model_ua };
++}
++
++}  // namespace fingerprint_mobile
+\ No newline at end of file
 diff --git a/content/browser/client_hints/client_hints.cc b/content/browser/client_hints/client_hints.cc
-index 8246d97469..c646435568 100644
+index 8246d97469..2c312cb755 100644
 --- a/content/browser/client_hints/client_hints.cc
 +++ b/content/browser/client_hints/client_hints.cc
 @@ -710,6 +710,8 @@ void UpdateNavigationRequestClientUaHeadersImpl(
@@ -191,21 +386,55 @@ index 8246d97469..c646435568 100644
        ua_metadata = delegate->GetUserAgentMetadata();
  
 +    UpdateUserAgentMetadataFingerprint(&ua_metadata.value());
-+    
++
      // The `Sec-CH-UA` client hint is attached to all outgoing requests. This is
      // (intentionally) different than other client hints.
      // It's barred behind ShouldAddClientHints to make sure it's controlled by
+diff --git a/content/browser/web_contents/slow_web_preference_cache.cc b/content/browser/web_contents/slow_web_preference_cache.cc
+index ff82883826..c914acd5e7 100644
+--- a/content/browser/web_contents/slow_web_preference_cache.cc
++++ b/content/browser/web_contents/slow_web_preference_cache.cc
+@@ -3,7 +3,8 @@
+ // found in the LICENSE file.
+ 
+ #include "content/browser/web_contents/slow_web_preference_cache.h"
+-
++#include "components/ungoogled/ungoogled_switches.h"
++#include "base/strings/string_util.h"
+ #include "base/command_line.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/no_destructor.h"
+@@ -176,6 +177,18 @@ bool SlowWebPreferenceCache::Update() {
+              touch_enabled_switch ==
+                  switches::kTouchEventFeatureDetectionEnabled);
+ 
++  // Android spoofing — force touch event detection enabled regardless of
++  // the --touch-events switch or real hardware presence.
++  {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (cmd->HasSwitch(ungoogled::switches::kFingerprintPlatform)) {
++      std::string pv = base::ToLowerASCII(
++          cmd->GetSwitchValueASCII(ungoogled::switches::kFingerprintPlatform));
++      if (pv.find("android") != std::string::npos)
++        touch_event_feature_detection_enabled_ = true;
++    }
++  }
++
+   std::tie(available_pointer_types_, available_hover_types_) =
+       GetAvailablePointerAndHoverTypes();
+   primary_pointer_type_ =
 diff --git a/third_party/blink/common/user_agent/user_agent_metadata.cc b/third_party/blink/common/user_agent/user_agent_metadata.cc
-index 4eab85a17e..1b62289065 100644
+index 4eab85a17e..e929d1fece 100644
 --- a/third_party/blink/common/user_agent/user_agent_metadata.cc
 +++ b/third_party/blink/common/user_agent/user_agent_metadata.cc
-@@ -6,6 +6,14 @@
+@@ -6,6 +6,15 @@
  
  #include <algorithm>
  
 +#include "base/command_line.h"
 +#include "base/strings/string_number_conversions.h"
 +#include "base/strings/string_util.h"
++#include "components/ungoogled/fingerprint_mobile.h"
 +#include "components/ungoogled/fingerprint_data.h"
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include <array>
@@ -214,7 +443,7 @@ index 4eab85a17e..1b62289065 100644
  #include "base/containers/span.h"
  #include "base/pickle.h"
  #include "net/http/structured_headers.h"
-@@ -24,6 +32,74 @@ constexpr std::string_view kValidFormFactors[] = {
+@@ -24,6 +33,74 @@ constexpr std::string_view kValidFormFactors[] = {
      blink::kXRFormFactor,      blink::kEInkFormFactor,
      blink::kWatchFormFactor};
  
@@ -289,7 +518,7 @@ index 4eab85a17e..1b62289065 100644
  }  // namespace
  
  UserAgentBrandVersion::UserAgentBrandVersion(const std::string& ua_brand,
-@@ -232,4 +308,216 @@ bool operator==(const UserAgentOverride& a, const UserAgentOverride& b) {
+@@ -232,4 +309,277 @@ bool operator==(const UserAgentOverride& a, const UserAgentOverride& b) {
           a.ua_metadata_override == b.ua_metadata_override;
  }
  
@@ -403,6 +632,56 @@ index 4eab85a17e..1b62289065 100644
 +  return "";
 +}
 +
++struct AndroidProfile {
++  std::string android_version;   // "14"
++  std::string ch_version;        // "14.0.0"
++  std::string model_ua;          // "Pixel 8"
++};
++
++static AndroidProfile ResolveAndroidProfile(const std::string& platform_value) {
++  using namespace ungoogled::fingerprint;
++
++  // Parse major version from platform string e.g. "android14", "android 14"
++  int requested_major = kAndroidDefaultMajor;
++  for (int v : {15, 14, 13, 12}) {
++    if (platform_value.find(std::to_string(v)) != std::string::npos) {
++      requested_major = v;
++      break;
++    }
++  }
++
++  // Find matching version entry
++  const AndroidVersionEntry* ver = &kAndroidVersions[1];// default = 14
++  for (const auto& av : kAndroidVersions) {
++    if (av.major == requested_major) {
++      ver = &av;
++      break;
++    }
++  }
++
++  // Resolve model
++  std::string model_ua = ver->default_model_ua;
++
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprintMobileModel)) {
++    std::string model_key = base::ToLowerASCII(
++        cmd->GetSwitchValueASCII(switches::kFingerprintMobileModel));
++    // Strip spaces/dashes for normalization
++    std::string normalized;
++    for (char c : model_key)
++      if (c != ' ' && c != '-') normalized += c;
++
++    for (const auto& m : kAndroidModels) {
++      if (normalized == m.key) {
++        model_ua = m.ua_name;
++        break;
++      }
++    }
++  }
++
++  return { ver->ua_version, ver->ch_version, model_ua };
++}
++
 +// Updates UserAgentMetadata fields based on --fingerprint-* switches.
 +// Called from multiple CH injection sites to keep them all consistent.
 +void UpdateUserAgentMetadataFingerprint(blink::UserAgentMetadata* metadata) {
@@ -475,6 +754,17 @@ index 4eab85a17e..1b62289065 100644
 +      metadata->platform = kLinuxPlatform;
 +      metadata->platform_version = GetPlatformVersion("linux");
 +      metadata->architecture = kX86Architecture;
++    } else if (platform_value.find("android") != std::string::npos) {
++      fingerprint_mobile::AndroidProfile p =
++          fingerprint_mobile::ResolveAndroidProfile(platform_value);
++      metadata->platform = ungoogled::fingerprint::kAndroidPlatform;
++      metadata->platform_version = p.ch_version;
++      metadata->architecture = "";
++      metadata->bitness = "";
++      metadata->mobile = true;
++      metadata->model = p.model_ua;  // Sec-CH-UA-Model: "Pixel 8"
++      metadata->form_factors = {blink::kMobileFormFactor};
++      // model token lives in the UA string only, not in any CH field
 +    }
 +  }
 +}
@@ -522,7 +812,7 @@ index fda7b49c11..abc41127f0 100644
  
  #endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_USER_AGENT_USER_AGENT_METADATA_H_
 diff --git a/third_party/blink/renderer/core/execution_context/navigator_base.cc b/third_party/blink/renderer/core/execution_context/navigator_base.cc
-index cccfafe8f9..c74096b668 100644
+index cccfafe8f9..e927c3f680 100644
 --- a/third_party/blink/renderer/core/execution_context/navigator_base.cc
 +++ b/third_party/blink/renderer/core/execution_context/navigator_base.cc
 @@ -4,6 +4,10 @@
@@ -536,7 +826,7 @@ index cccfafe8f9..c74096b668 100644
  #include "base/feature_list.h"
  #include "build/build_config.h"
  #include "third_party/blink/public/common/features.h"
-@@ -24,6 +28,26 @@ namespace blink {
+@@ -24,6 +28,32 @@ namespace blink {
  namespace {
  
  String GetReducedNavigatorPlatform() {
@@ -547,6 +837,12 @@ index cccfafe8f9..c74096b668 100644
 +
 +  if (custom_platform.find("win") != std::string::npos)
 +      return "Win32";
++  // Android Chrome always reports "Linux armv8l" for navigator.platform.
++  // This check must come before the generic "linux" branch below, because
++  // the Android platform string also contains "Linux" and would otherwise
++  // match that branch first.
++  if (custom_platform.find("android") != std::string::npos)
++      return "Linux armv8l";
 +  if (custom_platform.find("linux") != std::string::npos ||
 +        custom_platform.find("x11") != std::string::npos ||
 +        custom_platform.find("ubuntu") != std::string::npos ||
@@ -564,7 +860,7 @@ index cccfafe8f9..c74096b668 100644
    return "Linux armv81";
  #elif BUILDFLAG(IS_MAC)
 diff --git a/third_party/blink/renderer/core/frame/navigator.cc b/third_party/blink/renderer/core/frame/navigator.cc
-index 583f05f8dd..ecc5232642 100644
+index 583f05f8dd..2cde77aca1 100644
 --- a/third_party/blink/renderer/core/frame/navigator.cc
 +++ b/third_party/blink/renderer/core/frame/navigator.cc
 @@ -23,6 +23,10 @@
@@ -578,7 +874,7 @@ index 583f05f8dd..ecc5232642 100644
  #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
  #include "third_party/blink/renderer/core/dom/document.h"
  #include "third_party/blink/renderer/core/execution_context/navigator_base.h"
-@@ -56,6 +60,25 @@ String Navigator::vendorSub() const {
+@@ -56,6 +60,31 @@ String Navigator::vendorSub() const {
  }
  
  String Navigator::platform() const {
@@ -589,6 +885,12 @@ index 583f05f8dd..ecc5232642 100644
 +
 +    if (custom_platform.find("win") != std::string::npos)
 +      return "Win32";
++    // Android Chrome always reports "Linux armv8l" for navigator.platform.
++    // This check must come before the generic "linux" branch below, because
++    // the Android platform string also contains "Linux" and would otherwise
++    // match that branch first.
++    if (custom_platform.find("android") != std::string::npos)
++      return "Linux armv8l";
 +    if (custom_platform.find("linux") != std::string::npos ||
 +        custom_platform.find("x11") != std::string::npos ||
 +        custom_platform.find("ubuntu") != std::string::npos ||
@@ -640,3 +942,54 @@ index aa899b08d2..4ec1556532 100644
      // ShouldSendClientHint is called to make sure UA is controlled by
      // Permissions Policy.
      if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
+diff --git a/ui/base/pointer/pointer_device_linux.cc b/ui/base/pointer/pointer_device_linux.cc
+index 5c9bf105bb..f71382a247 100644
+--- a/ui/base/pointer/pointer_device_linux.cc
++++ b/ui/base/pointer/pointer_device_linux.cc
+@@ -3,7 +3,9 @@
+ // found in the LICENSE file.
+ 
+ #include "ui/base/pointer/pointer_device.h"
+-
++#include "base/command_line.h"
++#include "base/strings/string_util.h"
++#include "components/ungoogled/ungoogled_switches.h"
+ #include <algorithm>
+ #include <functional>
+ #include <utility>
+@@ -31,6 +33,17 @@ bool IsMouseOrTouchpadPresent() {
+ }  // namespace
+ 
+ std::pair<int, int> GetAvailablePointerAndHoverTypesImpl() {
++  // Android spoofing — coarse pointer (touch), no hover.
++  {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (cmd->HasSwitch(switches::kFingerprintPlatform)) {
++      std::string pv = base::ToLowerASCII(
++          cmd->GetSwitchValueASCII(switches::kFingerprintPlatform));
++      if (pv.find("android") != std::string::npos)
++        return {POINTER_TYPE_COARSE, HOVER_TYPE_NONE};
++    }
++  }
++
+   int pointer_types = IsTouchDevicePresent() ? POINTER_TYPE_COARSE : 0;
+   int hover_types = HOVER_TYPE_NONE;
+   if (IsMouseOrTouchpadPresent()) {
+@@ -51,6 +64,17 @@ TouchScreensAvailability GetTouchScreensAvailability() {
+ }
+ 
+ int MaxTouchPoints() {
++  // Android spoofing — return 5 touch points to match real Android Chrome.
++  {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (cmd->HasSwitch(switches::kFingerprintPlatform)) {
++      std::string pv = base::ToLowerASCII(
++          cmd->GetSwitchValueASCII(switches::kFingerprintPlatform));
++      if (pv.find("android") != std::string::npos)
++        return 5;
++    }
++  }
++
+   const std::vector<TouchscreenDevice>& touchscreen_devices =
+       DeviceDataManager::GetInstance()->GetTouchscreenDevices();
+   const auto& it = std::ranges::max_element(touchscreen_devices, {},
