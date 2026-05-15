@@ -197,18 +197,18 @@ index 0000000000..b28ea0fb5e
 +// =============================================================================
 +
 +// Chromium version list (for seed-based selection)
-+constexpr const char* kChromiumVersions = "147.0.7727.111";
++constexpr const char* kChromiumVersions = "148.0.7778.167";
 +
 +// Default versions for Client Hints (Sec-CH-UA)
-+constexpr const char* kChromeDefaultVersion = "147.0.7727.111";
-+constexpr const char* kEdgeDefaultVersion = "147.0.3912.51";
-+constexpr const char* kOperaDefaultVersion = "128.0.5807.52";
-+constexpr const char* kVivaldiDefaultVersion = "7.9.3970.39";
++constexpr const char* kChromeDefaultVersion = "148.0.7778.167";
++constexpr const char* kEdgeDefaultVersion = "148.0.4029.74";
++constexpr const char* kOperaDefaultVersion = "131.0.5877.55";
++constexpr const char* kVivaldiDefaultVersion = "7.9.3970.64";
 +
 +// Default versions for User-Agent string suffix
-+constexpr const char* kEdgeUAVersion = "147.0.0.0";
-+constexpr const char* kOperaUAVersion = "128.0.0.0";
-+constexpr const char* kVivaldiUAVersion = "7.9.3970.39";
++constexpr const char* kEdgeUAVersion = "148.0.0.0";
++constexpr const char* kOperaUAVersion = "131.0.0.0";
++constexpr const char* kVivaldiUAVersion = "7.9.3970.64";
 +
 +// User-Agent string suffixes
 +constexpr const char* kEdgeUASuffix = " Edg/";
