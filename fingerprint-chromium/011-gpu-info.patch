@@ -1,11 +1,200 @@
+diff --git a/003.patch b/003.patch
+deleted file mode 100644
+index c5c5123cab..0000000000
+--- a/003.patch
++++ /dev/null
+@@ -1,181 +0,0 @@
+-diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+-index 626582e39b..6f4b672b88 100644
+---- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+-+++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
+-@@ -25,6 +25,11 @@
+- 
+- #include "third_party/blink/renderer/modules/webaudio/offline_audio_context.h"
+- 
+-+#include <cmath>
+-+#include "base/command_line.h"
+-+#include "components/ungoogled/ungoogled_switches.h"
+-+#include "components/ungoogled/fingerprint_collector.h"
+-+
+- #include "base/metrics/histogram_functions.h"
+- #include "base/metrics/histogram_macros.h"
+- #include "media/base/audio_glitch_info.h"
+-@@ -180,6 +185,22 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
+-   destination_node_ = OfflineAudioDestinationNode::Create(
+-       this, number_of_channels, number_of_frames, sample_rate);
+-   Initialize();
+-+
+-+  // Collect mode: log constructor params as the recipe.
+-+  // numberOfChannels + numberOfFrames + sampleRate uniquely identify the
+-+  // audio fingerprint test — the DSP graph is always the same per site
+-+  // so these params are sufficient as the hash key.
+-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+-+          switches::kFingerprintCollect)) {
+-+    fingerprint_collector::SetCurrentSite(
+-+        window->Url().GetString().Utf8());
+-+    fingerprint_collector::LogCanvasInput(
+-+        "OfflineAudioContext", "",
+-+        static_cast<double>(number_of_channels),
+-+        static_cast<double>(number_of_frames),
+-+        std::to_string(sample_rate),
+-+        0, 0);
+-+  }
+- }
+- 
+- OfflineAudioContext::~OfflineAudioContext() {
+-@@ -419,6 +440,64 @@ void OfflineAudioContext::FireCompletionEvent() {
+-       return;
+-     }
+- 
+-+    const base::CommandLine* command_line =
+-+        base::CommandLine::ForCurrentProcess();
+-+
+-+    // Replay mode: substitute stored float32 buffer for the real rendered output.
+-+    // Path: {replay_db}/audio/{os}/{site}/{hash}_audio.bin
+-+    // .bin format: raw float32 LE, all channels concatenated:
+-+    //   [ch0_s0, ch0_s1, ..., ch0_sN, ch1_s0, ..., ch1_sN, ...]
+-+    if (command_line->HasSwitch(switches::kFingerprintReplay)) {
+-+      fingerprint_collector::SetCurrentSite(
+-+          GetExecutionContext()->Url().GetString().Utf8());
+-+      std::vector<uint8_t> bytes =
+-+          fingerprint_collector::ReplayAudioOutput();
+-+      if (!bytes.empty()) {
+-+        size_t expected =
+-+            static_cast<size_t>(rendered_buffer->numberOfChannels()) *
+-+            static_cast<size_t>(rendered_buffer->length()) *
+-+            sizeof(float);
+-+        if (bytes.size() == expected) {
+-+          const float* src =
+-+              reinterpret_cast<const float*>(bytes.data());
+-+          for (unsigned ch = 0;
+-+               ch < rendered_buffer->numberOfChannels(); ++ch) {
+-+            NotShared<DOMFloat32Array> array =
+-+                rendered_buffer->getChannelData(ch);
+-+            float* dst = array->Data();
+-+            size_t len = array->length();
+-+            memcpy(dst, src + ch * len, len * sizeof(float));
+-+          }
+-+        } else {
+-+          fprintf(stderr,
+-+                  "[FP-REPLAY] audio size mismatch: got %zu expected %zu\n",
+-+                  bytes.size(), expected);
+-+        }
+-+      }
+-+      // Fall through to fire completion event with whatever buffer we have.
+-+    }
+-+
+-+    // Collect mode: flush recipe JSON + save raw float32 .bin.
+-+    // Flushed here (not in constructor) so the hash covers the full
+-+    // context params — consistent with canvas flush-at-output pattern.
+-+    if (command_line->HasSwitch(switches::kFingerprintCollect)) {
+-+      size_t total_floats =
+-+          static_cast<size_t>(rendered_buffer->numberOfChannels()) *
+-+          static_cast<size_t>(rendered_buffer->length());
+-+      std::vector<float> audio_data;
+-+      audio_data.reserve(total_floats);
+-+      for (unsigned ch = 0;
+-+           ch < rendered_buffer->numberOfChannels(); ++ch) {
+-+        NotShared<DOMFloat32Array> array =
+-+            rendered_buffer->getChannelData(ch);
+-+        const float* src = array->Data();
+-+        audio_data.insert(audio_data.end(), src, src + array->length());
+-+      }
+-+      fingerprint_collector::FlushAudioIfNew(
+-+          reinterpret_cast<const uint8_t*>(audio_data.data()),
+-+          audio_data.size() * sizeof(float));
+-+    }
+-+
+-     // Call the offline rendering completion event listener and resolve the
+-     // promise too.
+-     DispatchEvent(*OfflineAudioCompletionEvent::Create(rendered_buffer));
+-diff --git a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc b/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
+-index 4ff2fecc93..3138416b18 100644
+---- a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
+-+++ b/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
+-@@ -31,6 +31,10 @@
+- #include <bit>
+- #include <complex>
+- 
+-+#include "base/command_line.h"
+-+#include "components/ungoogled/ungoogled_switches.h"
+-+#include "components/ungoogled/fingerprint_collector.h"
+-+
+- #include "base/compiler_specific.h"
+- #include "media/base/audio_bus.h"
+- #include "third_party/blink/renderer/platform/audio/audio_bus.h"
+-@@ -109,6 +113,30 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
+-     DoFFTAnalysis();
+-   }
+- 
+-+  {
+-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+-+
+-+    // Collect: log fftSize as the recipe identifier for frequency data.
+-+    if (cmd->HasSwitch(switches::kFingerprintCollect)) {
+-+      fingerprint_collector::LogCanvasInput(
+-+          "AnalyserGetFloatFrequencyData", "",
+-+          static_cast<double>(fft_size_), 0.0,
+-+          "", 0, 0);
+-+    }
+-+
+-+    // Replay: substitute stored frequency bin data.
+-+    // .bin format: raw float32 LE, length = (fftSize / 2) floats (freq bins)
+-+    if (cmd->HasSwitch(switches::kFingerprintReplay)) {
+-+      std::vector<uint8_t> bytes =
+-+          fingerprint_collector::ReplayAudioOutput();
+-+      if (!bytes.empty() &&
+-+          bytes.size() == destination_array->length() * sizeof(float)) {
+-+        memcpy(destination_array->Data(), bytes.data(), bytes.size());
+-+        return;
+-+      }
+-+    }
+-+  }
+-+
+-   // Convert from linear magnitude to floating-point decibels.
+-   const size_t source_length = magnitude_buffer_.size();
+-   const size_t len = std::min(source_length, destination_array->length());
+-@@ -177,6 +205,30 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
+- 
+-     const unsigned write_index = GetWriteIndex();
+- 
+-+    {
+-+      const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+-+
+-+      // Collect: log fftSize as the recipe identifier for time domain data.
+-+      if (cmd->HasSwitch(switches::kFingerprintCollect)) {
+-+        fingerprint_collector::LogCanvasInput(
+-+            "AnalyserGetFloatTimeDomainData", "",
+-+            static_cast<double>(fft_size_), 0.0,
+-+            "", 0, 0);
+-+      }
+-+
+-+      // Replay: substitute stored time domain data.
+-+      // .bin format: raw float32 LE, length = fftSize floats (time samples)
+-+      if (cmd->HasSwitch(switches::kFingerprintReplay)) {
+-+        std::vector<uint8_t> bytes =
+-+            fingerprint_collector::ReplayAudioOutput();
+-+        if (!bytes.empty() &&
+-+            bytes.size() == destination_array->length() * sizeof(float)) {
+-+          memcpy(destination_array->Data(), bytes.data(), bytes.size());
+-+          return;
+-+        }
+-+      }
+-+    }
+-+
+-     base::span<float> destination = destination_array->AsSpan();
+-     for (unsigned i = 0; i < len; ++i) {
+-       // Buffer access is protected due to modulo operation.
 diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
-index 0fbf669ac3..0037a13bba 100644
+index b28ea0fb5e..ddc1b22f78 100644
 --- a/components/ungoogled/fingerprint_data.h
 +++ b/components/ungoogled/fingerprint_data.h
-@@ -67,6 +67,214 @@ constexpr const char* kMacOSVersions[] = {
- constexpr const char* kX86Architecture = "x86";
- constexpr const char* kArmArchitecture = "arm";
+@@ -112,6 +112,216 @@ constexpr AndroidModel kAndroidModels[] = {
+   { "a54",        "SM-A546B"     },
+ };
  
++
++
 +// =============================================================================
 +// GPU Constants
 +// =============================================================================
@@ -218,7 +407,7 @@ index 0fbf669ac3..0037a13bba 100644
  }  // namespace ungoogled
  
 diff --git a/third_party/blink/renderer/modules/webgl/BUILD.gn b/third_party/blink/renderer/modules/webgl/BUILD.gn
-index d611207944..6dfe877682 100644
+index 7873c1698d..133df64555 100644
 --- a/third_party/blink/renderer/modules/webgl/BUILD.gn
 +++ b/third_party/blink/renderer/modules/webgl/BUILD.gn
 @@ -48,6 +48,10 @@ blink_modules_sources("webgl") {
@@ -234,7 +423,7 @@ index d611207944..6dfe877682 100644
      "nv_shader_noperspective_interpolation.cc",
 diff --git a/third_party/blink/renderer/modules/webgl/gpu_fingerprint.cc b/third_party/blink/renderer/modules/webgl/gpu_fingerprint.cc
 new file mode 100644
-index 0000000000..5c3e2f3089
+index 0000000000..a31869021a
 --- /dev/null
 +++ b/third_party/blink/renderer/modules/webgl/gpu_fingerprint.cc
 @@ -0,0 +1,200 @@
