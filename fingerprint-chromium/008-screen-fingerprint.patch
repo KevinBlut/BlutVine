@@ -1,16 +1,17 @@
 diff --git a/components/ungoogled/BUILD.gn b/components/ungoogled/BUILD.gn
-index 5d330670e9..9ac48e164a 100644
+index 54f54ad017..eb72b607f8 100644
 --- a/components/ungoogled/BUILD.gn
 +++ b/components/ungoogled/BUILD.gn
-@@ -5,11 +5,13 @@
+@@ -5,6 +5,8 @@
  component("ungoogled_switches") {
    sources = [
      "fingerprint_data.h",
 +    "fingerprint_screen.cc",
 +    "fingerprint_screen.h",
+     "fingerprint_mobile.h",
      "ungoogled_switches.h",
      "ungoogled_switches.cc",
-   ]
+@@ -12,5 +14,5 @@ component("ungoogled_switches") {
  
    defines = [ "IS_UNGOOGLED_IMPL" ]
  
@@ -20,10 +21,10 @@ index 5d330670e9..9ac48e164a 100644
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_screen.cc b/components/ungoogled/fingerprint_screen.cc
 new file mode 100644
-index 0000000000..dfebc8adb0
+index 0000000000..6c297c731b
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_screen.cc
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,207 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -32,7 +33,7 @@ index 0000000000..dfebc8adb0
 +
 +#include <array>
 +#include <cstddef>
-+
++#include "base/strings/string_util.h"
 +#include "base/command_line.h"
 +#include "base/hash/hash.h"
 +#include "base/strings/string_number_conversions.h"
@@ -43,6 +44,48 @@ index 0000000000..dfebc8adb0
 +#include "ui/gfx/geometry/size.h"
 +
 +namespace ungoogled {
++
++// ---------------------------------------------------------------------------
++// Android helpers
++// ---------------------------------------------------------------------------
++
++static bool IsAndroidPlatform() {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (!cmd->HasSwitch(switches::kFingerprintPlatform)) return false;
++  std::string pv = base::ToLowerASCII(
++      cmd->GetSwitchValueASCII(switches::kFingerprintPlatform));
++  return pv.find("android") != std::string::npos;
++}
++
++// Returns the AndroidModel entry matching --fingerprint-mobile-model,
++// or the default (pixel8) if the switch is absent or the key is unknown.
++static const fingerprint::AndroidModel* GetAndroidModelEntry() {
++  using namespace fingerprint;
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++
++  std::string key = "pixel8";  // default
++  if (cmd->HasSwitch(switches::kFingerprintMobileModel)) {
++    std::string raw = base::ToLowerASCII(
++        cmd->GetSwitchValueASCII(switches::kFingerprintMobileModel));
++    // Normalize: strip spaces and dashes
++    std::string normalized;
++    for (char c : raw)
++      if (c != ' ' && c != '-') normalized += c;
++    if (!normalized.empty()) key = normalized;
++  }
++
++  for (const auto& m : kAndroidModels) {
++    if (key == m.key) return &m;
++  }
++
++  // Fallback: pixel8
++  for (const auto& m : kAndroidModels) {
++    if (std::string("pixel8") == m.key) return &m;
++  }
++  return &kAndroidModels[0];
++}
++
++// ---------------------------------------------------------------------------
 +
 +bool IsFingerprintScreenSpoofingEnabled() {
 +  return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -70,6 +113,10 @@ index 0000000000..dfebc8adb0
 +    }
 +  }
 +
++  // Android: use model DPR
++  if (IsAndroidPlatform())
++    return GetAndroidModelEntry()->dpr;
++
 +  // Seed-based fallback: 80% -> 1.0, 10% -> 1.25, 5% -> 1.5, 5% -> 2.0
 +  const uint32_t r = (GetFingerprintSeed() >> 8) % 100;
 +  if (r < 80) return 1.0f;
@@ -81,6 +128,28 @@ index 0000000000..dfebc8adb0
 +display::ScreenInfo GetSpoofedScreenInfo() {
 +  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +  const uint32_t seed = GetFingerprintSeed();
++
++  // Android: use model-specific dimensions and portrait orientation
++  if (IsAndroidPlatform()) {
++    const auto* m = GetAndroidModelEntry();
++    display::ScreenInfo info;
++    info.rect                = gfx::Rect(0, 0, m->screen_width, m->screen_height);
++    // availHeight excludes the Android nav bar
++    info.available_rect      = gfx::Rect(0, 0, m->screen_width,
++                                         m->screen_height - m->nav_bar_height);
++    info.device_scale_factor = m->dpr;
++    info.depth               = 24;
++    info.depth_per_component = 8;
++    info.is_monochrome       = false;
++    info.orientation_angle   = 0;
++    info.orientation_type    =
++        display::mojom::ScreenOrientation::kPortraitPrimary;
++    info.display_id          = static_cast<int64_t>(seed & 0x7FFFFFFF);
++    info.is_extended         = false;
++    info.is_primary          = true;
++    info.is_internal         = true;  // mobile display is always internal
++    return info;
++  }
 +
 +  int width = 0, height = 0, avail_width = 0, avail_height = 0;
 +
@@ -137,20 +206,39 @@ index 0000000000..dfebc8adb0
 +
 +gfx::Rect GetSpoofedWindowRect() {
 +  const display::ScreenInfo info = GetSpoofedScreenInfo();
++
++  // Android: outerWidth/Height == full screen dimensions (no window chrome)
++  if (IsAndroidPlatform()) {
++    return gfx::Rect(0, 0, info.rect.width(), info.rect.height());
++  }
++
 +  // Outer window includes decorations: subtract typical border + title/taskbar.
 +  const int width  = info.rect.width()  - 16;
 +  const int height = info.rect.height() - 80;
 +  return gfx::Rect(0, 0, width, height);
 +}
 +
++int GetSpoofedInnerHeight() {
++  // Android: subtract status bar + address bar + nav bar
++  if (IsAndroidPlatform()) {
++    const auto* m = GetAndroidModelEntry();
++    return m->screen_height
++           - m->status_bar_height
++           - m->address_bar_height
++           - m->nav_bar_height;
++  }
++  // Desktop: fixed estimate
++  return GetSpoofedWindowRect().height() - 85;
++}
++
 +}  // namespace ungoogled
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_screen.h b/components/ungoogled/fingerprint_screen.h
 new file mode 100644
-index 0000000000..f5ccc0d32b
+index 0000000000..a59898b238
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_screen.h
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,33 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -176,6 +264,11 @@ index 0000000000..f5ccc0d32b
 +// Returns the spoofed outer window rect (for outerWidth/Height, screenX/Y).
 +COMPONENT_EXPORT(UNGOOGLED) gfx::Rect GetSpoofedWindowRect();
 +
++// Returns the spoofed innerHeight accounting for browser chrome bars.
++// For Android: subtracts nav bar + status bar + address bar.
++// For desktop: subtracts a fixed 85px estimate.
++COMPONENT_EXPORT(UNGOOGLED) int GetSpoofedInnerHeight();
++
 +}  // namespace ungoogled
 +
 +#endif  // COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
@@ -193,7 +286,7 @@ index 942455c9b6..961e36b4f0 100644
      "+components/viz/common/navigation_id.h",
      "+gpu/config/gpu_feature_info.h",
 diff --git a/third_party/blink/renderer/core/frame/local_dom_window.cc b/third_party/blink/renderer/core/frame/local_dom_window.cc
-index 06efc300ee..5dbbfbed65 100644
+index 06efc300ee..f3dd3b05f4 100644
 --- a/third_party/blink/renderer/core/frame/local_dom_window.cc
 +++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
 @@ -30,6 +30,8 @@
@@ -232,7 +325,7 @@ index 06efc300ee..5dbbfbed65 100644
      return 0;
  
 +  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
-+    return ungoogled::GetSpoofedWindowRect().height() - 85;
++    return ungoogled::GetSpoofedInnerHeight();
 +
    return AdjustForAbsoluteZoom::AdjustInt(GetViewportSize().height(),
                                            GetFrame()->LayoutZoomFactor());
