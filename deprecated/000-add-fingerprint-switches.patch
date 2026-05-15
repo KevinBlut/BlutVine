@@ -1,0 +1,175 @@
+diff --git a/components/ungoogled/ungoogled_switches.cc b/components/ungoogled/ungoogled_switches.cc
+index 15e63407e1..c5180e61f3 100644
+--- a/components/ungoogled/ungoogled_switches.cc
++++ b/components/ungoogled/ungoogled_switches.cc
+@@ -15,4 +15,91 @@ const char kFingerprintingCanvasMeasureTextNoise[] = "fingerprinting-canvas-meas
+ // Enable fingerprinting deception for Canvas image data
+ const char kFingerprintingCanvasImageDataNoise[] = "fingerprinting-canvas-image-data-noise";
+ 
++// Specify the fingerprint seed
++const char kFingerprint[] = "fingerprint";
++
++// Specify the browser brand
++const char kFingerprintBrand[] = "fingerprint-brand";
++
++// Specify if fingerprint GPU or not (DISABLED)
++const char kDisableGpuFingerprint[] = "disable-gpu-fingerprint";
++
++
++
++
++// Specify screen width
++const char kFingerprintScreenWidth[] = "fingerprint-screen-width";
++
++// Specify screen height
++const char kFingerprintScreenHeight[] = "fingerprint-screen-height";
++
++// Specify available screen width (excludes taskbar)
++const char kFingerprintScreenAvailWidth[] = "fingerprint-screen-avail-width";
++
++// Specify available screen height (excludes taskbar)
++const char kFingerprintScreenAvailHeight[] = "fingerprint-screen-avail-height";
++
++// Specify device pixel ratio
++const char kFingerprintScreenDevicePixelRatio[] = "fingerprint-screen-device-pixel-ratio";
++
++
++
++
++// Specify what API was called (canvas, webgl) and capture the fingerprint test
++const char kFingerprintCollect[] = "fingerprint-collect";
++const char kFingerprintCollectorScript[] = "fingerprint-collector-script";
++
++// Specify the database's path
++const char kFingerprintDatabase[] = "fingerprint-database";
++
++// Specify the replay of which fingerprint test if matched the database
++const char kFingerprintReplay[] = "fingerprint-replay";
++
++
++
++
++// Specify the GPU VENDOR (explicit override, takes priority over gpu-model) (DISABLED)
++const char kFingerprintGpuVendor[] = "fingerprint-gpu-vendor";
++
++// Specify the GPU RENDERER (explicit override, takes priority over gpu-model) (DISABLED)
++const char kFingerprintGpuRenderer[] = "fingerprint-gpu-renderer";
++
++// Specify GPU model name for auto-derivation of vendor/renderer/limits
++// e.g. "RTX 3060", "GTX 1660 Ti", "RTX 4090"
++// The code will search kGpuModels[] for matching entries and pick one
++// deterministically using the fingerprint seed.
++const char kFingerprintGpuModel[] = "fingerprint-gpu-model";
++
++// Specify the GPU driver version
++const char kFingerprintGpuDriver[] = "fingerprint-gpu-driver";
++
++// If present, prefer laptop GPU variants when selecting from kGpuModels[].
++// If absent (default), prefer desktop GPU variants.
++const char kFingerprintLaptop[] = "fingerprint-laptop";
++
++// Specify the number of CPU cores
++const char kFingerprintHardwareConcurrency[] = "fingerprint-hardware-concurrency";
++
++// Specify the RAM GB
++const char kFingerprintDeviceMemory[] = "fingerprint-device-memory";
++
++// Specify the operating system type
++const char kFingerprintPlatform[] = "fingerprint-platform";
++
++// Specify the operating system version
++const char kFingerprintPlatformVersion[] = "fingerprint-platform-version";
++
++// Mobile device model for Android spoofing (e.g. "pixel8", "s24")
++// Optional — if absent, a default model is chosen based on Android version.
++const char kFingerprintMobileModel[] = "fingerprint-mobile-model";
++
++
++
++
++// Specify the location
++const char kFingerprintLocation[] = "fingerprint-location";
++
++// Specify the timezone
++const char kFingerprintTimezone[] = "timezone";
++
+ }  // namespace switches
+\ No newline at end of file
+diff --git a/components/ungoogled/ungoogled_switches.h b/components/ungoogled/ungoogled_switches.h
+index b7a6a75e04..b611ec0d5f 100644
+--- a/components/ungoogled/ungoogled_switches.h
++++ b/components/ungoogled/ungoogled_switches.h
+@@ -15,6 +15,34 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingClientRectsNoise[];
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingCanvasMeasureTextNoise[];
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingCanvasImageDataNoise[];
+ 
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprint[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintBrand[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kDisableGpuFingerprint[];
++
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintDatabase[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCollect[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCollectorScript[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintReplay[];
++
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenWidth[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenHeight[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenAvailWidth[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenAvailHeight[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenDevicePixelRatio[];
++
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuVendor[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuRenderer[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuModel[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuDriver[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintLaptop[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintHardwareConcurrency[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintDeviceMemory[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPlatform[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPlatformVersion[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintMobileModel[];
++
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintLocation[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintTimezone[];
+ }
+ 
+ #endif  // THIRD_PARTY_UNGOOGLED_FINGERPRINTING_SWITCHES_H_
+\ No newline at end of file
+diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
+index bd954af691..6dd56d8442 100644
+--- a/content/browser/renderer_host/render_process_host_impl.cc
++++ b/content/browser/renderer_host/render_process_host_impl.cc
+@@ -3741,6 +3741,33 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+       switches::kEnableWebGLDraftExtensions,
+       switches::kEnableWebGPUDeveloperFeatures,
+       switches::kFileUrlPathAlias,
++      switches::kFingerprintingClientRectsNoise,
++      switches::kFingerprintingCanvasMeasureTextNoise,
++      switches::kFingerprintingCanvasImageDataNoise,
++      switches::kFingerprint,
++      switches::kFingerprintBrand,
++      switches::kDisableGpuFingerprint,
++      switches::kFingerprintDatabase,
++      switches::kFingerprintScreenWidth,
++      switches::kFingerprintScreenHeight,
++      switches::kFingerprintScreenAvailWidth,
++      switches::kFingerprintScreenAvailHeight,
++      switches::kFingerprintScreenDevicePixelRatio,
++      switches::kFingerprintCollect,
++      switches::kFingerprintCollectorScript,
++      switches::kFingerprintReplay,
++      switches::kFingerprintGpuVendor,
++      switches::kFingerprintGpuRenderer,
++      switches::kFingerprintGpuModel,
++      switches::kFingerprintGpuDriver,
++      switches::kFingerprintLaptop,
++      switches::kFingerprintHardwareConcurrency,
++      switches::kFingerprintDeviceMemory,
++      switches::kFingerprintPlatform,
++      switches::kFingerprintPlatformVersion,
++      switches::kFingerprintMobileModel,
++      switches::kFingerprintLocation,
++      switches::kFingerprintTimezone,
+       switches::kForceDeviceScaleFactor,
+       switches::kForceDisplayColorProfile,
+       switches::kForceHighContrast,
