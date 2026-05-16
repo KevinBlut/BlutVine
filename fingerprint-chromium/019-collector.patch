@@ -197,7 +197,14 @@ index 0000000000..7c0e2231e7
 +}
 +
 +void SetCurrentSite(const std::string& url) {
-+    g_current_site = url;
++    // Normalize to origin (scheme + host + port) to ensure collect and replay
++    // hashes match regardless of path, query params, or session tokens.
++    // e.g. "https://example.com/test?session=abc" -> "https://example.com"
++    GURL gurl(url);
++    if (gurl.is_valid())
++        g_current_site = gurl.DeprecatedGetOriginAsURL().spec();
++    else
++        g_current_site = url;
 +}
 +
 +void ClearInputLog() {
