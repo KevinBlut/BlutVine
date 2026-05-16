@@ -26,7 +26,7 @@ index 0000000000..7c0e2231e7
 +++ b/components/ungoogled/fingerprint_collector.cc
 @@ -0,0 +1,180 @@
 +#include "components/ungoogled/fingerprint_collector.h"
-+
++#include "url/gurl.h"
 +#include <fstream>
 +#include <sstream>
 +#include <string>
