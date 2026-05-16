@@ -327,36 +327,29 @@ index 3006cad0fb..9944dc551a 100644
    DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
                     state.GetTextAlign(), state.GetTextBaseline(), 0,
                     text.length(), &max_width);
-@@ -1165,6 +1223,34 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
+@@ -1165,6 +1223,27 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
    TextDirection direction =
        ToTextDirection(state.GetDirection(), host, computed_style);
  
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+    fingerprint_collector::LogCanvasInput(
-+        "measureText",
-+        text.Utf8(),
-+        0.0, 0.0,
-+        font->GetFontDescription().Family().FamilyName().Utf8(),
-+        static_cast<int>(state.GetTextAlign()),
-+        static_cast<int>(state.GetTextBaseline()));
-+  }
-+
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-+          switches::kFingerprintReplay)) {
-+    fingerprint_collector::LogCanvasInput(
-+        "measureText",
-+        text.Utf8(),
-+        0.0, 0.0,
-+        font->GetFontDescription().Family().FamilyName().Utf8(),
-+        static_cast<int>(state.GetTextAlign()),
-+        static_cast<int>(state.GetTextBaseline()));
-+    TextMetrics* replayed =
-+        fingerprint_collector::ReplayMeasureText(
-+            font, direction, state.GetTextBaseline(),
-+            state.GetTextAlign(), text, host);
-+    if (replayed)
-+      return replayed;
-+    // Miss — fall through to real measurement below
++  {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (cmd->HasSwitch(switches::kFingerprintCollect) ||
++        cmd->HasSwitch(switches::kFingerprintReplay)) {
++      fingerprint_collector::SetCurrentSite(
++          GURL(GetTopExecutionContext()->Url().GetString().Utf8())
++              .DeprecatedGetOriginAsURL().spec());
++      fingerprint_collector::LogCanvasInput(
++          "measureText", text.Utf8(), 0.0, 0.0,
++          font->GetFontDescription().Family().FamilyName().Utf8(),
++          static_cast<int>(state.GetTextAlign()),
++          static_cast<int>(state.GetTextBaseline()));
++    }
++    if (cmd->HasSwitch(switches::kFingerprintReplay)) {
++      TextMetrics* replayed = fingerprint_collector::ReplayMeasureText(
++          font, direction, state.GetTextBaseline(),
++          state.GetTextAlign(), text, host);
++      if (replayed) return replayed;
++    }
 +  }
 +  
    return MakeGarbageCollected<TextMetrics>(
