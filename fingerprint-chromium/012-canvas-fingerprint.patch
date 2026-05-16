@@ -1,0 +1,399 @@
+diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+index 34e8e70932..37e6c4f356 100644
+--- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
++++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+@@ -33,6 +33,12 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include <vector>
++#include "third_party/blink/renderer/core/fileapi/blob.h"
++
+ #include "base/feature_list.h"
+ #include "base/functional/callback_helpers.h"
+ #include "base/location.h"
+@@ -1314,6 +1320,26 @@ String HTMLCanvasElement::ToDataURLInternal(
+ 
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
+   if (image_bitmap) {
++
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++      fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
++      fingerprint_collector::FlushTestIfNew("toDataURL");
++    }
++
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++      fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
++      std::vector<uint8_t> pixels = fingerprint_collector::ReplayCanvasOutput("toDataURL");
++      if (!pixels.empty()) {
++        SkImageInfo info = SkImageInfo::Make(
++            image_bitmap->width(), image_bitmap->height(),
++            kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++        SkPixmap pixmap(info, pixels.data(), info.minRowBytes());
++        auto buffer = ImageDataBuffer::Create(pixmap);
++        if (buffer)
++          return buffer->ToDataURL(encoding_mime_type, quality);
++      }
++    }
++
+     std::unique_ptr<ImageDataBuffer> data_buffer =
+         ImageDataBuffer::Create(image_bitmap);
+     if (!data_buffer)
+@@ -1425,6 +1451,39 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
+   CanvasAsyncBlobCreator* async_creator = nullptr;
+   scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(kBackBuffer);
+   if (image_bitmap) {
++
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++      fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
++      fingerprint_collector::FlushTestIfNew("toBlob");
++    }
++
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++      fingerprint_collector::SetCurrentSite(GetDocument().Url().GetString().Utf8());
++      std::vector<uint8_t> pixels = fingerprint_collector::ReplayCanvasOutput("toBlob");
++      if (!pixels.empty()) {
++        SkImageInfo info = SkImageInfo::Make(
++            image_bitmap->width(), image_bitmap->height(),
++            kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++        SkPixmap pixmap(info, pixels.data(), info.minRowBytes());
++        auto buffer = ImageDataBuffer::Create(pixmap);
++        if (buffer) {
++          Vector<unsigned char> encoded;
++          if (buffer->EncodeImage(encoding_mime_type, 1.0, &encoded)) {
++            Blob* blob = Blob::Create(
++                base::span<const uint8_t>(encoded.data(), encoded.size()),
++                ImageEncoderUtils::MimeTypeName(encoding_mime_type));
++            GetDocument()
++                .GetTaskRunner(TaskType::kCanvasBlobSerialization)
++                ->PostTask(FROM_HERE,
++                           BindOnce(&V8BlobCallback::InvokeAndReportException,
++                                    WrapPersistent(callback), nullptr,
++                                    WrapPersistent(blob)));
++            return;
++          }
++        }
++      }
++    }
++ 
+     auto* options = ImageEncodeOptions::Create();
+     options->setType(ImageEncoderUtils::MimeTypeName(encoding_mime_type));
+     async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
+diff --git a/third_party/blink/renderer/core/html/canvas/text_metrics.cc b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+index 5ddc877d7d..54f49f4d79 100644
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.cc
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+@@ -108,6 +108,26 @@ void TextMetrics::Shuffle(const double factor) {
+   baselines_->setIdeographic(baselines_->ideographic() * factor);
+ }
+ 
++void TextMetrics::SetFromReplay(double width,
++                                double actual_bounding_box_left,
++                                double actual_bounding_box_right,
++                                double font_bounding_box_ascent,
++                                double font_bounding_box_descent,
++                                double actual_bounding_box_ascent,
++                                double actual_bounding_box_descent,
++                                double em_height_ascent,
++                                double em_height_descent) {
++  width_                     = width;
++  actual_bounding_box_left_  = actual_bounding_box_left;
++  actual_bounding_box_right_ = actual_bounding_box_right;
++  font_bounding_box_ascent_  = font_bounding_box_ascent;
++  font_bounding_box_descent_ = font_bounding_box_descent;
++  actual_bounding_box_ascent_  = actual_bounding_box_ascent;
++  actual_bounding_box_descent_ = actual_bounding_box_descent;
++  em_height_ascent_  = em_height_ascent;
++  em_height_descent_ = em_height_descent;
++}
++
+ void TextMetrics::Update(const Font* font,
+                          const TextDirection& direction,
+                          const V8CanvasTextBaseline::Enum baseline,
+diff --git a/third_party/blink/renderer/core/html/canvas/text_metrics.h b/third_party/blink/renderer/core/html/canvas/text_metrics.h
+index 7b3147047c..ce8628141b 100644
+--- a/third_party/blink/renderer/core/html/canvas/text_metrics.h
++++ b/third_party/blink/renderer/core/html/canvas/text_metrics.h
+@@ -112,6 +112,16 @@ class CORE_EXPORT TextMetrics final : public ScriptWrappable {
+ 
+   void Shuffle(const double factor);
+ 
++  void SetFromReplay(double width,
++                   double actual_bounding_box_left,
++                   double actual_bounding_box_right,
++                   double font_bounding_box_ascent,
++                   double font_bounding_box_descent,
++                   double actual_bounding_box_ascent,
++                   double actual_bounding_box_descent,
++                   double em_height_ascent,
++                   double em_height_descent);
++
+  private:
+   void Update(const Font*,
+               const TextDirection& direction,
+diff --git a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
+index bc38366a99..0149f8177d 100644
+--- a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
++++ b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
+@@ -7,6 +7,13 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include <vector>
++#include "third_party/skia/include/core/SkImageInfo.h"
++#include "third_party/blink/renderer/platform/graphics/image_data_buffer.h"
++
+ #include "base/metrics/histogram_functions.h"
+ #include "base/numerics/safe_conversions.h"
+ #include "base/task/single_thread_task_runner.h"
+@@ -223,6 +230,32 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
+                                       "ImageBitmap construction failed");
+   }
+ 
++  if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::SetCurrentSite(GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::FlushTestIfNew("transferToImageBitmap");
++  }
++
++  if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(
++                   switches::kFingerprintReplay)) {
++    fingerprint_collector::SetCurrentSite(Url().GetString().Utf8());
++    std::vector<uint8_t> pixels =
++        fingerprint_collector::ReplayCanvasOutput("transferToImageBitmap");
++    if (!pixels.empty()) {
++      scoped_refptr<StaticBitmapImage> sbi = image->BitmapImage();
++      if (sbi) {
++        SkImageInfo info = SkImageInfo::Make(
++            sbi->width(), sbi->height(),
++            kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++        sk_sp<SkData> sk_data = SkData::MakeWithCopy(pixels.data(), pixels.size());
++        sk_sp<SkImage> sk_image = SkImages::RasterFromData(
++            info, sk_data, info.minRowBytes());
++        if (sk_image)
++          return MakeGarbageCollected<ImageBitmap>(
++              UnacceleratedStaticBitmapImage::Create(std::move(sk_image)));
++      }
++    }
++  }
++
+   return image;
+ }
+ 
+@@ -343,6 +376,37 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
+     auto* async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
+         image_bitmap, options, function_type, start_time, execution_context,
+         resolver);
++    
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++      fingerprint_collector::SetCurrentSite(execution_context->Url().GetString().Utf8());
++      fingerprint_collector::FlushTestIfNew("convertToBlob");
++    }
++
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++      fingerprint_collector::SetCurrentSite(Url().GetString().Utf8());
++      std::vector<uint8_t> pixels =
++          fingerprint_collector::ReplayCanvasOutput("convertToBlob");
++      if (!pixels.empty()) {
++        SkImageInfo info = SkImageInfo::Make(
++            image_bitmap->width(), image_bitmap->height(),
++            kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++        SkPixmap pixmap(info, pixels.data(), info.minRowBytes());
++        auto buffer = ImageDataBuffer::Create(pixmap);
++        if (buffer) {
++          Vector<unsigned char> encoded;
++          if (buffer->EncodeImage(ImageEncoderUtils::ToEncodingMimeType(options->type(), ImageEncoderUtils::kEncodeReasonConvertToBlobPromise), options->quality(), &encoded)) {
++            Blob* blob = Blob::Create(
++                base::span<const uint8_t>(encoded.data(), encoded.size()),
++                options->type());
++            auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<Blob>>(
++                script_state, exception_state.GetContext());
++            resolver->Resolve(blob);
++            return resolver->Promise();
++          }
++        }
++      }
++    }
++
+     async_creator->ScheduleAsyncBlobCreation(options->quality());
+     return resolver->Promise();
+   }
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 3006cad0fb..9944dc551a 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -11,6 +11,13 @@
+ #include <optional>
+ #include <utility>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include "third_party/blink/renderer/core/style/computed_style.h"
++#include "third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++
+ #include "base/check.h"
+ #include "base/check_op.h"
+ #include "base/location.h"
+@@ -523,6 +530,23 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+           snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
+       DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
+     }
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++      fingerprint_collector::SetCurrentSite(
++        GetTopExecutionContext()->Url().GetString().Utf8());
++      fingerprint_collector::FlushTestIfNew("getImageData");
++    }
++
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++      fingerprint_collector::SetCurrentSite(
++          GetTopExecutionContext()->Url().GetString().Utf8());
++      std::vector<uint8_t> pixels =
++          fingerprint_collector::ReplayCanvasOutput("getImageData");
++      if (!pixels.empty()) {
++        SkPixmap pm = image_data->GetSkPixmap();
++        memcpy(pm.writable_addr(), pixels.data(),
++               std::min(pixels.size(), pm.rowBytes() * static_cast<size_t>(pm.height())));
++      }
++    }
+   }
+ 
+   return image_data;
+@@ -882,6 +906,14 @@ void BaseRenderingContext2D::setDirection(const V8CanvasDirection direction) {
+ 
+ void BaseRenderingContext2D::fillText(const String& text, double x, double y) {
+   CanvasRenderingContext2DState& state = GetState();
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput("fillText", text.Utf8(), x, y,
++      GetState().UnparsedFont().Utf8(),
++      static_cast<int>(GetState().GetTextAlign()),
++      static_cast<int>(GetState().GetTextBaseline()));
++  }
++
+   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kFillPaintType,
+                    state.GetTextAlign(), state.GetTextBaseline(), 0,
+                    text.length());
+@@ -892,6 +924,15 @@ void BaseRenderingContext2D::fillText(const String& text,
+                                       double y,
+                                       double max_width) {
+   CanvasRenderingContext2DState& state = GetState();
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput("fillText", text.Utf8(), x, y,
++      GetState().UnparsedFont().Utf8(),
++      static_cast<int>(GetState().GetTextAlign()),
++      static_cast<int>(GetState().GetTextBaseline()),
++      max_width);
++  }
++
+   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kFillPaintType,
+                    state.GetTextAlign(), state.GetTextBaseline(), 0,
+                    text.length(), &max_width);
+@@ -938,6 +979,14 @@ void BaseRenderingContext2D::strokeText(const String& text,
+                                         double x,
+                                         double y) {
+   CanvasRenderingContext2DState& state = GetState();
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput("strokeText", text.Utf8(), x, y,
++      GetState().UnparsedFont().Utf8(),
++      static_cast<int>(GetState().GetTextAlign()),
++      static_cast<int>(GetState().GetTextBaseline()));
++  }
++
+   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
+                    state.GetTextAlign(), state.GetTextBaseline(), 0,
+                    text.length());
+@@ -948,6 +997,15 @@ void BaseRenderingContext2D::strokeText(const String& text,
+                                         double y,
+                                         double max_width) {
+   CanvasRenderingContext2DState& state = GetState();
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput("strokeText", text.Utf8(), x, y,
++      GetState().UnparsedFont().Utf8(),
++      static_cast<int>(GetState().GetTextAlign()),
++      static_cast<int>(GetState().GetTextBaseline()),
++      max_width);
++  }
++
+   DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
+                    state.GetTextAlign(), state.GetTextBaseline(), 0,
+                    text.length(), &max_width);
+@@ -1165,6 +1223,34 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
+   TextDirection direction =
+       ToTextDirection(state.GetDirection(), host, computed_style);
+ 
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogCanvasInput(
++        "measureText",
++        text.Utf8(),
++        0.0, 0.0,
++        font->GetFontDescription().Family().FamilyName().Utf8(),
++        static_cast<int>(state.GetTextAlign()),
++        static_cast<int>(state.GetTextBaseline()));
++  }
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintReplay)) {
++    fingerprint_collector::LogCanvasInput(
++        "measureText",
++        text.Utf8(),
++        0.0, 0.0,
++        font->GetFontDescription().Family().FamilyName().Utf8(),
++        static_cast<int>(state.GetTextAlign()),
++        static_cast<int>(state.GetTextBaseline()));
++    TextMetrics* replayed =
++        fingerprint_collector::ReplayMeasureText(
++            font, direction, state.GetTextBaseline(),
++            state.GetTextAlign(), text, host);
++    if (replayed)
++      return replayed;
++    // Miss — fall through to real measurement below
++  }
++  
+   return MakeGarbageCollected<TextMetrics>(
+       font, direction, state.GetTextBaseline(), state.GetTextAlign(), text,
+       host->GetPlainTextPainter());
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc b/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc
+index 9723c850b7..e437f4ddc4 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/canvas_2d_recorder_context.cc
+@@ -18,6 +18,10 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++
+ #include "base/check.h"
+ #include "base/check_deref.h"
+ #include "base/check_op.h"
+@@ -1738,6 +1742,9 @@ void Canvas2DRecorderContext::fillRect(double x,
+   }
+ 
+   // clamp to float to avoid float cast overflow when used as SkScalar
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogRectInput(x, y, width, height);
++  }
+   AdjustRectForCanvas(x, y, width, height);
+   gfx::RectF rect(ClampTo<float>(x), ClampTo<float>(y), ClampTo<float>(width),
+                   ClampTo<float>(height));
+@@ -2229,6 +2236,9 @@ void Canvas2DRecorderContext::drawImage(CanvasImageSource* image_source,
+   // clamp to float to avoid float cast overflow when used as SkScalar
+   AdjustRectForCanvas(sx, sy, sw, sh);
+   AdjustRectForCanvas(dx, dy, dw, dh);
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    fingerprint_collector::LogRectInput(x, y, width, height);
++  }
+   float fsx = ClampTo<float>(sx);
+   float fsy = ClampTo<float>(sy);
+   float fsw = ClampTo<float>(sw);
