@@ -1,0 +1,427 @@
+diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+index 3006cad0fb..a419b85851 100644
+--- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -523,6 +523,10 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+           snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
+       DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
+     }
++    const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++    if (read_pixels_successful && command_line->HasSwitch(switches::kFingerprint)) {
++      StaticBitmapImage::ShuffleSubchannelColorData(image_data_pixmap.addr(), image_data_pixmap.info(), sx, sy);
++    }
+   }
+ 
+   return image_data;
+diff --git a/third_party/blink/renderer/platform/graphics/image_data_buffer.cc b/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
+index c76f6553e1..eaaad9530f 100644
+--- a/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
++++ b/third_party/blink/renderer/platform/graphics/image_data_buffer.cc
+@@ -32,6 +32,10 @@
+ 
+ #include "third_party/blink/renderer/platform/graphics/image_data_buffer.h"
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
++
+ #include "base/compiler_specific.h"
+ #include "base/memory/ptr_util.h"
+ #include "third_party/blink/renderer/platform/image-encoders/image_encoder_utils.h"
+@@ -130,6 +134,12 @@ base::span<const uint8_t> ImageDataBuffer::PixelData() const {
+ bool ImageDataBuffer::EncodeImage(const ImageEncodingMimeType mime_type,
+                                   const double& quality,
+                                   Vector<unsigned char>* encoded_image) const {
++  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++  if (command_line->HasSwitch(switches::kFingerprint)) {
++    // shuffle subchannel color data within the pixmap
++    StaticBitmapImage::ShuffleSubchannelColorData(pixmap_.writable_addr(), pixmap_.info(), 0, 0);
++  }
++
+   return ImageEncoder::Encode(encoded_image, pixmap_, mime_type, quality);
+ }
+ 
+diff --git a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
+index 7bd7cb5906..8c3311e473 100644
+--- a/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
++++ b/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
+@@ -4,6 +4,14 @@
+ 
+ #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+ 
++#include <vector>
++#include <cmath>
++#include <algorithm>
++#include <random>
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "base/strings/string_number_conversions.h"
++
+ #include "base/numerics/checked_math.h"
+ #include "gpu/command_buffer/client/gles2_interface.h"
+ #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
+@@ -114,4 +122,346 @@ void StaticBitmapImage::DrawHelper(cc::PaintCanvas* canvas,
+                         ToSkiaRectConstraint(draw_options.clamping_mode));
+ }
+ 
++// set the component to maximum-delta if it is >= maximum, or add to existing color component (color + delta)
++#define shuffleComponent(color, max, delta) ( (color) >= (max) ? ((max)-(delta)) : ((color)+(delta)) )
++
++#define writable_addr(T, p, stride, x, y) (T*)((const char *)p + y * stride + x * sizeof(T))
++
++void StaticBitmapImage::ShuffleSubchannelColorData(const void *addr, const SkImageInfo& info, int srcX, int srcY) {
++  auto w = info.width() - srcX;
++  auto h = info.height() - srcY;
++
++  // Skip tiny images (icons, 1px spacers, etc.)
++  if (w < 8 || h < 8) return;
++
++  // ── 1. Resolve seed ───────────────────────────────────────────────────────
++  std::string seed_str = "0";
++  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++  if (command_line->HasSwitch(switches::kFingerprint))
++    seed_str = command_line->GetSwitchValueASCII(switches::kFingerprint);
++
++  // Incorporate canvas dimensions:
++  //   same seed + same size  → always identical noise (consistency guarantee)
++  //   same seed + diff size  → different noise (no cross-canvas correlation)
++  uint32_t seed = 0;
++  base::StringToUint(seed_str, &seed);
++  uint32_t render_hash = seed;
++  render_hash ^= static_cast<uint32_t>(w) * 2654435761u;
++  render_hash ^= static_cast<uint32_t>(h) * 2246822519u;
++  render_hash ^= render_hash >> 16;
++  render_hash *= 0x45d9f3bu;
++  render_hash ^= render_hash >> 16;
++
++  // ── 2. Collect true AA pixels only ───────────────────────────────────────
++  // NO random pixel fallback.
++  // If the canvas contains only solid fills (e.g. the known-canvas detection
++  // test draws a solid rectangle and reads it back), aa_pixels will be empty
++  // and we return immediately with zero modifications. This is correct —
++  // real GPUs also produce zero variance on solid fills, so we are
++  // indistinguishable from a genuine unmodified render.
++  auto colorType = info.colorType();
++  auto fRowBytes  = info.minRowBytes();
++
++  // Adaptive scan stride for large canvases (performance)
++  double area = static_cast<double>(w) * h;
++  int stride = (area < 10000) ? 1 : std::max(2, static_cast<int>(area / 8000));
++
++  // Anti-aliased pixels
++  std::vector<std::pair<int,int>> aa_pixels;
++
++  // ── Cache lookup ──────────────────────────────────────────────────────────
++  struct AACacheEntry {
++    uint32_t key;
++    std::vector<std::pair<int,int>> pixels;
++  };
++  static thread_local std::vector<AACacheEntry> aa_cache;
++  static thread_local std::vector<uint32_t>     aa_cache_order;
++  constexpr size_t kCacheCapacity = 8;
++
++  auto cache_it = std::find_if(aa_cache.begin(), aa_cache.end(),
++      [&](const AACacheEntry& e){ return e.key == render_hash; });
++
++  if (cache_it != aa_cache.end()) {
++    aa_pixels = cache_it->pixels;
++  } else {
++    aa_pixels.reserve(64);
++
++    for (int y = 1; y < h - 1; y += stride) {
++      for (int x = 1; x < w - 1; x += stride) {
++        if (IsAntiAliasedPixel(addr, fRowBytes, x, y, w, h, colorType))
++          aa_pixels.push_back({x, y});
++      }
++    }
++
++    // Store in cache
++    if (aa_cache.size() >= kCacheCapacity) {
++      uint32_t oldest = aa_cache_order.front();
++      aa_cache_order.erase(aa_cache_order.begin());
++      aa_cache.erase(std::remove_if(aa_cache.begin(), aa_cache.end(),
++          [&](const AACacheEntry& e){ return e.key == oldest; }),
++          aa_cache.end());
++    }
++    aa_cache.push_back({render_hash, aa_pixels});
++    aa_cache_order.push_back(render_hash);
++  }  // end cache miss block
++
++  // Nothing to do — solid-fill canvas, undetectable
++  if (aa_pixels.empty()) return;
++
++  // ── 3. Apply noise ────────────────────────────────────────────────────────
++  auto clamp8 = [](int v) -> uint8_t {
++    return static_cast<uint8_t>(std::clamp(v, 0, 255));
++  };
++
++  for (const auto& [x, y] : aa_pixels) {
++    // Per-pixel deterministic seed — spatially unique within session.
++    uint32_t h2 = render_hash;
++    h2 ^= static_cast<uint32_t>(x) * 2654435761u;
++    h2 ^= static_cast<uint32_t>(y) * 2246822519u;
++    h2 ^= h2 >> 16; h2 *= 0x45d9f3bu; h2 ^= h2 >> 16;
++
++    switch (colorType) {
++      case kRGBA_8888_SkColorType:
++      case kBGRA_8888_SkColorType: {
++        uint32_t* pixel = reinterpret_cast<uint32_t*>(
++          static_cast<uint8_t*>(const_cast<void*>(addr)) + (y * fRowBytes) + (x * 4));
++        uint8_t r, g, b, a;
++        if (colorType == kRGBA_8888_SkColorType) {
++          r = ((*pixel >> 16) & 0xFF); g = ((*pixel >> 8) & 0xFF);
++          b = ((*pixel >> 0) & 0xFF);  a = ((*pixel >> 24) & 0xFF);
++        } else {
++          // BGRA: R and B are swapped in the packed representation
++          b = ((*pixel >> 16) & 0xFF); g = ((*pixel >> 8) & 0xFF);
++          r = ((*pixel >> 0) & 0xFF);  a = ((*pixel >> 24) & 0xFF);
++        }
++        // Belt-and-suspenders solid fill guard (IsAntiAliasedPixel already
++        // rejects these, but cheap to double-check here)
++        if ((r < 5 && g < 5 && b < 5) || (r > 250 && g > 250 && b > 250)) continue;
++        if ((h2 >> 6) & 1) break;
++        r = clamp8(((h2 >> 10) & 1) ? r + ((h2 >> 7) & 1) : r - ((h2 >> 7) & 1));
++        g = clamp8(((h2 >> 11) & 1) ? g + ((h2 >> 8) & 1) : g - ((h2 >> 8) & 1));
++        b = clamp8(((h2 >> 12) & 1) ? b + ((h2 >> 9) & 1) : b - ((h2 >> 9) & 1));
++        if (colorType == kRGBA_8888_SkColorType)
++         *pixel = (a<<24)|(r<<16)|(g<<8)|b;
++        else
++         *pixel = (a<<24)|(b<<16)|(g<<8)|r;
++        break;
++      }
++
++      case kRGB_565_SkColorType: {
++        uint16_t* p = reinterpret_cast<uint16_t*>(
++          static_cast<uint8_t*>(const_cast<void*>(addr)) + (y * fRowBytes) + (x * 2));
++        int r = (*p >> 11) & 0x1F;
++        int g = (*p >> 5)  & 0x3F;
++        int b = (*p)       & 0x1F;
++        if ((r < 1 && g < 1 && b < 1) || (r > 30 && g > 62 && b > 30)) continue;
++        if ((h2 >> 6) & 1) break;
++        r = std::clamp(((h2 >> 10) & 1) ? r + ((int)((h2 >> 7) & 1)) : r - ((int)((h2 >> 7) & 1)), 0, 31);
++        g = std::clamp(((h2 >> 11) & 1) ? g + ((int)((h2 >> 8) & 1)) : g - ((int)((h2 >> 8) & 1)), 0, 63);
++        b = std::clamp(((h2 >> 12) & 1) ? b + ((int)((h2 >> 9) & 1)) : b - ((int)((h2 >> 9) & 1)), 0, 31);
++        *p = (r<<11)|(g<<5)|b;
++        break;
++      }
++
++      case kARGB_4444_SkColorType: {
++        uint16_t* p = reinterpret_cast<uint16_t*>(
++          static_cast<uint8_t*>(const_cast<void*>(addr)) + (y * fRowBytes) + (x * 2));
++        int a = ((*p >> 12) & 0xF), r = ((*p >> 8) & 0xF);
++        int g = ((*p >> 4) & 0xF),  b = (*p & 0xF);
++        if ((r < 1 && g < 1 && b < 1) || (r > 14 && g > 14 && b > 14)) continue;
++        if ((h2 >> 6) & 1) break;
++        r = std::clamp(((h2 >> 10) & 1) ? r + ((int)((h2 >> 7) & 1)) : r - ((int)((h2 >> 7) & 1)), 0, 15);
++        g = std::clamp(((h2 >> 11) & 1) ? g + ((int)((h2 >> 8) & 1)) : g - ((int)((h2 >> 8) & 1)), 0, 15);
++        b = std::clamp(((h2 >> 12) & 1) ? b + ((int)((h2 >> 9) & 1)) : b - ((int)((h2 >> 9) & 1)), 0, 15);
++        *p = (a<<12)|(r<<8)|(g<<4)|b;
++        break;
++      }
++
++      case kGray_8_SkColorType: {
++        uint8_t* p = static_cast<uint8_t*>(const_cast<void*>(addr)) + (y * fRowBytes) + x;
++        if (*p > 5 && *p < 250)
++          if (!((h2 >> 6) & 1)) *p = clamp8(((h2 >> 7) & 1) ? *p + ((h2 >> 8) & 1) : *p - ((h2 >> 8) & 1));
++        break;
++      }
++
++      // kAlpha_8 and all unknown formats: IsAntiAliasedPixel already returns
++      // false for these so we never reach this switch for them.
++      // The default is a pure safety net.
++      default:
++        break;
++    }
++  }
++}
++
++// ── IsAntiAliasedPixel ────────────────────────────────────────────────────────
++//
++// Returns true only when a pixel is a genuine anti-aliased blend pixel,
++// i.e. it sits on a rendered edge and its value was computed by blending
++// two adjacent color regions.
++//
++// Three conditions must ALL hold on at least one axis (horizontal or vertical):
++//
++//   1. BOUNDARY: the two opposite neighbors differ by > BOUNDARY_THRESHOLD,
++//      confirming two distinct color regions exist on either side.
++//
++//   2. BLEND: the pixel's luminance falls strictly between those two neighbors
++//      (with BLEND_MARGIN clearance), confirming it is an interpolated blend
++//      rather than a member of either region.
++//
++//   3. NOT HARD EDGE: the pixel is not within HARD_EDGE_TOL of either neighbor,
++//      confirming it does not simply "belong" to one side (which would make it
++//      a hard-edge pixel, not an AA pixel).
++//
++// This correctly rejects:
++//   - Solid fill pixels  → no boundary exists          (condition 1 fails)
++//   - Hard edge pixels   → pixel matches one neighbor  (condition 3 fails)
++//   - Unknown/alpha-only → early return false before any luminance work
++//
++bool StaticBitmapImage::IsAntiAliasedPixel(const void* addr, size_t fRowBytes,
++                                           int x, int y, int w, int h,
++                                           SkColorType colorType) {
++  // ── Early exit for unsupported formats ───────────────────────────────────
++  // Must come first. If an unknown colorType falls through to get_lum it
++  // returns 0 for every pixel, causing false positives like:
++  //   current=0, right=200 → flagged as edge even though it's not.
++  switch (colorType) {
++    case kRGBA_8888_SkColorType:
++    case kBGRA_8888_SkColorType:
++    case kRGB_565_SkColorType:
++    case kARGB_4444_SkColorType:
++    case kGray_8_SkColorType:
++      break;        // supported — continue below
++    default:
++      return false; // unknown or alpha-only — never treat as AA pixel
++  }
++
++  // Need all 4 neighbors — stay 1px away from every edge
++  if (x < 1 || y < 1 || x >= w - 1 || y >= h - 1) return false;
++
++  // Luminance helper — only reachable for the 5 supported formats above
++  auto get_lum = [&](int px, int py) -> int {
++    const uint8_t* row = static_cast<const uint8_t*>(addr) + (py * fRowBytes);
++    switch (colorType) {
++      case kRGBA_8888_SkColorType:
++      case kBGRA_8888_SkColorType: {
++        uint32_t p = *reinterpret_cast<const uint32_t*>(row + px * 4);
++        return (((p >> 16) & 0xFF) + ((p >> 8) & 0xFF) + (p & 0xFF)) / 3;
++      }
++      case kRGB_565_SkColorType: {
++        uint16_t p = *reinterpret_cast<const uint16_t*>(row + px * 2);
++        return (((int)(((p >> 11) & 0x1F) * 255 / 31)) + ((int)(((p >> 5) & 0x3F) * 255 / 63)) + ((int)((p & 0x1F) * 255 / 31))) / 3;
++      }
++      case kARGB_4444_SkColorType: {
++        uint16_t p = *reinterpret_cast<const uint16_t*>(row + px * 2);
++        // Scale 0-15 → 0-255 (15 * 17 = 255)
++        return ((((p >> 8) & 0xF) + ((p >> 4) & 0xF) + (p & 0xF)) / 3) * 17;
++      }
++      case kGray_8_SkColorType:
++        return *(row + px);
++      default:
++        return 0; // unreachable — guarded above
++    }
++  };
++
++  // Tuning constants:
++  //   BOUNDARY_THRESHOLD — how different the two sides must be to count as a boundary.
++  //                        10 catches real rendering transitions, ignores subtle dither.
++  //   BLEND_MARGIN       — how far inside [lo, hi] the pixel must sit.
++  //                        Prevents pixels right at the edge of the blend range.
++  //   HARD_EDGE_TOL      — how close to a neighbor disqualifies a pixel as hard-edge.
++  //                        3 units accounts for minor quantization without being too loose.
++  constexpr int BOUNDARY_THRESHOLD = 10;
++  constexpr int BLEND_MARGIN       = 2;
++  constexpr int HARD_EDGE_TOL      = 3;
++
++  int c      = get_lum(x,     y);
++  int left   = get_lum(x - 1, y);
++  int right  = get_lum(x + 1, y);
++  int top    = get_lum(x,     y - 1);
++  int bottom = get_lum(x,     y + 1);
++
++  // Check horizontal axis
++  if (std::abs(left - right) > BOUNDARY_THRESHOLD) {
++    int lo = std::min(left, right) + BLEND_MARGIN;
++    int hi = std::max(left, right) - BLEND_MARGIN;
++    if (c > lo && c < hi &&
++        std::abs(c - left)  > HARD_EDGE_TOL &&
++        std::abs(c - right) > HARD_EDGE_TOL)
++      return true;
++  }
++
++  // Check vertical axis
++  if (std::abs(top - bottom) > BOUNDARY_THRESHOLD) {
++    int lo = std::min(top, bottom) + BLEND_MARGIN;
++    int hi = std::max(top, bottom) - BLEND_MARGIN;
++    if (c > lo && c < hi &&
++        std::abs(c - top)    > HARD_EDGE_TOL &&
++        std::abs(c - bottom) > HARD_EDGE_TOL)
++      return true;
++  }
++
++  return false;
++}
++
++void StaticBitmapImage::ShuffleWebGLPixelData(const void* addr, const SkImageInfo& info) {
++  int w = info.width();
++  int h = info.height();
++  if (w < 4 || h < 4) return;
++
++  std::string seed_str = "0";
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprint))
++    seed_str = cmd->GetSwitchValueASCII(switches::kFingerprint);
++
++  uint32_t seed = 0;
++  base::StringToUint(seed_str, &seed);
++  uint32_t base_hash = seed;
++  base_hash ^= static_cast<uint32_t>(w) * 2654435761u;
++  base_hash ^= static_cast<uint32_t>(h) * 2246822519u;
++  base_hash ^= base_hash >> 16;
++  base_hash *= 0x45d9f3bu;
++  base_hash ^= base_hash >> 16;
++
++  auto colorType  = info.colorType();
++  size_t rowBytes = info.minRowBytes();
++
++  auto clamp8 = [](int v) -> uint8_t {
++    return static_cast<uint8_t>(std::clamp(v, 0, 255));
++  };
++
++  for (int y = 0; y < h; y++) {
++    for (int x = 0; x < w; x++) {
++      uint32_t h2 = base_hash;
++      h2 ^= static_cast<uint32_t>(x) * 2654435761u;
++      h2 ^= static_cast<uint32_t>(y) * 2246822519u;
++      h2 ^= h2 >> 16; h2 *= 0x45d9f3bu; h2 ^= h2 >> 16;
++
++      // Only touch ~1/64 pixels
++      if ((h2 & 0x3F) != 0) continue;
++
++      if (colorType == kRGBA_8888_SkColorType || colorType == kBGRA_8888_SkColorType) {
++        uint32_t* pixel = reinterpret_cast<uint32_t*>(
++          static_cast<uint8_t*>(const_cast<void*>(addr)) + (y * rowBytes) + (x * 4));
++        uint8_t r = (*pixel >> 16) & 0xFF;
++        uint8_t g = (*pixel >>  8) & 0xFF;
++        uint8_t b = (*pixel >>  0) & 0xFF;
++        uint8_t a = (*pixel >> 24) & 0xFF;
++        if (a < 10 || (r < 5 && g < 5 && b < 5) || (r > 250 && g > 250 && b > 250)) continue;
++        r = clamp8(((h2 >> 10) & 1) ? r + ((h2 >> 7) & 1) : r - ((h2 >> 7) & 1));
++        g = clamp8(((h2 >> 11) & 1) ? g + ((h2 >> 8) & 1) : g - ((h2 >> 8) & 1));
++        b = clamp8(((h2 >> 12) & 1) ? b + ((h2 >> 9) & 1) : b - ((h2 >> 9) & 1));
++        if (colorType == kRGBA_8888_SkColorType)
++          *pixel = (static_cast<uint32_t>(a) << 24) | (static_cast<uint32_t>(r) << 16) |
++                   (static_cast<uint32_t>(g) <<  8) |  static_cast<uint32_t>(b);
++        else
++          *pixel = (static_cast<uint32_t>(a) << 24) | (static_cast<uint32_t>(b) << 16) |
++                   (static_cast<uint32_t>(g) <<  8) |  static_cast<uint32_t>(r);
++      }
++    }
++  }
++}
++
++#undef writable_addr
++#undef shuffleComponent
++
+ }  // namespace blink
+diff --git a/third_party/blink/renderer/platform/graphics/static_bitmap_image.h b/third_party/blink/renderer/platform/graphics/static_bitmap_image.h
+index d2fb75194b..3f83327a90 100644
+--- a/third_party/blink/renderer/platform/graphics/static_bitmap_image.h
++++ b/third_party/blink/renderer/platform/graphics/static_bitmap_image.h
+@@ -37,6 +37,13 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
+ 
+   StaticBitmapImage(ImageOrientation orientation) : orientation_(orientation) {}
+ 
++  static void ShuffleSubchannelColorData(const void *addr, const SkImageInfo& info, int srcX, int srcY);
++
++  static bool IsAntiAliasedPixel(const void* addr, size_t fRowBytes,
++                                int x, int y, int w, int h,
++                                SkColorType colorType);
++  static void ShuffleWebGLPixelData(const void* addr, const SkImageInfo& info);
++
+   bool IsStaticBitmapImage() const override { return true; }
+ 
+   // Methods overridden by all sub-classes
