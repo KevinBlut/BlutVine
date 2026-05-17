@@ -173,21 +173,21 @@ index bc38366a99..d78ac98f05 100644
    }
  
 +  if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+    GURL raw(GetDocument().Url().GetString().Utf8());
-+      fingerprint_collector::SetCurrentSite(
-+          raw.is_valid()
-+              ? raw.DeprecatedGetOriginAsURL().spec()
-+              : GetDocument().Url().GetString().Utf8());
++    GURL raw(GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : GetExecutionContext()->Url().GetString().Utf8());
 +    fingerprint_collector::FlushTestIfNew("transferToImageBitmap");
 +  }
 +
 +  if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(
 +                   switches::kFingerprintReplay)) {
-+    GURL raw(GetDocument().Url().GetString().Utf8());
-+      fingerprint_collector::SetCurrentSite(
-+          raw.is_valid()
-+              ? raw.DeprecatedGetOriginAsURL().spec()
-+              : GetDocument().Url().GetString().Utf8());
++    GURL raw(GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : GetExecutionContext()->Url().GetString().Utf8());
 +    std::vector<uint8_t> pixels =
 +        fingerprint_collector::ReplayCanvasOutput("transferToImageBitmap");
 +    if (!pixels.empty()) {
@@ -215,20 +215,20 @@ index bc38366a99..d78ac98f05 100644
          resolver);
 +    
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+      GURL raw(GetDocument().Url().GetString().Utf8());
-+      fingerprint_collector::SetCurrentSite(
-+          raw.is_valid()
-+              ? raw.DeprecatedGetOriginAsURL().spec()
-+              : GetDocument().Url().GetString().Utf8());
++    GURL raw(execution_context->Url().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : execution_context->Url().GetString().Utf8());
 +      fingerprint_collector::FlushTestIfNew("convertToBlob");
 +    }
 +
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
-+      GURL raw(GetDocument().Url().GetString().Utf8());
-+      fingerprint_collector::SetCurrentSite(
-+          raw.is_valid()
-+              ? raw.DeprecatedGetOriginAsURL().spec()
-+              : GetDocument().Url().GetString().Utf8());
++    GURL raw(execution_context->Url().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : execution_context->Url().GetString().Utf8());
 +      std::vector<uint8_t> pixels =
 +          fingerprint_collector::ReplayCanvasOutput("convertToBlob");
 +      if (!pixels.empty()) {
