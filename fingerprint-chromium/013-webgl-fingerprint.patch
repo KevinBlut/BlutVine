@@ -1,11 +1,13 @@
 diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
-index 82a8b1979c..3f1c44306b 100644
+index ddc1b22f78..3cc6031577 100644
 --- a/components/ungoogled/fingerprint_data.h
 +++ b/components/ungoogled/fingerprint_data.h
-@@ -275,6 +275,78 @@ constexpr GpuModelInfo kGpuModels[] = {
+@@ -322,6 +322,104 @@ constexpr GpuModelInfo kGpuModels[] = {
  
  constexpr size_t kGpuModelCount = sizeof(kGpuModels) / sizeof(kGpuModels[0]);
  
++
++
 +// =============================================================================
 +// WebGL GPU Limits
 +// =============================================================================
@@ -78,14 +80,87 @@ index 82a8b1979c..3f1c44306b 100644
 +    {1.0f, 2047.0f} // ALIASED_POINT_SIZE_RANGE
 +};
 +
++// Android Adreno (Qualcomm) — common across Adreno 6xx/7xx
++constexpr GpuLimits kGpuLimitsAndroidAdreno = {
++    16384,          // MAX_TEXTURE_SIZE
++    16384,          // MAX_RENDER_BUFFER_SIZE
++    {16384, 16384}, // MAX_VIEWPORT_DIMS
++    31,             // MAX_VARYING_VECTORS
++    256,            // MAX_VERTEX_UNIFORM_VECTORS
++    224,            // MAX_FRAGMENT_UNIFORM_VECTORS
++    {1.0f, 1.0f},  // ALIASED_LINE_WIDTH_RANGE
++    {1.0f, 2048.0f} // ALIASED_POINT_SIZE_RANGE
++};
++
++// Android Mali (ARM) — common across Mali-G series
++constexpr GpuLimits kGpuLimitsAndroidMali = {
++    16384,          // MAX_TEXTURE_SIZE
++    16384,          // MAX_RENDER_BUFFER_SIZE
++    {16384, 16384}, // MAX_VIEWPORT_DIMS
++    31,             // MAX_VARYING_VECTORS
++    256,            // MAX_VERTEX_UNIFORM_VECTORS
++    256,            // MAX_FRAGMENT_UNIFORM_VECTORS
++    {1.0f, 1.0f},  // ALIASED_LINE_WIDTH_RANGE
++    {1.0f, 2048.0f} // ALIASED_POINT_SIZE_RANGE
++};
++
  }  // namespace fingerprint
  }  // namespace ungoogled
  
+diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+index 18aaa25ad7..2c33c2a8e0 100644
+--- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
++++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+@@ -6,6 +6,11 @@
+ 
+ #include <memory>
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include "base/time/time.h"
++
+ #include "base/compiler_specific.h"
+ #include "base/containers/heap_array.h"
+ #include "base/numerics/checked_math.h"
+@@ -457,6 +462,32 @@ void WebGL2RenderingContextBase::getBufferSubData(
+                      static_cast<size_t>(destination_byte_length)));
+ 
+   ContextGL()->UnmapBuffer(target);
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : Host()->GetExecutionContextUrl().GetString().Utf8());
++    auto t0 = base::TimeTicks::Now();
++    ContextGL()->Finish();  // ensure GPU sync before measuring
++    double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++    fingerprint_collector::FlushTestIfNew("getBufferSubData", render_ms);
++  }
++
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintReplay)) {
++    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : Host()->GetExecutionContextUrl().GetString().Utf8());
++    std::vector<uint8_t> pixels = fingerprint_collector::ReplayWebGLOutput();
++    if (!pixels.empty() && destination_data_ptr) {
++      memcpy(destination_data_ptr, pixels.data(),
++             std::min(pixels.size(),
++                      static_cast<size_t>(destination_byte_length)));
++    }
++  }
+ }
+ 
+ void WebGL2RenderingContextBase::blitFramebuffer(GLint src_x0,
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index b0bba87aad..2784c342e9 100644
+index b0bba87aad..cd93c3818f 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-@@ -28,6 +28,13 @@
+@@ -28,6 +28,15 @@
  #include <memory>
  #include <utility>
  
@@ -95,11 +170,59 @@ index b0bba87aad..2784c342e9 100644
 +#include "components/ungoogled/fingerprint_data.h"
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include <random>
++#include "components/ungoogled/fingerprint_collector.h"
++#include "base/time/time.h"
 +
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
  #include "base/compiler_specific.h"
-@@ -3764,6 +3771,53 @@ void WebGLRenderingContextBase::RecordANGLEImplementation() {
+@@ -738,8 +747,43 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+     return nullptr;
+   }
+ 
+-  return MakeGarbageCollected<ImageBitmap>(
+-      GetDrawingBuffer()->TransferToStaticBitmapImage());
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : Host()->GetExecutionContextUrl().GetString().Utf8());
++    auto t0 = base::TimeTicks::Now();
++    GetDrawingBuffer()->ResolveAndBindForReadAndDraw();
++    double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++    fingerprint_collector::FlushTestIfNew("transferToImageBitmap", render_ms);
++  }
++
++  scoped_refptr<StaticBitmapImage> sbi =
++      GetDrawingBuffer()->TransferToStaticBitmapImage();
++
++  if (sbi && base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : Host()->GetExecutionContextUrl().GetString().Utf8());
++    std::vector<uint8_t> pixels =
++        fingerprint_collector::ReplayCanvasOutput("transferToImageBitmap");
++    if (!pixels.empty()) {
++      SkImageInfo info = SkImageInfo::Make(
++          sbi->width(), sbi->height(),
++          kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++      sk_sp<SkData> sk_data = SkData::MakeWithCopy(pixels.data(), pixels.size());
++      sk_sp<SkImage> sk_image = SkImages::RasterFromData(
++          info, sk_data, info.minRowBytes());
++      if (sk_image)
++        return MakeGarbageCollected<ImageBitmap>(
++            UnacceleratedStaticBitmapImage::Create(std::move(sk_image)));
++    }
++  }
++
++  return MakeGarbageCollected<ImageBitmap>(std::move(sbi));
+ }
+ 
+ void WebGLRenderingContextBase::drawingBufferStorage(GLenum sizedformat,
+@@ -3764,6 +3808,69 @@ void WebGLRenderingContextBase::RecordANGLEImplementation() {
                              webgl_angle_implementation);
  }
  
@@ -128,6 +251,22 @@ index b0bba87aad..2784c342e9 100644
 +    if (is_windows)
 +        return &kGpuLimitsWindows;
 +
++    // Android — key off model to distinguish Adreno (Pixel/most) vs Mali (some Samsung)
++    bool is_android = platform.find("android") != std::string::npos;
++    if (is_android) {
++        std::string model;
++        if (cmd->HasSwitch(switches::kFingerprintMobileModel))
++            model = base::ToLowerASCII(
++                cmd->GetSwitchValueASCII(switches::kFingerprintMobileModel));
++        // Samsung Galaxy uses Mali, everything else (Pixel, most others) uses Adreno
++        bool is_mali = model.find("s2") != std::string::npos ||
++                       model.find("s3") != std::string::npos ||
++                       model.find("s4") != std::string::npos ||
++                       model.find("a5") != std::string::npos ||
++                       model.find("a3") != std::string::npos;
++        return is_mali ? &kGpuLimitsAndroidMali : &kGpuLimitsAndroidAdreno;
++    }
++
 +    // Linux — distinguish proprietary NVIDIA vs Mesa from renderer string.
 +    // Check explicit renderer override first, then auto-built renderer.
 +    // Mesa renderer strings contain "Mesa" or "nouveau".
@@ -153,7 +292,7 @@ index b0bba87aad..2784c342e9 100644
  ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
                                                      GLenum pname) {
    if (isContextLost())
-@@ -3851,21 +3905,49 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3851,21 +3958,49 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
        return GetIntParameter(script_state, pname);
      case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
@@ -207,7 +346,7 @@ index b0bba87aad..2784c342e9 100644
      case GL_MAX_VIEWPORT_DIMS:
        return GetWebGLIntArrayParameter(script_state, pname);
      case GL_PACK_ALIGNMENT:
-@@ -3881,7 +3963,15 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3881,7 +4016,15 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GL_RENDERBUFFER_BINDING:
        return WebGLAny(script_state, renderbuffer_binding_.Get());
      case GL_RENDERER:
@@ -223,7 +362,7 @@ index b0bba87aad..2784c342e9 100644
      case GL_SAMPLE_ALPHA_TO_COVERAGE:
        return GetBooleanParameter(script_state, pname);
      case GL_SAMPLE_BUFFERS:
-@@ -3959,7 +4049,14 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3959,7 +4102,14 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GC3D_UNPACK_COLORSPACE_CONVERSION_WEBGL:
        return WebGLAny(script_state, unpack_colorspace_conversion_);
      case GL_VENDOR:
@@ -238,7 +377,38 @@ index b0bba87aad..2784c342e9 100644
      case GL_VERSION:
        return WebGLAny(
            script_state,
-@@ -7754,47 +7851,75 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
+@@ -5144,6 +5294,30 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+       return;
+     }
+     ContextGL()->ReadPixels(x, y, width, height, format, type, data);
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++      GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
++      fingerprint_collector::SetCurrentSite(
++          raw.is_valid()
++              ? raw.DeprecatedGetOriginAsURL().spec()
++              : Host()->GetExecutionContextUrl().GetString().Utf8());
++      auto t0 = base::TimeTicks::Now();
++      ContextGL()->Finish();
++      double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++      fingerprint_collector::FlushTestIfNew("readPixels", render_ms);
++    }
++
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++      GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
++      fingerprint_collector::SetCurrentSite(
++          raw.is_valid()
++              ? raw.DeprecatedGetOriginAsURL().spec()
++              : Host()->GetExecutionContextUrl().GetString().Utf8());
++      std::vector<uint8_t> replay_pixels = fingerprint_collector::ReplayWebGLOutput();
++      if (!replay_pixels.empty() && data) {
++        size_t expected = static_cast<size_t>(width) * height * 4;
++        memcpy(data, replay_pixels.data(), std::min(replay_pixels.size(), expected));
++      }
++    }
+   }
+ }
+ 
+@@ -7754,47 +7928,75 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
  ScriptValue WebGLRenderingContextBase::GetWebGLFloatArrayParameter(
      ScriptState* script_state,
      GLenum pname) {
