@@ -180,11 +180,11 @@ index bc38366a99..d78ac98f05 100644
 +#include <vector>
 +#include "third_party/skia/include/core/SkImageInfo.h"
 +#include "third_party/blink/renderer/platform/graphics/image_data_buffer.h"
-+
++#include "base/time/time.h"
  #include "base/metrics/histogram_functions.h"
  #include "base/numerics/safe_conversions.h"
  #include "base/task/single_thread_task_runner.h"
-@@ -223,6 +230,40 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
+@@ -223,6 +230,44 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
                                        "ImageBitmap construction failed");
    }
  
@@ -194,7 +194,11 @@ index bc38366a99..d78ac98f05 100644
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
 +            : GetExecutionContext()->Url().GetString().Utf8());
-+    fingerprint_collector::FlushTestIfNew("transferToImageBitmap");
++    auto t0 = base::TimeTicks::Now();
++    scoped_refptr<StaticBitmapImage> sbi_measure = image->BitmapImage();
++    if (sbi_measure) sbi_measure->PaintImageForCurrentFrame(); // force readback
++    double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++    fingerprint_collector::FlushTestIfNew("transferToImageBitmap", render_ms);
 +  }
 +
 +  if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -225,7 +229,7 @@ index bc38366a99..d78ac98f05 100644
    return image;
  }
  
-@@ -343,6 +384,45 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
+@@ -347,6 +388,49 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
      auto* async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
          image_bitmap, options, function_type, start_time, execution_context,
          resolver);
@@ -236,7 +240,10 @@ index bc38366a99..d78ac98f05 100644
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
 +            : execution_context->Url().GetString().Utf8());
-+      fingerprint_collector::FlushTestIfNew("convertToBlob");
++    auto t0 = base::TimeTicks::Now();
++    image_bitmap->PaintImageForCurrentFrame();
++    double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++    fingerprint_collector::FlushTestIfNew("convertToBlob", render_ms);
 +    }
 +
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
@@ -289,7 +296,7 @@ index 3006cad0fb..13e975ec1a 100644
  #include "base/check.h"
  #include "base/check_op.h"
  #include "base/location.h"
-@@ -523,6 +530,33 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+@@ -523,6 +530,31 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
            snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
        DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
      }
@@ -299,9 +306,7 @@ index 3006cad0fb..13e975ec1a 100644
 +          raw.is_valid()
 +              ? raw.DeprecatedGetOriginAsURL().spec()
 +              : GetDocument().Url().GetString().Utf8());
-+      auto t0 = base::TimeTicks::Now();
-+      double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
-+      fingerprint_collector::FlushTestIfNew("getImageData", render_ms);
++      fingerprint_collector::FlushTestIfNew("getImageData", 0.0);
 +    }
 +
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
@@ -392,13 +397,12 @@ index 3006cad0fb..13e975ec1a 100644
    HTMLCanvasElement* canvas = HostAsHTMLCanvasElement();
  
    if (canvas) {
-@@ -1165,9 +1227,54 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
+@@ -1165,9 +1227,59 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
    TextDirection direction =
        ToTextDirection(state.GetDirection(), host, computed_style);
  
 -  return MakeGarbageCollected<TextMetrics>(
 +  {
-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +    if (cmd->HasSwitch(switches::kFingerprintCollect) ||
 +        cmd->HasSwitch(switches::kFingerprintReplay)) {
 +      GURL raw(GetTopExecutionContext()->Url().GetString().Utf8());
@@ -413,16 +417,22 @@ index 3006cad0fb..13e975ec1a 100644
 +          font->GetFontDescription().Family().FamilyName().Utf8(),
 +          static_cast<int>(state.GetTextAlign()),
 +          static_cast<int>(state.GetTextBaseline()));
++    
++      if (cmd->HasSwitch(switches::kFingerprintReplay)) {
++        std::vector<double> values = fingerprint_collector::ReplayMeasureText();
++        if (values.size() >= 9) {
++          TextMetrics* replayed = MakeGarbageCollected<TextMetrics>(
++              font, direction, state.GetTextBaseline(),
++              state.GetTextAlign(), text,
++              host->GetPlainTextPainter());
++          replayed->SetFromReplay(
++              values[0], values[1], values[2],
++              values[3], values[4], values[5],
++              values[6], values[7], values[8]);
++          return replayed;
++        }
++      }
 +    }
-+
-+    if (cmd->HasSwitch(switches::kFingerprintReplay)) {
-+      TextMetrics* replayed = fingerprint_collector::ReplayMeasureText(
-+          font, direction, state.GetTextBaseline(),
-+          state.GetTextAlign(), text, host);
-+      if (replayed)
-+        return replayed;
-+    }
-+  }
 +
 +  TextMetrics* real = MakeGarbageCollected<TextMetrics>(
        font, direction, state.GetTextBaseline(), state.GetTextAlign(), text,
