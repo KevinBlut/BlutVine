@@ -397,11 +397,12 @@ index 3006cad0fb..13e975ec1a 100644
    HTMLCanvasElement* canvas = HostAsHTMLCanvasElement();
  
    if (canvas) {
-@@ -1165,9 +1227,59 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
+@@ -1165,9 +1227,60 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
    TextDirection direction =
        ToTextDirection(state.GetDirection(), host, computed_style);
  
 -  return MakeGarbageCollected<TextMetrics>(
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +  {
 +    if (cmd->HasSwitch(switches::kFingerprintCollect) ||
 +        cmd->HasSwitch(switches::kFingerprintReplay)) {
@@ -433,7 +434,7 @@ index 3006cad0fb..13e975ec1a 100644
 +        }
 +      }
 +    }
-+
++  }
 +  TextMetrics* real = MakeGarbageCollected<TextMetrics>(
        font, direction, state.GetTextBaseline(), state.GetTextAlign(), text,
        host->GetPlainTextPainter());
