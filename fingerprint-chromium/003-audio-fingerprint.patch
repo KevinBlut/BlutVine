@@ -37,7 +37,7 @@ index 626582e39b..6f4b672b88 100644
  }
  
  OfflineAudioContext::~OfflineAudioContext() {
-@@ -419,6 +440,64 @@ void OfflineAudioContext::FireCompletionEvent() {
+@@ -419,6 +440,67 @@ void OfflineAudioContext::FireCompletionEvent() {
        return;
      }
  
@@ -81,23 +81,26 @@ index 626582e39b..6f4b672b88 100644
 +    // Collect mode: flush recipe JSON + save raw float32 .bin.
 +    // Flushed here (not in constructor) so the hash covers the full
 +    // context params — consistent with canvas flush-at-output pattern.
-+    if (command_line->HasSwitch(switches::kFingerprintCollect)) {
-+      size_t total_floats =
-+          static_cast<size_t>(rendered_buffer->numberOfChannels()) *
-+          static_cast<size_t>(rendered_buffer->length());
-+      std::vector<float> audio_data;
-+      audio_data.reserve(total_floats);
-+      for (unsigned ch = 0;
-+           ch < rendered_buffer->numberOfChannels(); ++ch) {
-+        NotShared<DOMFloat32Array> array =
-+            rendered_buffer->getChannelData(ch);
-+        const float* src = array->Data();
-+        audio_data.insert(audio_data.end(), src, src + array->length());
-+      }
-+      fingerprint_collector::FlushAudioIfNew(
-+          reinterpret_cast<const uint8_t*>(audio_data.data()),
-+          audio_data.size() * sizeof(float));
-+    }
++     if (command_line->HasSwitch(switches::kFingerprintCollect)) {
++       auto t0 = base::TimeTicks::Now();
++       size_t total_floats =
++           static_cast<size_t>(rendered_buffer->numberOfChannels()) *
++           static_cast<size_t>(rendered_buffer->length());
++       std::vector<float> audio_data;
++       audio_data.reserve(total_floats);
++       for (unsigned ch = 0;
++            ch < rendered_buffer->numberOfChannels(); ++ch) {
++         NotShared<DOMFloat32Array> array =
++             rendered_buffer->getChannelData(ch);
++         const float* src = array->Data();
++         audio_data.insert(audio_data.end(), src, src + array->length());
++       }
++       double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++       fingerprint_collector::FlushAudioIfNew(
++           reinterpret_cast<const uint8_t*>(audio_data.data()),
++           audio_data.size() * sizeof(float),
++           render_ms);
++     }
 +
      // Call the offline rendering completion event listener and resolve the
      // promise too.
