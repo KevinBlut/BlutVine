@@ -294,26 +294,24 @@ index 3006cad0fb..13e975ec1a 100644
        DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
      }
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+      auto t0 = base::TimeTicks::Now();
 +      GURL raw(GetTopExecutionContext()->Url().GetString().Utf8());
 +      fingerprint_collector::SetCurrentSite(
 +          raw.is_valid()
 +              ? raw.DeprecatedGetOriginAsURL().spec()
 +              : GetDocument().Url().GetString().Utf8());
++      auto t0 = base::TimeTicks::Now();
 +      double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
 +      fingerprint_collector::FlushTestIfNew("getImageData", render_ms);
 +    }
 +
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
-+      auto t0 = base::TimeTicks::Now();
 +      GURL raw(GetTopExecutionContext()->Url().GetString().Utf8());
 +      fingerprint_collector::SetCurrentSite(
 +          raw.is_valid()
 +              ? raw.DeprecatedGetOriginAsURL().spec()
 +              : GetDocument().Url().GetString().Utf8());
-+      double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
 +      std::vector<uint8_t> pixels =
-+          fingerprint_collector::ReplayCanvasOutput("getImageData", render_ms);
++          fingerprint_collector::ReplayCanvasOutput("getImageData");
 +      if (!pixels.empty()) {
 +        SkPixmap pm = image_data->GetSkPixmap();
 +        memcpy(pm.writable_addr(), pixels.data(),
