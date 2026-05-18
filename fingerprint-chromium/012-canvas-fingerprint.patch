@@ -11,11 +11,11 @@ index 34e8e70932..fe1930f3f2 100644
 +#include "components/ungoogled/fingerprint_collector.h"
 +#include <vector>
 +#include "third_party/blink/renderer/core/fileapi/blob.h"
-+
++#include "base/time/time.h"
  #include "base/feature_list.h"
  #include "base/functional/callback_helpers.h"
  #include "base/location.h"
-@@ -1314,6 +1320,34 @@ String HTMLCanvasElement::ToDataURLInternal(
+@@ -1314,6 +1320,42 @@ String HTMLCanvasElement::ToDataURLInternal(
  
    scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
    if (image_bitmap) {
@@ -26,7 +26,15 @@ index 34e8e70932..fe1930f3f2 100644
 +          raw.is_valid()
 +              ? raw.DeprecatedGetOriginAsURL().spec()
 +              : GetDocument().Url().GetString().Utf8());
-+      fingerprint_collector::FlushTestIfNew("toDataURL");
++      SkImageInfo info = SkImageInfo::Make(
++        image_bitmap->width(), image_bitmap->height(),
++        kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++      std::vector<uint8_t> buf(info.computeMinByteSize());
++      auto t0 = base::TimeTicks::Now();
++      image_bitmap->PaintImageForCurrentFrame().readPixels(
++        info, buf.data(), info.minRowBytes(), 0, 0);
++      double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++      fingerprint_collector::FlushTestIfNew("toDataURL", render_ms);
 +    }
 +
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
@@ -50,7 +58,7 @@ index 34e8e70932..fe1930f3f2 100644
      std::unique_ptr<ImageDataBuffer> data_buffer =
          ImageDataBuffer::Create(image_bitmap);
      if (!data_buffer)
-@@ -1425,6 +1459,47 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
+@@ -1433,6 +1463,55 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
    CanvasAsyncBlobCreator* async_creator = nullptr;
    scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(kBackBuffer);
    if (image_bitmap) {
@@ -61,7 +69,15 @@ index 34e8e70932..fe1930f3f2 100644
 +          raw.is_valid()
 +              ? raw.DeprecatedGetOriginAsURL().spec()
 +              : GetDocument().Url().GetString().Utf8());
-+      fingerprint_collector::FlushTestIfNew("toBlob");
++      SkImageInfo info = SkImageInfo::Make(
++        image_bitmap->width(), image_bitmap->height(),
++        kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
++      std::vector<uint8_t> buf(info.computeMinByteSize());
++      auto t0 = base::TimeTicks::Now();
++      image_bitmap->PaintImageForCurrentFrame().readPixels(
++        info, buf.data(), info.minRowBytes(), 0, 0);
++      double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++      fingerprint_collector::FlushTestIfNew("toBlob", render_ms);
 +    }
 +
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
@@ -273,27 +289,31 @@ index 3006cad0fb..13e975ec1a 100644
  #include "base/check.h"
  #include "base/check_op.h"
  #include "base/location.h"
-@@ -523,6 +530,29 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+@@ -523,6 +530,33 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
            snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
        DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
      }
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+      GURL raw(GetDocument().Url().GetString().Utf8());
++      auto t0 = base::TimeTicks::Now();
++      GURL raw(GetTopExecutionContext()->Url().GetString().Utf8());
 +      fingerprint_collector::SetCurrentSite(
 +          raw.is_valid()
 +              ? raw.DeprecatedGetOriginAsURL().spec()
 +              : GetDocument().Url().GetString().Utf8());
-+      fingerprint_collector::FlushTestIfNew("getImageData");
++      double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++      fingerprint_collector::FlushTestIfNew("getImageData", render_ms);
 +    }
 +
 +    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
-+      GURL raw(GetDocument().Url().GetString().Utf8());
++      auto t0 = base::TimeTicks::Now();
++      GURL raw(GetTopExecutionContext()->Url().GetString().Utf8());
 +      fingerprint_collector::SetCurrentSite(
 +          raw.is_valid()
 +              ? raw.DeprecatedGetOriginAsURL().spec()
 +              : GetDocument().Url().GetString().Utf8());
++      double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
 +      std::vector<uint8_t> pixels =
-+          fingerprint_collector::ReplayCanvasOutput("getImageData");
++          fingerprint_collector::ReplayCanvasOutput("getImageData", render_ms);
 +      if (!pixels.empty()) {
 +        SkPixmap pm = image_data->GetSkPixmap();
 +        memcpy(pm.writable_addr(), pixels.data(),
