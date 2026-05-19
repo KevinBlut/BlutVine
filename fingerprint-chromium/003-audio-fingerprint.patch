@@ -58,6 +58,12 @@ index 626582e39b..6f4b672b88 100644
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
 +            : GetExecutionContext()->Url().GetString().Utf8());
++      fingerprint_collector::LogCanvasInput(
++        "OfflineAudioContext", "",
++        static_cast<double>(rendered_buffer->numberOfChannels()),
++        static_cast<double>(rendered_buffer->length()),
++        std::to_string(rendered_buffer->sampleRate()),
++        0, 0);
 +      std::vector<uint8_t> bytes =
 +          fingerprint_collector::ReplayAudioOutput();
 +      if (!bytes.empty()) {
@@ -132,20 +138,12 @@ index 4ff2fecc93..3138416b18 100644
  #include "base/compiler_specific.h"
  #include "media/base/audio_bus.h"
  #include "third_party/blink/renderer/platform/audio/audio_bus.h"
-@@ -109,6 +113,30 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
+@@ -109,6 +113,22 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
      DoFFTAnalysis();
    }
  
 +  {
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+
-+    // Collect: log fftSize as the recipe identifier for frequency data.
-+    if (cmd->HasSwitch(switches::kFingerprintCollect)) {
-+      fingerprint_collector::LogCanvasInput(
-+          "AnalyserGetFloatFrequencyData", "",
-+          static_cast<double>(fft_size_), 0.0,
-+          "", 0, 0);
-+    }
 +
 +    // Replay: substitute stored frequency bin data.
 +    // .bin format: raw float32 LE, length = (fftSize / 2) floats (freq bins)
@@ -163,20 +161,12 @@ index 4ff2fecc93..3138416b18 100644
    // Convert from linear magnitude to floating-point decibels.
    const size_t source_length = magnitude_buffer_.size();
    const size_t len = std::min(source_length, destination_array->length());
-@@ -177,6 +205,30 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
+@@ -177,6 +205,22 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
  
      const unsigned write_index = GetWriteIndex();
  
 +    {
 +      const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+
-+      // Collect: log fftSize as the recipe identifier for time domain data.
-+      if (cmd->HasSwitch(switches::kFingerprintCollect)) {
-+        fingerprint_collector::LogCanvasInput(
-+            "AnalyserGetFloatTimeDomainData", "",
-+            static_cast<double>(fft_size_), 0.0,
-+            "", 0, 0);
-+      }
 +
 +      // Replay: substitute stored time domain data.
 +      // .bin format: raw float32 LE, length = fftSize floats (time samples)
