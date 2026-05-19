@@ -14,7 +14,7 @@ index 626582e39b..6f4b672b88 100644
  #include "base/metrics/histogram_functions.h"
  #include "base/metrics/histogram_macros.h"
  #include "media/base/audio_glitch_info.h"
-@@ -180,6 +185,22 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
+@@ -180,6 +185,25 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
    destination_node_ = OfflineAudioDestinationNode::Create(
        this, number_of_channels, number_of_frames, sample_rate);
    Initialize();
@@ -25,8 +25,11 @@ index 626582e39b..6f4b672b88 100644
 +  // so these params are sufficient as the hash key.
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
 +          switches::kFingerprintCollect)) {
++    GURL raw(window->Url().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
-+        window->Url().GetString().Utf8());
++       raw.is_valid()
++           ? raw.DeprecatedGetOriginAsURL().spec()
++           : window->Url().GetString().Utf8());
 +    fingerprint_collector::LogCanvasInput(
 +        "OfflineAudioContext", "",
 +        static_cast<double>(number_of_channels),
@@ -37,7 +40,7 @@ index 626582e39b..6f4b672b88 100644
  }
  
  OfflineAudioContext::~OfflineAudioContext() {
-@@ -419,6 +440,67 @@ void OfflineAudioContext::FireCompletionEvent() {
+@@ -422,6 +443,75 @@ void OfflineAudioContext::FireCompletionEvent() {
        return;
      }
  
@@ -49,8 +52,11 @@ index 626582e39b..6f4b672b88 100644
 +    // .bin format: raw float32 LE, all channels concatenated:
 +    //   [ch0_s0, ch0_s1, ..., ch0_sN, ch1_s0, ..., ch1_sN, ...]
 +    if (command_line->HasSwitch(switches::kFingerprintReplay)) {
++      GURL raw(GetExecutionContext()->Url().GetString().Utf8());
 +      fingerprint_collector::SetCurrentSite(
-+          GetExecutionContext()->Url().GetString().Utf8());
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : GetExecutionContext()->Url().GetString().Utf8());
 +      std::vector<uint8_t> bytes =
 +          fingerprint_collector::ReplayAudioOutput();
 +      if (!bytes.empty()) {
@@ -82,6 +88,11 @@ index 626582e39b..6f4b672b88 100644
 +    // Flushed here (not in constructor) so the hash covers the full
 +    // context params — consistent with canvas flush-at-output pattern.
 +     if (command_line->HasSwitch(switches::kFingerprintCollect)) {
++       GURL raw(GetExecutionContext()->Url().GetString().Utf8());
++       fingerprint_collector::SetCurrentSite(
++         raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : GetExecutionContext()->Url().GetString().Utf8());
 +       auto t0 = base::TimeTicks::Now();
 +       size_t total_floats =
 +           static_cast<size_t>(rendered_buffer->numberOfChannels()) *
