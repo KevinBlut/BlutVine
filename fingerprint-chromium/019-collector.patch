@@ -1,5 +1,5 @@
 diff --git a/components/ungoogled/BUILD.gn b/components/ungoogled/BUILD.gn
-index 9ac48e164a..c6cf4438b4 100644
+index eb72b607f8..8279148133 100644
 --- a/components/ungoogled/BUILD.gn
 +++ b/components/ungoogled/BUILD.gn
 @@ -4,6 +4,8 @@
@@ -11,7 +11,7 @@ index 9ac48e164a..c6cf4438b4 100644
      "fingerprint_data.h",
      "fingerprint_screen.cc",
      "fingerprint_screen.h",
-@@ -13,5 +15,5 @@ component("ungoogled_switches") {
+@@ -14,5 +16,5 @@ component("ungoogled_switches") {
  
    defines = [ "IS_UNGOOGLED_IMPL" ]
  
@@ -21,23 +21,34 @@ index 9ac48e164a..c6cf4438b4 100644
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
 new file mode 100644
-index 0000000000..7c0e2231e7
+index 0000000000..b6f9d99bde
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.cc
-@@ -0,0 +1,180 @@
+@@ -0,0 +1,804 @@
 +#include "components/ungoogled/fingerprint_collector.h"
-+#include "url/gurl.h"
++
 +#include <fstream>
 +#include <sstream>
 +#include <string>
 +#include <vector>
++#include <unordered_map>
++#include <algorithm>
 +
 +#include "base/command_line.h"
 +#include "base/files/file_path.h"
 +#include "base/files/file_util.h"
++#include "base/files/file_enumerator.h"
++#include "base/rand_util.h"
++#include "base/threading/platform_thread.h"
++#include "base/time/time.h"
 +#include "components/ungoogled/ungoogled_switches.h"
++#include "url/gurl.h"
 +
 +namespace fingerprint_collector {
++
++// ---------------------------------------------------------------------------
++// Input log
++// ---------------------------------------------------------------------------
 +
 +struct InputEntry {
 +    std::string op;
@@ -52,6 +63,10 @@ index 0000000000..7c0e2231e7
 +
 +static thread_local std::vector<InputEntry> g_input_log;
 +static thread_local std::string g_current_site;
++
++// ---------------------------------------------------------------------------
++// Helpers
++// ---------------------------------------------------------------------------
 +
 +static std::string SanitizeForPath(const std::string& s) {
 +    std::string out;
@@ -88,47 +103,7 @@ index 0000000000..7c0e2231e7
 +    return hash;
 +}
 +
-+static std::string GetOutputDir() {
-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
-+        return "";
-+    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
-+    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
-+    return db_path + "/" + site + "/";
-+}
-+
-+void LogCanvasInput(
-+    const std::string& op,
-+    const std::string& text,
-+    double x, double y,
-+    const std::string& font,
-+    int text_align,
-+    int text_baseline,
-+    double max_width
-+) {
-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
-+    g_input_log.push_back({op, text, x, y, font,
-+                            text_align, text_baseline,
-+                            max_width, 0.0, 0.0});
-+}
-+
-+void LogRectInput(double x, double y, double width, double height) {
-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
-+    g_input_log.push_back({"fillRect", "", x, y, "",
-+                            0, 0, -1.0, width, height});
-+}
-+
-+void FlushTestIfNew(const std::string& trigger) {
-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
-+    if (g_input_log.empty()) return;
-+
-+    std::string dir = GetOutputDir();
-+    if (dir.empty()) return;
-+
-+    // compute hash over input log for dedup filename
++static uint64_t HashInputLog() {
 +    uint64_t h = 0xcbf29ce484222325ULL;
 +    for (const auto& e : g_input_log) {
 +        h = FNV64(h, e.op.data(), e.op.size());
@@ -142,6 +117,76 @@ index 0000000000..7c0e2231e7
 +        h = FNV64(h, &e.rect_width, sizeof(e.rect_width));
 +        h = FNV64(h, &e.rect_height, sizeof(e.rect_height));
 +    }
++    return h;
++}
++
++static std::string GetOutputDir() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++        return "";
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
++    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
++    return db_path + "/" + site + "/";
++}
++
++static std::string JsonGetString(const std::string& json, const std::string& key) {
++    std::string needle = "\"" + key + "\":\"";
++    size_t pos = json.find(needle);
++    if (pos == std::string::npos) return "";
++    pos += needle.size();
++    size_t end = json.find('"', pos);
++    if (end == std::string::npos) return "";
++    return json.substr(pos, end - pos);
++}
++
++static int JsonGetInt(const std::string& json, const std::string& key) {
++    std::string needle = "\"" + key + "\":";
++    size_t pos = json.find(needle);
++    if (pos == std::string::npos) return 0;
++    pos += needle.size();
++    return std::stoi(json.substr(pos));
++}
++
++static double JsonGetDouble(const std::string& json, const std::string& key) {
++    std::string needle = "\"" + key + "\":";
++    size_t pos = json.find(needle);
++    if (pos == std::string::npos) return 0.0;
++    pos += needle.size();
++    return std::stod(json.substr(pos));
++}
++
++// ---------------------------------------------------------------------------
++// Collect — input logging
++// ---------------------------------------------------------------------------
++
++void LogCanvasInput(
++    const std::string& op,
++    const std::string& text,
++    double x, double y,
++    const std::string& font,
++    int text_align,
++    int text_baseline,
++    double max_width
++) {
++    g_input_log.push_back({op, text, x, y, font,
++                            text_align, text_baseline,
++                            max_width, 0.0, 0.0});
++}
++
++void LogRectInput(double x, double y, double width, double height) {
++    g_input_log.push_back({"fillRect", "", x, y, "",
++                            0, 0, -1.0, width, height});
++}
++
++void FlushTestIfNew(const std::string& trigger, double render_ms) {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
++    if (g_input_log.empty()) return;
++
++    std::string dir = GetOutputDir();
++    if (dir.empty()) return;
++
++    uint64_t h = HashInputLog();
 +    char hash_hex[17];
 +    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)h);
 +
@@ -149,17 +194,17 @@ index 0000000000..7c0e2231e7
 +
 +    std::string filepath = dir + hash_hex + "_" + trigger + ".json";
 +
-+    // dedup — skip if file already exists
 +    if (base::PathExists(base::FilePath(filepath))) {
 +        g_input_log.clear();
 +        return;
 +    }
 +
-+    // serialize call sequence
 +    std::ostringstream ss;
 +    ss << "{\n"
 +       << "  \"site\": \"" << EscapeJson(g_current_site) << "\",\n"
 +       << "  \"trigger\": \"" << trigger << "\",\n"
++       << "  \"hash\": \"" << hash_hex << "\",\n"
++       << "  \"render_ms\": " << render_ms << ",\n"
 +       << "  \"calls\": [\n";
 +    for (size_t i = 0; i < g_input_log.size(); i++) {
 +        const auto& e = g_input_log[i];
@@ -196,10 +241,14 @@ index 0000000000..7c0e2231e7
 +    g_input_log.clear();
 +}
 +
++// ---------------------------------------------------------------------------
++// Site management
++// ---------------------------------------------------------------------------
++
 +void SetCurrentSite(const std::string& url) {
-+    // Normalize to origin (scheme + host + port) to ensure collect and replay
-+    // hashes match regardless of path, query params, or session tokens.
-+    // e.g. "https://example.com/test?session=abc" -> "https://example.com"
++    // Normalize to origin only (scheme + host + port) so that collect and
++    // replay hashes match across sessions regardless of path/query/token.
++    // Blob and data URLs produce opaque origins — fall back to raw string.
 +    GURL gurl(url);
 +    if (gurl.is_valid())
 +        g_current_site = gurl.DeprecatedGetOriginAsURL().spec();
@@ -211,22 +260,597 @@ index 0000000000..7c0e2231e7
 +    g_input_log.clear();
 +}
 +
++// ---------------------------------------------------------------------------
++// Canvas / WebGL Replay
++// ---------------------------------------------------------------------------
++
++struct ReplayEntry {
++    std::string bin_path;
++    int width;
++    int height;
++    std::string trigger;
++    double render_ms;
++};
++
++static thread_local std::unordered_map<uint64_t, ReplayEntry> g_replay_map;
++static thread_local std::string g_replay_loaded_site;
++
++static std::string GetReplayDir() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++        return "";
++
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
++
++    std::string gpu_model = "unknown_gpu";
++    if (cmd->HasSwitch(switches::kFingerprintGpuModel))
++        gpu_model = cmd->GetSwitchValueASCII(switches::kFingerprintGpuModel);
++    std::transform(gpu_model.begin(), gpu_model.end(), gpu_model.begin(), ::tolower);
++    std::replace(gpu_model.begin(), gpu_model.end(), ' ', '_');
++
++    std::string os_version = "unknown_os";
++    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
++        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
++    std::transform(os_version.begin(), os_version.end(), os_version.begin(), ::tolower);
++    std::replace(os_version.begin(), os_version.end(), ' ', '_');
++
++    std::string driver = "unknown_driver";
++    if (cmd->HasSwitch(switches::kFingerprintGpuDriver))
++        driver = cmd->GetSwitchValueASCII(switches::kFingerprintGpuDriver);
++    std::transform(driver.begin(), driver.end(), driver.begin(), ::tolower);
++    std::replace(driver.begin(), driver.end(), ' ', '_');
++
++    std::string dpr = "1_0";
++    if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
++        dpr = cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio);
++        std::replace(dpr.begin(), dpr.end(), '.', '_');
++    }
++
++    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
++
++    return db_path + "/" + gpu_model + "/" + os_version + "/" +
++           driver + "/" + dpr + "/" + site + "/";
++}
++
++static void ReplayLoad() {
++    g_replay_map.clear();
++    g_replay_loaded_site = g_current_site;
++
++    std::string dir = GetReplayDir();
++    if (dir.empty()) return;
++
++    base::FilePath dir_path(dir);
++    base::FileEnumerator enumerator(dir_path, false,
++                                    base::FileEnumerator::FILES,
++                                    FILE_PATH_LITERAL("*.json"));
++    for (base::FilePath json_path = enumerator.Next();
++         !json_path.empty();
++         json_path = enumerator.Next()) {
++        std::string contents;
++        if (!base::ReadFileToString(json_path, &contents)) continue;
++
++        std::string hash_str = JsonGetString(contents, "hash");
++        if (hash_str.empty()) continue;
++
++        uint64_t hash = std::stoull(hash_str, nullptr, 16);
++
++        std::string bin_path =
++            json_path.RemoveFinalExtension().value() + ".bin";
++
++        ReplayEntry entry;
++        entry.bin_path  = bin_path;
++        entry.width     = JsonGetInt(contents, "width");
++        entry.height    = JsonGetInt(contents, "height");
++        entry.trigger   = JsonGetString(contents, "trigger");
++        entry.render_ms = JsonGetDouble(contents, "render_ms");
++
++        g_replay_map[hash] = std::move(entry);
++    }
++}
++
++static std::vector<uint8_t> ReplayLookup(const std::string& trigger) {
++    if (g_replay_loaded_site != g_current_site)
++        ReplayLoad();
++
++    uint64_t hash = HashInputLog();
++    g_input_log.clear();
++
++    auto it = g_replay_map.find(hash);
++    if (it == g_replay_map.end()) {
++        fprintf(stderr, "[FP-REPLAY MISS] site=%s trigger=%s\n",
++                g_current_site.c_str(), trigger.c_str());
++        return {};
++    }
++
++    const ReplayEntry& entry = it->second;
++    auto t0 = base::TimeTicks::Now();
++
++    std::ifstream f(entry.bin_path, std::ios::binary);
++    if (!f.is_open()) {
++        fprintf(stderr, "[FP-REPLAY MISS] site=%s trigger=%s (bin missing: %s)\n",
++                g_current_site.c_str(), trigger.c_str(), entry.bin_path.c_str());
++        return {};
++    }
++
++    std::vector<uint8_t> pixels(
++        std::istreambuf_iterator<char>(f),
++        std::istreambuf_iterator<char>());
++
++    double elapsed_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++
++    if (entry.render_ms > 0.0) {
++        // ±2% jitter — realistic variance for same hardware across runs
++        double jitter_factor = 1.0 + (static_cast<double>(
++            base::RandInt(-20, 20)) / 1000.0);
++        double target_ms = entry.render_ms * jitter_factor;
++        double delta_ms = target_ms - elapsed_ms;
++        if (delta_ms > 1.0) {
++            base::PlatformThread::Sleep(
++                base::Milliseconds(static_cast<int64_t>(delta_ms)));
++        }
++    }
++
++    return pixels;
++}
++
++std::vector<uint8_t> ReplayCanvasOutput(const std::string& trigger) {
++    return ReplayLookup(trigger);
++}
++
++std::vector<uint8_t> ReplayWebGLOutput() {
++    return ReplayLookup("readPixels");
++}
++
++// ---------------------------------------------------------------------------
++// Audio Collect + Replay
++// ---------------------------------------------------------------------------
++
++static std::string GetAudioDir() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++        return "";
++
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
++
++    std::string os_version = "unknown_os";
++    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
++        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
++    std::transform(os_version.begin(), os_version.end(), os_version.begin(), ::tolower);
++    std::replace(os_version.begin(), os_version.end(), ' ', '_');
++
++    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
++
++    return db_path + "/audio/" + os_version + "/" + site + "/";
++}
++
++void FlushAudioIfNew(const uint8_t* bytes, size_t byte_len, double render_ms) {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
++    if (g_input_log.empty()) return;
++
++    std::string dir = GetAudioDir();
++    if (dir.empty()) return;
++
++    uint64_t h = HashInputLog();
++    g_input_log.clear();
++
++    char hash_hex[17];
++    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)h);
++
++    base::CreateDirectory(base::FilePath(dir));
++
++    std::string json_path = dir + hash_hex + "_audio.json";
++    std::string bin_path  = dir + hash_hex + "_audio.bin";
++
++    if (base::PathExists(base::FilePath(json_path)))
++        return;
++
++    std::ostringstream ss;
++    ss << "{\n"
++       << "  \"site\": \""    << EscapeJson(g_current_site) << "\",\n"
++       << "  \"trigger\": \"audio\",\n"
++       << "  \"hash\": \""    << hash_hex << "\",\n"
++       << "  \"render_ms\": " << render_ms << "\n"
++       << "}";
++    {
++        std::ofstream f(json_path);
++        if (f.is_open()) f << ss.str();
++    }
++
++    if (bytes && byte_len > 0) {
++        std::ofstream f(bin_path, std::ios::binary);
++        if (f.is_open())
++            f.write(reinterpret_cast<const char*>(bytes), byte_len);
++    }
++}
++
++static thread_local std::unordered_map<uint64_t, ReplayEntry> g_audio_replay_map;
++static thread_local std::string g_audio_replay_loaded_site;
++
++static void AudioReplayLoad() {
++    g_audio_replay_map.clear();
++    g_audio_replay_loaded_site = g_current_site;
++
++    std::string dir = GetAudioDir();
++    if (dir.empty()) return;
++
++    base::FilePath dir_path(dir);
++    base::FileEnumerator enumerator(dir_path, false,
++                                    base::FileEnumerator::FILES,
++                                    FILE_PATH_LITERAL("*.json"));
++    for (base::FilePath json_path = enumerator.Next();
++         !json_path.empty();
++         json_path = enumerator.Next()) {
++        std::string contents;
++        if (!base::ReadFileToString(json_path, &contents)) continue;
++
++        std::string hash_str = JsonGetString(contents, "hash");
++        if (hash_str.empty()) continue;
++
++        uint64_t hash = std::stoull(hash_str, nullptr, 16);
++        std::string bin_path =
++            json_path.RemoveFinalExtension().value() + ".bin";
++
++        ReplayEntry entry;
++        entry.bin_path  = bin_path;
++        entry.width     = 0;
++        entry.height    = 0;
++        entry.trigger   = "audio";
++        entry.render_ms = JsonGetDouble(contents, "render_ms");
++        g_audio_replay_map[hash] = std::move(entry);
++    }
++}
++
++std::vector<uint8_t> ReplayAudioOutput() {
++    if (g_audio_replay_loaded_site != g_current_site)
++        AudioReplayLoad();
++
++    uint64_t hash = HashInputLog();
++    g_input_log.clear();
++
++    auto it = g_audio_replay_map.find(hash);
++    if (it == g_audio_replay_map.end()) {
++        fprintf(stderr, "[FP-REPLAY MISS] site=%s trigger=audio\n",
++                g_current_site.c_str());
++        return {};
++    }
++
++    const ReplayEntry& entry = it->second;
++    auto t0 = base::TimeTicks::Now();
++
++    std::ifstream f(entry.bin_path, std::ios::binary);
++    if (!f.is_open()) {
++        fprintf(stderr,
++                "[FP-REPLAY MISS] site=%s trigger=audio (bin missing: %s)\n",
++                g_current_site.c_str(), entry.bin_path.c_str());
++        return {};
++    }
++
++    std::vector<uint8_t> result(
++        std::istreambuf_iterator<char>(f),
++        std::istreambuf_iterator<char>());
++
++    double elapsed_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++
++    if (entry.render_ms > 0.0) {
++        double jitter_factor = 1.0 + (static_cast<double>(
++            base::RandInt(-20, 20)) / 1000.0);
++        double target_ms = entry.render_ms * jitter_factor;
++        double delta_ms = target_ms - elapsed_ms;
++        if (delta_ms > 1.0) {
++            base::PlatformThread::Sleep(
++                base::Milliseconds(static_cast<int64_t>(delta_ms)));
++        }
++    }
++
++    return result;
++}
++
++// ---------------------------------------------------------------------------
++// measureText Collect + Replay
++// ---------------------------------------------------------------------------
++
++static std::string GetMeasureTextDir() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++        return "";
++
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
++
++    std::string os_version = "unknown_os";
++    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
++        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
++    std::transform(os_version.begin(), os_version.end(), os_version.begin(), ::tolower);
++    std::replace(os_version.begin(), os_version.end(), ' ', '_');
++
++    std::string dpr = "1_0";
++    if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
++        dpr = cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio);
++        std::replace(dpr.begin(), dpr.end(), '.', '_');
++    }
++
++    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
++
++    return db_path + "/measureText/" + os_version + "/" + dpr + "/" + site + "/";
++}
++
++void FlushMeasureTextIfNew(const double* values, size_t count) {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
++    if (g_input_log.empty()) return;
++
++    std::string dir = GetMeasureTextDir();
++    if (dir.empty()) return;
++
++    uint64_t h = HashInputLog();
++    g_input_log.clear();
++
++    char hash_hex[17];
++    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)h);
++
++    base::CreateDirectory(base::FilePath(dir));
++
++    std::string json_path = dir + hash_hex + "_measureText.json";
++    std::string bin_path  = dir + hash_hex + "_measureText.bin";
++
++    if (base::PathExists(base::FilePath(json_path)))
++        return;
++
++    std::ostringstream ss;
++    ss << "{\n"
++       << "  \"site\": \""    << EscapeJson(g_current_site) << "\",\n"
++       << "  \"trigger\": \"measureText\",\n"
++       << "  \"hash\": \""    << hash_hex << "\"\n"
++       << "}";
++    {
++        std::ofstream f(json_path);
++        if (f.is_open()) f << ss.str();
++    }
++
++    if (values && count > 0) {
++        std::ofstream f(bin_path, std::ios::binary);
++        if (f.is_open())
++            f.write(reinterpret_cast<const char*>(values),
++                    count * sizeof(double));
++    }
++}
++
++static thread_local std::unordered_map<uint64_t, ReplayEntry> g_measuretext_replay_map;
++static thread_local std::string g_measuretext_replay_loaded_site;
++
++static void MeasureTextReplayLoad() {
++    g_measuretext_replay_map.clear();
++    g_measuretext_replay_loaded_site = g_current_site;
++
++    std::string dir = GetMeasureTextDir();
++    if (dir.empty()) return;
++
++    base::FilePath dir_path(dir);
++    base::FileEnumerator enumerator(dir_path, false,
++                                    base::FileEnumerator::FILES,
++                                    FILE_PATH_LITERAL("*.json"));
++    for (base::FilePath json_path = enumerator.Next();
++         !json_path.empty();
++         json_path = enumerator.Next()) {
++        std::string contents;
++        if (!base::ReadFileToString(json_path, &contents)) continue;
++
++        std::string hash_str = JsonGetString(contents, "hash");
++        if (hash_str.empty()) continue;
++
++        uint64_t hash = std::stoull(hash_str, nullptr, 16);
++        std::string bin_path =
++            json_path.RemoveFinalExtension().value() + ".bin";
++
++        ReplayEntry entry;
++        entry.bin_path  = bin_path;
++        entry.width     = 0;
++        entry.height    = 0;
++        entry.trigger   = "measureText";
++        entry.render_ms = 0.0;
++        g_measuretext_replay_map[hash] = std::move(entry);
++    }
++}
++
++std::vector<double> ReplayMeasureText() {
++    if (g_measuretext_replay_loaded_site != g_current_site)
++        MeasureTextReplayLoad();
++
++    uint64_t hash = HashInputLog();
++    g_input_log.clear();
++
++    auto it = g_measuretext_replay_map.find(hash);
++    if (it == g_measuretext_replay_map.end()) {
++        fprintf(stderr, "[FP-REPLAY MISS] site=%s trigger=measureText\n",
++                g_current_site.c_str());
++        return {};
++    }
++
++    const ReplayEntry& entry = it->second;
++    std::ifstream f(entry.bin_path, std::ios::binary);
++    if (!f.is_open()) {
++        fprintf(stderr,
++                "[FP-REPLAY MISS] site=%s trigger=measureText (bin: %s)\n",
++                g_current_site.c_str(), entry.bin_path.c_str());
++        return {};
++    }
++
++    std::vector<uint8_t> raw(
++        std::istreambuf_iterator<char>(f),
++        std::istreambuf_iterator<char>());
++
++    if (raw.size() < 9 * sizeof(double)) return {};
++
++    std::vector<double> result(raw.size() / sizeof(double));
++    memcpy(result.data(), raw.data(), result.size() * sizeof(double));
++    return result;
++}
++
++// ---------------------------------------------------------------------------
++// clientRects Collect + Replay
++// ---------------------------------------------------------------------------
++
++static std::string GetClientRectsDir() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++        return "";
++
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
++
++    std::string os_version = "unknown_os";
++    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
++        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
++    std::transform(os_version.begin(), os_version.end(), os_version.begin(), ::tolower);
++    std::replace(os_version.begin(), os_version.end(), ' ', '_');
++
++    std::string dpr = "1_0";
++    if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
++        dpr = cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio);
++        std::replace(dpr.begin(), dpr.end(), '.', '_');
++    }
++
++    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
++
++    return db_path + "/clientRects/" + os_version + "/" + dpr + "/" + site + "/";
++}
++
++void FlushClientRectsIfNew(const float* values, size_t count,
++                           const std::string& trigger) {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
++    if (g_input_log.empty()) return;
++
++    std::string dir = GetClientRectsDir();
++    if (dir.empty()) return;
++
++    uint64_t h = HashInputLog();
++    g_input_log.clear();
++
++    char hash_hex[17];
++    snprintf(hash_hex, sizeof(hash_hex), "%016llx", (unsigned long long)h);
++
++    base::CreateDirectory(base::FilePath(dir));
++
++    std::string json_path = dir + hash_hex + "_" + trigger + ".json";
++    std::string bin_path  = dir + hash_hex + "_" + trigger + ".bin";
++
++    if (base::PathExists(base::FilePath(json_path)))
++        return;
++
++    std::ostringstream ss;
++    ss << "{\n"
++       << "  \"site\": \""    << EscapeJson(g_current_site) << "\",\n"
++       << "  \"trigger\": \"" << trigger << "\",\n"
++       << "  \"hash\": \""    << hash_hex << "\"\n"
++       << "}";
++    {
++        std::ofstream f(json_path);
++        if (f.is_open()) f << ss.str();
++    }
++
++    if (values && count > 0) {
++        std::ofstream f(bin_path, std::ios::binary);
++        if (f.is_open())
++            f.write(reinterpret_cast<const char*>(values),
++                    count * sizeof(float));
++    }
++}
++
++static thread_local std::unordered_map<uint64_t, ReplayEntry> g_clientrects_replay_map;
++static thread_local std::string g_clientrects_replay_loaded_site;
++
++static void ClientRectsReplayLoad() {
++    g_clientrects_replay_map.clear();
++    g_clientrects_replay_loaded_site = g_current_site;
++
++    std::string dir = GetClientRectsDir();
++    if (dir.empty()) return;
++
++    base::FilePath dir_path(dir);
++    base::FileEnumerator enumerator(dir_path, false,
++                                    base::FileEnumerator::FILES,
++                                    FILE_PATH_LITERAL("*.json"));
++    for (base::FilePath json_path = enumerator.Next();
++         !json_path.empty();
++         json_path = enumerator.Next()) {
++        std::string contents;
++        if (!base::ReadFileToString(json_path, &contents)) continue;
++
++        std::string hash_str = JsonGetString(contents, "hash");
++        if (hash_str.empty()) continue;
++
++        uint64_t hash = std::stoull(hash_str, nullptr, 16);
++        std::string bin_path =
++            json_path.RemoveFinalExtension().value() + ".bin";
++
++        ReplayEntry entry;
++        entry.bin_path  = bin_path;
++        entry.width     = 0;
++        entry.height    = 0;
++        entry.trigger   = JsonGetString(contents, "trigger");
++        entry.render_ms = 0.0;
++        g_clientrects_replay_map[hash] = std::move(entry);
++    }
++}
++
++std::vector<float> ReplayClientRects(const std::string& trigger) {
++    if (g_clientrects_replay_loaded_site != g_current_site)
++        ClientRectsReplayLoad();
++
++    uint64_t hash = HashInputLog();
++    g_input_log.clear();
++
++    auto it = g_clientrects_replay_map.find(hash);
++    if (it == g_clientrects_replay_map.end()) {
++        fprintf(stderr, "[FP-REPLAY MISS] site=%s trigger=%s\n",
++                g_current_site.c_str(), trigger.c_str());
++        return {};
++    }
++
++    const ReplayEntry& entry = it->second;
++    std::ifstream f(entry.bin_path, std::ios::binary);
++    if (!f.is_open()) {
++        fprintf(stderr,
++                "[FP-REPLAY MISS] site=%s trigger=%s (bin: %s)\n",
++                g_current_site.c_str(), trigger.c_str(),
++                entry.bin_path.c_str());
++        return {};
++    }
++
++    std::vector<uint8_t> raw(
++        std::istreambuf_iterator<char>(f),
++        std::istreambuf_iterator<char>());
++
++    if (raw.size() < sizeof(float)) return {};
++
++    std::vector<float> result(raw.size() / sizeof(float));
++    memcpy(result.data(), raw.data(), result.size() * sizeof(float));
++    return result;
++}
++
 +}  // namespace fingerprint_collector
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.h b/components/ungoogled/fingerprint_collector.h
 new file mode 100644
-index 0000000000..21482a76b8
+index 0000000000..e3c020222d
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.h
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,117 @@
 +#pragma once
 +
 +#include <string>
++#include <cstdint>
 +#include <vector>
 +#include "base/component_export.h"
 +
 +namespace fingerprint_collector {
 +
++// ---------------------------------------------------------------------------
++// Collect — input logging
++// ---------------------------------------------------------------------------
++
++// Log a canvas drawing command into the thread-local input log.
++// Called for fillText, strokeText, measureText, etc.
 +COMPONENT_EXPORT(UNGOOGLED) void LogCanvasInput(
 +    const std::string& op,
 +    const std::string& text,
@@ -237,16 +861,142 @@ index 0000000000..21482a76b8
 +    double max_width = -1.0
 +);
 +
++// Log a rect drawing command (fillRect, drawImage).
 +COMPONENT_EXPORT(UNGOOGLED) void LogRectInput(
 +    double x, double y,
 +    double width, double height
 +);
 +
-+COMPONENT_EXPORT(UNGOOGLED) void FlushTestIfNew(const std::string& trigger);
++// Hash the current input log, write recipe JSON if new, clear log.
++// render_ms — GPU/CPU readback time measured by the caller (0.0 if unknown).
++COMPONENT_EXPORT(UNGOOGLED) void FlushTestIfNew(
++    const std::string& trigger,
++    double render_ms = 0.0
++);
 +
++// ---------------------------------------------------------------------------
++// Site management
++// ---------------------------------------------------------------------------
++
++// Set the current site — normalizes to origin (scheme+host+port).
++// Must be called before any Log* or Flush* call for a given page.
 +COMPONENT_EXPORT(UNGOOGLED) void SetCurrentSite(const std::string& url);
 +
++// Clear the thread-local input log — call at page navigation.
 +COMPONENT_EXPORT(UNGOOGLED) void ClearInputLog();
++
++// ---------------------------------------------------------------------------
++// Canvas / WebGL Replay
++// ---------------------------------------------------------------------------
++
++// Returns stored pixel bytes or empty on miss.
++// Caller falls through to real GPU output if empty.
++// Internally applies ±2% jitter sleep based on stored render_ms.
++COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayCanvasOutput(
++    const std::string& trigger
++);
++
++COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayWebGLOutput();
++
++// ---------------------------------------------------------------------------
++// Audio Collect + Replay
++// ---------------------------------------------------------------------------
++
++// Flush recipe JSON + save raw float32 .bin for the audio replay database.
++// bytes     — raw float32 LE buffer (all channels concatenated)
++// byte_len  — size in bytes
++// render_ms — time to extract the audio buffer, for replay jitter
++COMPONENT_EXPORT(UNGOOGLED) void FlushAudioIfNew(
++    const uint8_t* bytes,
++    size_t byte_len,
++    double render_ms = 0.0
++);
++
++// Load float32 .bin from OS-keyed audio replay path.
++// Returns empty vector on miss.
++// Internally applies ±2% jitter sleep based on stored render_ms.
++COMPONENT_EXPORT(UNGOOGLED) std::vector<uint8_t> ReplayAudioOutput();
++
++// ---------------------------------------------------------------------------
++// measureText Collect + Replay
++// ---------------------------------------------------------------------------
++
++// Flush recipe JSON + save 9 doubles as .bin.
++// values[0..8]: width, bbox_left, bbox_right, font_ascent, font_descent,
++//               actual_ascent, actual_descent, em_ascent, em_descent
++COMPONENT_EXPORT(UNGOOGLED) void FlushMeasureTextIfNew(
++    const double* values,
++    size_t count
++);
++
++// Returns 9 doubles or empty on miss.
++COMPONENT_EXPORT(UNGOOGLED) std::vector<double> ReplayMeasureText();
++
++// ---------------------------------------------------------------------------
++// clientRects Collect + Replay
++// ---------------------------------------------------------------------------
++
++// Flush recipe JSON + save float x/y offset pairs as .bin.
++// values  — array of x/y offset pairs per rect
++// count   — total number of floats (rect_count * 2)
++// trigger — "getClientRects", "getBoundingClientRect",
++//           "range.getClientRects", "range.getBoundingClientRect"
++COMPONENT_EXPORT(UNGOOGLED) void FlushClientRectsIfNew(
++    const float* values,
++    size_t count,
++    const std::string& trigger
++);
++
++// Returns float x/y offset pairs or empty on miss.
++COMPONENT_EXPORT(UNGOOGLED) std::vector<float> ReplayClientRects(
++    const std::string& trigger
++);
 +
 +}  // namespace fingerprint_collector
 \ No newline at end of file
+diff --git a/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc b/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
+index d293c49e67..f904649c77 100644
+--- a/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
++++ b/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
+@@ -32,6 +32,13 @@
+ 
+ #include <tuple>
+ 
++#include "base/command_line.h"
++#include "base/files/file_util.h"
++#include "base/files/file_path.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include "third_party/blink/renderer/core/script/classic_script.h"
++
+ #include "base/debug/crash_logging.h"
+ #include "base/debug/dump_without_crashing.h"
+ #include "base/memory/scoped_refptr.h"
+@@ -218,6 +225,27 @@ void LocalWindowProxy::Initialize() {
+   InstallConditionalFeatures();
+ 
+   if (World().IsMainWorld()) {
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++            switches::kFingerprintCollect)) {
++        fingerprint_collector::ClearInputLog();
++        const base::CommandLine* cmd =
++            base::CommandLine::ForCurrentProcess();
++        std::string script_path =
++            cmd->GetSwitchValueASCII(switches::kFingerprintCollectorScript);
++        if (!script_path.empty()) {
++            std::string script_content;
++            if (base::ReadFileToString(
++                    base::FilePath(script_path), &script_content)) {
++                ClassicScript::CreateUnspecifiedScript(
++                    String::FromUTF8(script_content.c_str()),
++                    ScriptSourceLocationType::kInternal)
++                    ->RunScript(
++                        GetFrame()->DomWindow(),
++                        ExecuteScriptPolicy::
++                            kExecuteScriptWhenScriptsDisabled);
++            }
++        }
++    }
+     probe::DidCreateMainWorldContext(GetFrame());
+     GetFrame()->Loader().DispatchDidClearWindowObjectInMainWorld();
+   }
