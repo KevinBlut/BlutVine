@@ -192,3 +192,49 @@ index 4ff2fecc93..3138416b18 100644
      base::span<float> destination = destination_array->AsSpan();
      for (unsigned i = 0; i < len; ++i) {
        // Buffer access is protected due to modulo operation.
+diff --git a/third_party/blink/renderer/modules/webaudio/analyser_node.cc b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
+index 688a2fec77..21c67cda44 100644
+--- a/third_party/blink/renderer/modules/webaudio/analyser_node.cc
++++ b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
+@@ -25,6 +25,11 @@
+ 
+ #include "third_party/blink/renderer/modules/webaudio/analyser_node.h"
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include "url/gurl.h"
++
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_analyser_options.h"
+ #include "third_party/blink/renderer/modules/webaudio/analyser_handler.h"
+ #include "third_party/blink/renderer/modules/webaudio/audio_graph_tracer.h"
+@@ -117,6 +122,14 @@ double AnalyserNode::smoothingTimeConstant() const {
+ }
+ 
+ void AnalyserNode::getFloatFrequencyData(NotShared<DOMFloat32Array> array) {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintReplay)) {
++    GURL raw(context()->GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : context()->GetExecutionContext()->Url().GetString().Utf8());
++  }
+   GetAnalyserHandler().GetFloatFrequencyData(array.Get(),
+                                              context()->currentTime());
+ }
+@@ -127,6 +140,14 @@ void AnalyserNode::getByteFrequencyData(NotShared<DOMUint8Array> array) {
+ }
+ 
+ void AnalyserNode::getFloatTimeDomainData(NotShared<DOMFloat32Array> array) {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintReplay)) {
++    GURL raw(context()->GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : context()->GetExecutionContext()->Url().GetString().Utf8());
++  }
+   GetAnalyserHandler().GetFloatTimeDomainData(array.Get());
+ }
+ 
