@@ -1,8 +1,8 @@
 diff --git a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-index 34e8e70932..fe1930f3f2 100644
+index 6a7419e4a1..1daef9ac28 100644
 --- a/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
 +++ b/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
-@@ -33,6 +33,12 @@
+@@ -33,6 +33,13 @@
  #include <memory>
  #include <utility>
  
@@ -12,10 +12,11 @@ index 34e8e70932..fe1930f3f2 100644
 +#include <vector>
 +#include "third_party/blink/renderer/core/fileapi/blob.h"
 +#include "base/time/time.h"
++
  #include "base/feature_list.h"
  #include "base/functional/callback_helpers.h"
  #include "base/location.h"
-@@ -1314,6 +1320,42 @@ String HTMLCanvasElement::ToDataURLInternal(
+@@ -1308,6 +1315,42 @@ String HTMLCanvasElement::ToDataURLInternal(
  
    scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(source_buffer);
    if (image_bitmap) {
@@ -58,7 +59,7 @@ index 34e8e70932..fe1930f3f2 100644
      std::unique_ptr<ImageDataBuffer> data_buffer =
          ImageDataBuffer::Create(image_bitmap);
      if (!data_buffer)
-@@ -1433,6 +1463,55 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
+@@ -1419,6 +1462,55 @@ void HTMLCanvasElement::toBlob(V8BlobCallback* callback,
    CanvasAsyncBlobCreator* async_creator = nullptr;
    scoped_refptr<StaticBitmapImage> image_bitmap = Snapshot(kBackBuffer);
    if (image_bitmap) {
@@ -115,10 +116,10 @@ index 34e8e70932..fe1930f3f2 100644
      options->setType(ImageEncoderUtils::MimeTypeName(encoding_mime_type));
      async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
 diff --git a/third_party/blink/renderer/core/html/canvas/text_metrics.cc b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
-index 5ddc877d7d..54f49f4d79 100644
+index 9933a3e2bd..6549c5ffed 100644
 --- a/third_party/blink/renderer/core/html/canvas/text_metrics.cc
 +++ b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
-@@ -108,6 +108,26 @@ void TextMetrics::Shuffle(const double factor) {
+@@ -109,6 +109,26 @@ void TextMetrics::Shuffle(const double factor) {
    baselines_->setIdeographic(baselines_->ideographic() * factor);
  }
  
@@ -167,10 +168,10 @@ index 7b3147047c..ce8628141b 100644
    void Update(const Font*,
                const TextDirection& direction,
 diff --git a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
-index bc38366a99..d78ac98f05 100644
+index 3307c21537..552717a9a8 100644
 --- a/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
 +++ b/third_party/blink/renderer/core/offscreencanvas/offscreen_canvas.cc
-@@ -7,6 +7,13 @@
+@@ -7,6 +7,14 @@
  #include <memory>
  #include <utility>
  
@@ -181,10 +182,11 @@ index bc38366a99..d78ac98f05 100644
 +#include "third_party/skia/include/core/SkImageInfo.h"
 +#include "third_party/blink/renderer/platform/graphics/image_data_buffer.h"
 +#include "base/time/time.h"
++
  #include "base/metrics/histogram_functions.h"
  #include "base/numerics/safe_conversions.h"
  #include "base/task/single_thread_task_runner.h"
-@@ -223,6 +230,44 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
+@@ -285,6 +293,44 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(
                                        "ImageBitmap construction failed");
    }
  
@@ -229,7 +231,7 @@ index bc38366a99..d78ac98f05 100644
    return image;
  }
  
-@@ -347,6 +388,49 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
+@@ -431,6 +477,48 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
      auto* async_creator = MakeGarbageCollected<CanvasAsyncBlobCreator>(
          image_bitmap, options, function_type, start_time, execution_context,
          resolver);
@@ -279,7 +281,7 @@ index bc38366a99..d78ac98f05 100644
      return resolver->Promise();
    }
 diff --git a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
-index 3006cad0fb..13e975ec1a 100644
+index 381f92b905..a432ed1578 100644
 --- a/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
 +++ b/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
 @@ -11,6 +11,13 @@
@@ -296,7 +298,7 @@ index 3006cad0fb..13e975ec1a 100644
  #include "base/check.h"
  #include "base/check_op.h"
  #include "base/location.h"
-@@ -523,6 +530,31 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
+@@ -532,6 +539,29 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
            snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
        DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
      }
@@ -326,7 +328,7 @@ index 3006cad0fb..13e975ec1a 100644
    }
  
    return image_data;
-@@ -882,6 +912,14 @@ void BaseRenderingContext2D::setDirection(const V8CanvasDirection direction) {
+@@ -891,6 +921,14 @@ void BaseRenderingContext2D::setDirection(const V8CanvasDirection direction) {
  
  void BaseRenderingContext2D::fillText(const String& text, double x, double y) {
    CanvasRenderingContext2DState& state = GetState();
@@ -341,7 +343,7 @@ index 3006cad0fb..13e975ec1a 100644
    DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kFillPaintType,
                     state.GetTextAlign(), state.GetTextBaseline(), 0,
                     text.length());
-@@ -892,6 +930,15 @@ void BaseRenderingContext2D::fillText(const String& text,
+@@ -901,6 +939,15 @@ void BaseRenderingContext2D::fillText(const String& text,
                                        double y,
                                        double max_width) {
    CanvasRenderingContext2DState& state = GetState();
@@ -357,7 +359,7 @@ index 3006cad0fb..13e975ec1a 100644
    DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kFillPaintType,
                     state.GetTextAlign(), state.GetTextBaseline(), 0,
                     text.length(), &max_width);
-@@ -938,6 +985,14 @@ void BaseRenderingContext2D::strokeText(const String& text,
+@@ -947,6 +994,14 @@ void BaseRenderingContext2D::strokeText(const String& text,
                                          double x,
                                          double y) {
    CanvasRenderingContext2DState& state = GetState();
@@ -372,7 +374,7 @@ index 3006cad0fb..13e975ec1a 100644
    DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
                     state.GetTextAlign(), state.GetTextBaseline(), 0,
                     text.length());
-@@ -948,6 +1003,15 @@ void BaseRenderingContext2D::strokeText(const String& text,
+@@ -957,6 +1012,15 @@ void BaseRenderingContext2D::strokeText(const String& text,
                                          double y,
                                          double max_width) {
    CanvasRenderingContext2DState& state = GetState();
@@ -388,16 +390,7 @@ index 3006cad0fb..13e975ec1a 100644
    DrawTextInternal(text, x, y, CanvasRenderingContext2DState::kStrokePaintType,
                     state.GetTextAlign(), state.GetTextBaseline(), 0,
                     text.length(), &max_width);
-@@ -1143,8 +1207,6 @@ void BaseRenderingContext2D::DrawTextInternal(
- }
- 
- TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
--  // The style resolution required for fonts is not available in frame-less
--  // documents.
-   HTMLCanvasElement* canvas = HostAsHTMLCanvasElement();
- 
-   if (canvas) {
-@@ -1165,9 +1227,60 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
+@@ -1174,9 +1238,60 @@ TextMetrics* BaseRenderingContext2D::measureText(const String& text) {
    TextDirection direction =
        ToTextDirection(state.GetDirection(), host, computed_style);
  
