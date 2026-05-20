@@ -1,8 +1,54 @@
+diff --git a/third_party/blink/renderer/modules/webaudio/analyser_node.cc b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
+index 688a2fec77..21c67cda44 100644
+--- a/third_party/blink/renderer/modules/webaudio/analyser_node.cc
++++ b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
+@@ -25,6 +25,11 @@
+ 
+ #include "third_party/blink/renderer/modules/webaudio/analyser_node.h"
+ 
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include "url/gurl.h"
++
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_analyser_options.h"
+ #include "third_party/blink/renderer/modules/webaudio/analyser_handler.h"
+ #include "third_party/blink/renderer/modules/webaudio/audio_graph_tracer.h"
+@@ -117,6 +122,14 @@ double AnalyserNode::smoothingTimeConstant() const {
+ }
+ 
+ void AnalyserNode::getFloatFrequencyData(NotShared<DOMFloat32Array> array) {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintReplay)) {
++    GURL raw(context()->GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : context()->GetExecutionContext()->Url().GetString().Utf8());
++  }
+   GetAnalyserHandler().GetFloatFrequencyData(array.Get(),
+                                              context()->currentTime());
+ }
+@@ -127,6 +140,14 @@ void AnalyserNode::getByteFrequencyData(NotShared<DOMUint8Array> array) {
+ }
+ 
+ void AnalyserNode::getFloatTimeDomainData(NotShared<DOMFloat32Array> array) {
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintReplay)) {
++    GURL raw(context()->GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : context()->GetExecutionContext()->Url().GetString().Utf8());
++  }
+   GetAnalyserHandler().GetFloatTimeDomainData(array.Get());
+ }
+ 
 diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
-index 626582e39b..6f4b672b88 100644
+index 626582e39b..1aa9e24f95 100644
 --- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
 +++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
-@@ -25,6 +25,12 @@
+@@ -25,6 +25,13 @@
  
  #include "third_party/blink/renderer/modules/webaudio/offline_audio_context.h"
  
@@ -12,10 +58,11 @@ index 626582e39b..6f4b672b88 100644
 +#include "components/ungoogled/fingerprint_collector.h"
 +#include "base/time/time.h"
 +#include "url/gurl.h"
++
  #include "base/metrics/histogram_functions.h"
  #include "base/metrics/histogram_macros.h"
  #include "media/base/audio_glitch_info.h"
-@@ -181,6 +186,25 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
+@@ -180,6 +187,25 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
    destination_node_ = OfflineAudioDestinationNode::Create(
        this, number_of_channels, number_of_frames, sample_rate);
    Initialize();
@@ -41,7 +88,7 @@ index 626582e39b..6f4b672b88 100644
  }
  
  OfflineAudioContext::~OfflineAudioContext() {
-@@ -423,6 +444,75 @@ void OfflineAudioContext::FireCompletionEvent() {
+@@ -419,6 +445,81 @@ void OfflineAudioContext::FireCompletionEvent() {
        return;
      }
  
@@ -124,7 +171,7 @@ index 626582e39b..6f4b672b88 100644
      // promise too.
      DispatchEvent(*OfflineAudioCompletionEvent::Create(rendered_buffer));
 diff --git a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc b/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
-index 4ff2fecc93..3138416b18 100644
+index 4ff2fecc93..92fca78dbf 100644
 --- a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
 +++ b/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
 @@ -31,6 +31,10 @@
@@ -165,7 +212,7 @@ index 4ff2fecc93..3138416b18 100644
    // Convert from linear magnitude to floating-point decibels.
    const size_t source_length = magnitude_buffer_.size();
    const size_t len = std::min(source_length, destination_array->length());
-@@ -173,6 +205,26 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
+@@ -177,6 +201,26 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
  
      const unsigned write_index = GetWriteIndex();
  
@@ -192,49 +239,3 @@ index 4ff2fecc93..3138416b18 100644
      base::span<float> destination = destination_array->AsSpan();
      for (unsigned i = 0; i < len; ++i) {
        // Buffer access is protected due to modulo operation.
-diff --git a/third_party/blink/renderer/modules/webaudio/analyser_node.cc b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
-index 688a2fec77..21c67cda44 100644
---- a/third_party/blink/renderer/modules/webaudio/analyser_node.cc
-+++ b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
-@@ -25,6 +25,11 @@
- 
- #include "third_party/blink/renderer/modules/webaudio/analyser_node.h"
- 
-+#include "base/command_line.h"
-+#include "components/ungoogled/ungoogled_switches.h"
-+#include "components/ungoogled/fingerprint_collector.h"
-+#include "url/gurl.h"
-+
- #include "third_party/blink/renderer/bindings/modules/v8/v8_analyser_options.h"
- #include "third_party/blink/renderer/modules/webaudio/analyser_handler.h"
- #include "third_party/blink/renderer/modules/webaudio/audio_graph_tracer.h"
-@@ -117,6 +122,14 @@ double AnalyserNode::smoothingTimeConstant() const {
- }
- 
- void AnalyserNode::getFloatFrequencyData(NotShared<DOMFloat32Array> array) {
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-+          switches::kFingerprintReplay)) {
-+    GURL raw(context()->GetExecutionContext()->Url().GetString().Utf8());
-+    fingerprint_collector::SetCurrentSite(
-+        raw.is_valid()
-+            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : context()->GetExecutionContext()->Url().GetString().Utf8());
-+  }
-   GetAnalyserHandler().GetFloatFrequencyData(array.Get(),
-                                              context()->currentTime());
- }
-@@ -127,6 +140,14 @@ void AnalyserNode::getByteFrequencyData(NotShared<DOMUint8Array> array) {
- }
- 
- void AnalyserNode::getFloatTimeDomainData(NotShared<DOMFloat32Array> array) {
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-+          switches::kFingerprintReplay)) {
-+    GURL raw(context()->GetExecutionContext()->Url().GetString().Utf8());
-+    fingerprint_collector::SetCurrentSite(
-+        raw.is_valid()
-+            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : context()->GetExecutionContext()->Url().GetString().Utf8());
-+  }
-   GetAnalyserHandler().GetFloatTimeDomainData(array.Get());
- }
- 
