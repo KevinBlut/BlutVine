@@ -1,12 +1,11 @@
 diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
-index ddc1b22f78..3cc6031577 100644
+index dd57eb68ad..cfecdbae08 100644
 --- a/components/ungoogled/fingerprint_data.h
 +++ b/components/ungoogled/fingerprint_data.h
-@@ -322,6 +322,104 @@ constexpr GpuModelInfo kGpuModels[] = {
+@@ -322,6 +322,103 @@ constexpr GpuModelInfo kGpuModels[] = {
  
  constexpr size_t kGpuModelCount = sizeof(kGpuModels) / sizeof(kGpuModels[0]);
  
-+
 +
 +// =============================================================================
 +// WebGL GPU Limits
@@ -157,7 +156,7 @@ index 18aaa25ad7..2c33c2a8e0 100644
  
  void WebGL2RenderingContextBase::blitFramebuffer(GLint src_x0,
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index b0bba87aad..cd93c3818f 100644
+index 55af6d0d70..d920c8803a 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 @@ -28,6 +28,15 @@
@@ -176,12 +175,11 @@ index b0bba87aad..cd93c3818f 100644
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
  #include "base/compiler_specific.h"
-@@ -738,8 +747,43 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
-     return nullptr;
-   }
+@@ -763,7 +772,43 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+   // regardless of preserveDrawingBuffer.
+   GetDrawingBuffer()->RequireExplicitBufferClear();
  
--  return MakeGarbageCollected<ImageBitmap>(
--      GetDrawingBuffer()->TransferToStaticBitmapImage());
+-  return MakeGarbageCollected<ImageBitmap>(std::move(image));
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
 +    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
@@ -222,7 +220,7 @@ index b0bba87aad..cd93c3818f 100644
  }
  
  void WebGLRenderingContextBase::drawingBufferStorage(GLenum sizedformat,
-@@ -3764,6 +3808,69 @@ void WebGLRenderingContextBase::RecordANGLEImplementation() {
+@@ -3784,6 +3829,69 @@ void WebGLRenderingContextBase::RecordANGLEImplementation() {
                              webgl_angle_implementation);
  }
  
@@ -292,7 +290,7 @@ index b0bba87aad..cd93c3818f 100644
  ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
                                                      GLenum pname) {
    if (isContextLost())
-@@ -3851,21 +3958,49 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3871,21 +3979,49 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
        return GetIntParameter(script_state, pname);
      case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
@@ -346,7 +344,7 @@ index b0bba87aad..cd93c3818f 100644
      case GL_MAX_VIEWPORT_DIMS:
        return GetWebGLIntArrayParameter(script_state, pname);
      case GL_PACK_ALIGNMENT:
-@@ -3881,7 +4016,15 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3901,7 +4037,15 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GL_RENDERBUFFER_BINDING:
        return WebGLAny(script_state, renderbuffer_binding_.Get());
      case GL_RENDERER:
@@ -362,7 +360,7 @@ index b0bba87aad..cd93c3818f 100644
      case GL_SAMPLE_ALPHA_TO_COVERAGE:
        return GetBooleanParameter(script_state, pname);
      case GL_SAMPLE_BUFFERS:
-@@ -3959,7 +4102,14 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3979,7 +4123,14 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GC3D_UNPACK_COLORSPACE_CONVERSION_WEBGL:
        return WebGLAny(script_state, unpack_colorspace_conversion_);
      case GL_VENDOR:
@@ -377,7 +375,7 @@ index b0bba87aad..cd93c3818f 100644
      case GL_VERSION:
        return WebGLAny(
            script_state,
-@@ -5144,6 +5294,30 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+@@ -5164,6 +5315,30 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
        return;
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
@@ -408,7 +406,7 @@ index b0bba87aad..cd93c3818f 100644
    }
  }
  
-@@ -7754,47 +7928,75 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
+@@ -7747,47 +7922,75 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
  ScriptValue WebGLRenderingContextBase::GetWebGLFloatArrayParameter(
      ScriptState* script_state,
      GLenum pname) {
