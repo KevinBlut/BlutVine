@@ -274,19 +274,19 @@ index 0000000000..a59898b238
 +#endif  // COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
 \ No newline at end of file
 diff --git a/third_party/blink/renderer/core/DEPS b/third_party/blink/renderer/core/DEPS
-index 942455c9b6..961e36b4f0 100644
+index a7abbed524..cdaa8d9181 100644
 --- a/third_party/blink/renderer/core/DEPS
 +++ b/third_party/blink/renderer/core/DEPS
-@@ -69,6 +69,7 @@ include_rules = [
+@@ -70,6 +70,7 @@ include_rules = [
      "+components/attribution_reporting/features.h",
      "+components/performance_manager/public/mojom/coordination_unit.mojom-blink.h",
      "+components/performance_manager/public/mojom/web_memory.mojom-blink.h",
 +    "+components/ungoogled",
      "+components/viz/common/frame_timing_details.h",
      "+components/viz/common/navigation_id.h",
-     "+gpu/config/gpu_feature_info.h",
+     "+components/viz/common/surfaces/tracked_element_rects.h",
 diff --git a/third_party/blink/renderer/core/frame/local_dom_window.cc b/third_party/blink/renderer/core/frame/local_dom_window.cc
-index 06efc300ee..f3dd3b05f4 100644
+index 51f03729c2..0e05f7b129 100644
 --- a/third_party/blink/renderer/core/frame/local_dom_window.cc
 +++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
 @@ -30,6 +30,8 @@
