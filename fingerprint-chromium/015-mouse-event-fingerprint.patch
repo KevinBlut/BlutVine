@@ -1,5 +1,5 @@
 diff --git a/third_party/blink/renderer/core/events/mouse_event.h b/third_party/blink/renderer/core/events/mouse_event.h
-index edfcb09cf3..1ae8673b97 100644
+index 3ce3540e01..8cae7893c8 100644
 --- a/third_party/blink/renderer/core/events/mouse_event.h
 +++ b/third_party/blink/renderer/core/events/mouse_event.h
 @@ -26,6 +26,8 @@
@@ -8,10 +8,10 @@ index edfcb09cf3..1ae8673b97 100644
  
 +#include "components/ungoogled/fingerprint_screen.h"
 +
- #include "third_party/blink/public/common/input/web_menu_source_type.h"
  #include "third_party/blink/renderer/core/core_export.h"
  #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
-@@ -147,8 +149,26 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
+ #include "third_party/blink/renderer/core/events/ui_event_with_key_state.h"
+@@ -148,8 +150,26 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
  
    // Note that these values are adjusted to counter the effects of zoom, so that
    // values exposed via DOM APIs are invariant under zooming.
