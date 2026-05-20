@@ -1,5 +1,5 @@
 diff --git a/components/embedder_support/user_agent_utils.cc b/components/embedder_support/user_agent_utils.cc
-index 557eadb182..df378ef4e5 100644
+index 557eadb182..1d5a711207 100644
 --- a/components/embedder_support/user_agent_utils.cc
 +++ b/components/embedder_support/user_agent_utils.cc
 @@ -12,6 +12,10 @@
@@ -138,16 +138,16 @@ index 557eadb182..df378ef4e5 100644
  }
  
  std::string GetPlatformVersion() {
-+  // Fingerprint override — return spoofed Android platform version.
-+  {
-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (cmd->HasSwitch(switches::kFingerprintPlatform)) {
-+      std::string pv = base::ToLowerASCII(
-+          cmd->GetSwitchValueASCII(switches::kFingerprintPlatform));
-+      if (pv.find("android") != std::string::npos)
-+        return fingerprint_mobile::ResolveAndroidProfile(pv).ch_version;
-+    }
++// Fingerprint override — return spoofed Android platform version.
++{
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprintPlatform)) {
++    std::string pv = base::ToLowerASCII(
++        cmd->GetSwitchValueASCII(switches::kFingerprintPlatform));
++    if (pv.find("android") != std::string::npos)
++      return fingerprint_mobile::ResolveAndroidProfile(pv).ch_version;
 +  }
++}
 +
  #if BUILDFLAG(IS_LINUX)
    // TODO(crbug.com/40245146): Remove this Blink feature
@@ -167,7 +167,7 @@ index 8b910a0cc8..54f54ad017 100644
    ]
 diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
 new file mode 100644
-index 0000000000..b28ea0fb5e
+index 0000000000..ec3d103720
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_data.h
 @@ -0,0 +1,118 @@
@@ -197,10 +197,10 @@ index 0000000000..b28ea0fb5e
 +// =============================================================================
 +
 +// Chromium version list (for seed-based selection)
-+constexpr const char* kChromiumVersions = "148.0.7778.167";
++constexpr const char* kChromiumVersions = "148.0.7778.178";
 +
 +// Default versions for Client Hints (Sec-CH-UA)
-+constexpr const char* kChromeDefaultVersion = "148.0.7778.167";
++constexpr const char* kChromeDefaultVersion = "148.0.7778.178";
 +constexpr const char* kEdgeDefaultVersion = "148.0.4029.74";
 +constexpr const char* kOperaDefaultVersion = "131.0.5877.55";
 +constexpr const char* kVivaldiDefaultVersion = "7.9.3970.64";
@@ -378,7 +378,7 @@ index 0000000000..9298a8d221
 +}  // namespace fingerprint_mobile
 \ No newline at end of file
 diff --git a/content/browser/client_hints/client_hints.cc b/content/browser/client_hints/client_hints.cc
-index 8246d97469..2c312cb755 100644
+index b1778eb659..18e18e3f5e 100644
 --- a/content/browser/client_hints/client_hints.cc
 +++ b/content/browser/client_hints/client_hints.cc
 @@ -710,6 +710,8 @@ void UpdateNavigationRequestClientUaHeadersImpl(
@@ -391,20 +391,20 @@ index 8246d97469..2c312cb755 100644
      // (intentionally) different than other client hints.
      // It's barred behind ShouldAddClientHints to make sure it's controlled by
 diff --git a/content/browser/web_contents/slow_web_preference_cache.cc b/content/browser/web_contents/slow_web_preference_cache.cc
-index ff82883826..c914acd5e7 100644
+index ff82883826..486e078274 100644
 --- a/content/browser/web_contents/slow_web_preference_cache.cc
 +++ b/content/browser/web_contents/slow_web_preference_cache.cc
-@@ -3,7 +3,8 @@
- // found in the LICENSE file.
+@@ -4,6 +4,9 @@
  
  #include "content/browser/web_contents/slow_web_preference_cache.h"
--
+ 
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include "base/strings/string_util.h"
++
  #include "base/command_line.h"
  #include "base/metrics/histogram_functions.h"
  #include "base/no_destructor.h"
-@@ -176,6 +177,18 @@ bool SlowWebPreferenceCache::Update() {
+@@ -176,6 +179,18 @@ bool SlowWebPreferenceCache::Update() {
               touch_enabled_switch ==
                   switches::kTouchEventFeatureDetectionEnabled);
  
@@ -907,7 +907,7 @@ index 583f05f8dd..2cde77aca1 100644
    // the platform with a frozen platform to distinguish between
    // mobile and desktop when ReduceUserAgent is enabled.
 diff --git a/third_party/blink/renderer/core/frame/navigator_ua.cc b/third_party/blink/renderer/core/frame/navigator_ua.cc
-index 6275dbfa19..67010fd9f3 100644
+index 22483bb57a..f7299e1872 100644
 --- a/third_party/blink/renderer/core/frame/navigator_ua.cc
 +++ b/third_party/blink/renderer/core/frame/navigator_ua.cc
 @@ -16,6 +16,9 @@ NavigatorUAData* NavigatorUA::userAgentData() {
@@ -919,9 +919,9 @@ index 6275dbfa19..67010fd9f3 100644
 +  
    ua_data->SetBrandVersionList(metadata.brand_version_list);
    ua_data->SetMobile(metadata.mobile);
-   ua_data->SetPlatform(String::FromUTF8(metadata.platform),
+   ua_data->SetPlatform(String::FromUtf8(metadata.platform),
 diff --git a/third_party/blink/renderer/core/loader/frame_fetch_context.cc b/third_party/blink/renderer/core/loader/frame_fetch_context.cc
-index aa899b08d2..4ec1556532 100644
+index 687d531f60..2a0564eafb 100644
 --- a/third_party/blink/renderer/core/loader/frame_fetch_context.cc
 +++ b/third_party/blink/renderer/core/loader/frame_fetch_context.cc
 @@ -34,6 +34,8 @@
@@ -933,7 +933,7 @@ index aa899b08d2..4ec1556532 100644
  #include "base/command_line.h"
  #include "base/feature_list.h"
  #include "base/memory/scoped_refptr.h"
-@@ -732,6 +734,8 @@ void FrameFetchContext::AddClientHintsIfNecessary(
+@@ -726,6 +728,8 @@ void FrameFetchContext::AddClientHintsIfNecessary(
  
    // Only send User Agent hints if the info is available
    if (ua) {
@@ -943,21 +943,21 @@ index aa899b08d2..4ec1556532 100644
      // Permissions Policy.
      if (ShouldSendClientHint(*policy, resource_origin, is_1p_origin,
 diff --git a/ui/base/pointer/pointer_device_linux.cc b/ui/base/pointer/pointer_device_linux.cc
-index 5c9bf105bb..f71382a247 100644
+index 5c9bf105bb..4c73c02752 100644
 --- a/ui/base/pointer/pointer_device_linux.cc
 +++ b/ui/base/pointer/pointer_device_linux.cc
-@@ -3,7 +3,9 @@
- // found in the LICENSE file.
+@@ -4,6 +4,10 @@
  
  #include "ui/base/pointer/pointer_device.h"
--
+ 
 +#include "base/command_line.h"
 +#include "base/strings/string_util.h"
 +#include "components/ungoogled/ungoogled_switches.h"
++
  #include <algorithm>
  #include <functional>
  #include <utility>
-@@ -31,6 +33,17 @@ bool IsMouseOrTouchpadPresent() {
+@@ -31,6 +35,17 @@ bool IsMouseOrTouchpadPresent() {
  }  // namespace
  
  std::pair<int, int> GetAvailablePointerAndHoverTypesImpl() {
@@ -975,7 +975,7 @@ index 5c9bf105bb..f71382a247 100644
    int pointer_types = IsTouchDevicePresent() ? POINTER_TYPE_COARSE : 0;
    int hover_types = HOVER_TYPE_NONE;
    if (IsMouseOrTouchpadPresent()) {
-@@ -51,6 +64,17 @@ TouchScreensAvailability GetTouchScreensAvailability() {
+@@ -51,6 +66,17 @@ TouchScreensAvailability GetTouchScreensAvailability() {
  }
  
  int MaxTouchPoints() {
