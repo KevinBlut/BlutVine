@@ -19,6 +19,6 @@ write_gn_args
 gn_gen
 maybe_build
 
-echo "Uploading chrome to Google Drive..."
-rclone copy "${_out_dir}/chrome" gdrive:blutvine/ --progress
-echo "Upload done."
+echo "Uploading to Google Drive..."
+rclone copy "${_out_dir}" gdrive:blutvine/out/ --progress
+echo "Done."
