@@ -18,3 +18,7 @@ export PATH="${_depot_tools_dir}/.cipd_bin:${PATH}"
 write_gn_args
 gn_gen
 maybe_build
+
+echo "Uploading chrome to Google Drive..."
+rclone copy "${_out_dir}/chrome" gdrive:blutvine/ --progress
+echo "Upload done."
