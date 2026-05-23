@@ -179,10 +179,10 @@ index e4b9053c93..744b7e3e83 100644
      "device_form_factor_desktop.cc",
 diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
 new file mode 100644
-index 0000000000..ec3d103720
+index 0000000000..006ea9377e
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_data.h
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,125 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
