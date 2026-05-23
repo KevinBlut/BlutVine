@@ -16,7 +16,7 @@ index eb72b607f8..8279148133 100644
    defines = [ "IS_UNGOOGLED_IMPL" ]
  
 -  deps = [ "//base", "//ui/display", "//ui/gfx/geometry" ]
-+  deps = [ "//base", "//ui/display", "//ui/gfx/geometry", "//skia", "//url" ]
++  deps = [ "//base", "//ui/display", "//ui/gfx/geometry", "//skia" ]
  }
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
@@ -372,9 +372,9 @@ index 0000000000..b6f9d99bde
 +        return {};
 +    }
 +
-+    std::vector<uint8_t> pixels(
++    std::vector<uint8_t> pixels{
 +        std::istreambuf_iterator<char>(f),
-+        std::istreambuf_iterator<char>());
++        std::istreambuf_iterator<char>()};
 +
 +    double elapsed_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
 +
@@ -526,9 +526,9 @@ index 0000000000..b6f9d99bde
 +        return {};
 +    }
 +
-+    std::vector<uint8_t> result(
++    std::vector<uint8_t> result{
 +        std::istreambuf_iterator<char>(f),
-+        std::istreambuf_iterator<char>());
++        std::istreambuf_iterator<char>()};
 +
 +    double elapsed_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
 +
@@ -675,9 +675,9 @@ index 0000000000..b6f9d99bde
 +        return {};
 +    }
 +
-+    std::vector<uint8_t> raw(
++    std::vector<uint8_t> raw{
 +        std::istreambuf_iterator<char>(f),
-+        std::istreambuf_iterator<char>());
++        std::istreambuf_iterator<char>()};
 +
 +    if (raw.size() < 9 * sizeof(double)) return {};
 +
@@ -817,9 +817,9 @@ index 0000000000..b6f9d99bde
 +        return {};
 +    }
 +
-+    std::vector<uint8_t> raw(
++    std::vector<uint8_t> raw{
 +        std::istreambuf_iterator<char>(f),
-+        std::istreambuf_iterator<char>());
++        std::istreambuf_iterator<char>()};
 +
 +    if (raw.size() < sizeof(float)) return {};
 +
