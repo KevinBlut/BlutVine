@@ -182,7 +182,7 @@ new file mode 100644
 index 0000000000..ec3d103720
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_data.h
-@@ -0,0 +1,118 @@
+@@ -0,0 +1,129 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
@@ -280,21 +280,28 @@ index 0000000000..ec3d103720
 +struct AndroidModel {
 +  const char* key;
 +  const char* ua_name;
++  int    screen_width;
++  int    screen_height;
++  int    nav_bar_height;
++  int    status_bar_height;
++  int    address_bar_height;
++  float  dpr;
 +};
 +
 +constexpr AndroidModel kAndroidModels[] = {
-+  { "pixel9pro",  "Pixel 9 Pro"  },
-+  { "pixel9",     "Pixel 9"      },
-+  { "pixel8pro",  "Pixel 8 Pro"  },
-+  { "pixel8",     "Pixel 8"      },
-+  { "pixel7pro",  "Pixel 7 Pro"  },
-+  { "pixel7",     "Pixel 7"      },
-+  { "pixel6",     "Pixel 6"      },
-+  { "s24ultra",   "SM-S928B"     },
-+  { "s24",        "SM-S921B"     },
-+  { "s23",        "SM-S911B"     },
-+  { "s22",        "SM-S901B"     },
-+  { "a54",        "SM-A546B"     },
++  // key          ua_name          w     h    nav  stat addr  dpr
++  { "pixel9pro",  "Pixel 9 Pro",  1344, 2992,  48,  24,  56, 2.625f },
++  { "pixel9",     "Pixel 9",      1080, 2424,  48,  24,  56, 2.625f },
++  { "pixel8pro",  "Pixel 8 Pro",  1344, 2992,  48,  24,  56, 2.625f },
++  { "pixel8",     "Pixel 8",      1080, 2400,  48,  24,  56, 2.625f },
++  { "pixel7pro",  "Pixel 7 Pro",  1440, 3120,  48,  24,  56, 3.0f   },
++  { "pixel7",     "Pixel 7",      1080, 2400,  48,  24,  56, 2.625f },
++  { "pixel6",     "Pixel 6",      1080, 2400,  48,  24,  56, 2.625f },
++  { "s24ultra",   "SM-S928B",     1440, 3088,  48,  24,  56, 3.0f   },
++  { "s24",        "SM-S921B",     1080, 2340,  48,  24,  56, 2.625f },
++  { "s23",        "SM-S911B",     1080, 2340,  48,  24,  56, 2.625f },
++  { "s22",        "SM-S901B",     1080, 2340,  48,  24,  56, 2.625f },
++  { "a54",        "SM-A546B",     1080, 2340,  48,  24,  56, 2.0f   },
 +};
 +
 +}  // namespace fingerprint
