@@ -30,7 +30,7 @@ index 0000000000..6c297c731b
 +// found in the LICENSE file.
 +
 +#include "components/ungoogled/fingerprint_screen.h"
-+
++#include "components/ungoogled/fingerprint_data.h"
 +#include <array>
 +#include <cstddef>
 +#include "base/strings/string_util.h"
