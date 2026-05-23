@@ -16,7 +16,7 @@ index eb72b607f8..8279148133 100644
    defines = [ "IS_UNGOOGLED_IMPL" ]
  
 -  deps = [ "//base", "//ui/display", "//ui/gfx/geometry" ]
-+  deps = [ "//base", "//ui/display", "//ui/gfx/geometry", "//skia" ]
++  deps = [ "//base", "//ui/display", "//ui/gfx/geometry", "//skia", "//url" ]
  }
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
