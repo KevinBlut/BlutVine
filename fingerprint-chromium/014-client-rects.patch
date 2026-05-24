@@ -41,7 +41,7 @@ index 9e4c083f19..9d325be7e3 100644
 +        Vector<gfx::RectF> result;
 +        for (auto& quad : quads)
 +          result.emplace_back(quad.BoundingBox());
-+        size_t n = std::min(result.size(), offsets.size() / 2);
++        size_t n = std::min(static_cast<size_t>(result.size()), offsets.size() / 2);
 +        for (size_t i = 0; i < n; i++)
 +          result[i].Offset(offsets[i * 2], offsets[i * 2 + 1]);
 +        return result;
