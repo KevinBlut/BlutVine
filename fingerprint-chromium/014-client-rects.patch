@@ -137,11 +137,11 @@ index 5fb159f8e3..276ec351bf 100644
 +  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +  if (cmd->HasSwitch(switches::kFingerprintCollect) ||
 +      cmd->HasSwitch(switches::kFingerprintReplay)) {
-+    GURL raw(owner_->GetDocument().Url().GetString().Utf8());
++    GURL raw(GetDocument().Url().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : owner_->GetDocument().Url().GetString().Utf8());
++            : GetDocument().Url().GetString().Utf8());
 +    fingerprint_collector::LogCanvasInput(
 +        "range.getClientRects", "", 0.0, 0.0, "", 0, 0);
 +
@@ -152,7 +152,7 @@ index 5fb159f8e3..276ec351bf 100644
 +      std::vector<float> offsets =
 +          fingerprint_collector::ReplayClientRects("range.getClientRects");
 +      if (!offsets.empty() && offsets.size() >= 2) {
-+        size_t n = std::min(quads.size(), offsets.size() / 2);
++        size_t n = std::min(static_cast<size_t>(quads.size()), offsets.size() / 2);
 +        for (size_t i = 0; i < n; i++)
 +          quads[i].Offset(offsets[i * 2], offsets[i * 2 + 1]);
 +      }
@@ -182,11 +182,11 @@ index 5fb159f8e3..276ec351bf 100644
 +  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +  if (cmd->HasSwitch(switches::kFingerprintCollect) ||
 +      cmd->HasSwitch(switches::kFingerprintReplay)) {
-+    GURL raw(owner_->GetDocument().Url().GetString().Utf8());
++    GURL raw(GetDocument().Url().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : owner_->GetDocument().Url().GetString().Utf8());
++            : GetDocument().Url().GetString().Utf8());
 +    fingerprint_collector::LogCanvasInput(
 +        "range.getBoundingClientRect", "", 0.0, 0.0, "", 0, 0);
 +
