@@ -137,11 +137,11 @@ index 5fb159f8e3..276ec351bf 100644
 +  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +  if (cmd->HasSwitch(switches::kFingerprintCollect) ||
 +      cmd->HasSwitch(switches::kFingerprintReplay)) {
-+    GURL raw(GetDocument().Url().GetString().Utf8());
++    GURL raw(OwnerDocument().Url().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : GetDocument().Url().GetString().Utf8());
++            : OwnerDocument().Url().GetString().Utf8());
 +    fingerprint_collector::LogCanvasInput(
 +        "range.getClientRects", "", 0.0, 0.0, "", 0, 0);
 +
@@ -182,11 +182,11 @@ index 5fb159f8e3..276ec351bf 100644
 +  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +  if (cmd->HasSwitch(switches::kFingerprintCollect) ||
 +      cmd->HasSwitch(switches::kFingerprintReplay)) {
-+    GURL raw(GetDocument().Url().GetString().Utf8());
++    GURL raw(OwnerDocument().Url().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : GetDocument().Url().GetString().Utf8());
++            : OwnerDocument().Url().GetString().Utf8());
 +    fingerprint_collector::LogCanvasInput(
 +        "range.getBoundingClientRect", "", 0.0, 0.0, "", 0, 0);
 +
