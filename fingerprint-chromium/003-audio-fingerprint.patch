@@ -10,7 +10,7 @@ index 688a2fec77..21c67cda44 100644
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include "components/ungoogled/fingerprint_collector.h"
 +#include "url/gurl.h"
-+
++#include "third_party/blink/renderer/platform/weborigin/kurl.h"
  #include "third_party/blink/renderer/bindings/modules/v8/v8_analyser_options.h"
  #include "third_party/blink/renderer/modules/webaudio/analyser_handler.h"
  #include "third_party/blink/renderer/modules/webaudio/audio_graph_tracer.h"
