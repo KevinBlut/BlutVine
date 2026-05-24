@@ -482,7 +482,7 @@ index 9723c850b7..e437f4ddc4 100644
    AdjustRectForCanvas(sx, sy, sw, sh);
    AdjustRectForCanvas(dx, dy, dw, dh);
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+    fingerprint_collector::LogRectInput(x, y, width, height);
++    fingerprint_collector::LogRectInput(dx, dy, dw, dh);
 +  }
    float fsx = ClampTo<float>(sx);
    float fsy = ClampTo<float>(sy);
