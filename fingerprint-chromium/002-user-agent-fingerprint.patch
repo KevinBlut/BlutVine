@@ -34,7 +34,7 @@ index 557eadb182..1d5a711207 100644
 +      if (pv.find("android") != std::string::npos) {
 +        fingerprint_mobile::AndroidProfile p =
 +            fingerprint_mobile::ResolveAndroidProfile(pv);
-+        std::string major = GetMajorVersion(GetChromiumVersion());
++        std::string major = blink::GetMajorVersion(blink::GetChromiumVersion());
 +        return "Mozilla/5.0 (Linux; Android " + p.android_version +
 +               "; " + p.model_ua + ") AppleWebKit/537.36"
 +               " (KHTML, like Gecko) Chrome/" + major + ".0.0.0"
