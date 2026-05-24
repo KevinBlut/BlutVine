@@ -919,7 +919,7 @@ index 583f05f8dd..2cde77aca1 100644
 +      return "MacIntel";
 +
 +    if (!custom_platform.empty())
-+      return String::FromUTF8(custom_platform);
++      return String(custom_platform.c_str());
 +  }
 +
    // TODO(955620): Consider changing devtools overrides to only allow overriding
