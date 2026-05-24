@@ -307,7 +307,7 @@ index 381f92b905..a432ed1578 100644
 +      fingerprint_collector::SetCurrentSite(
 +          raw.is_valid()
 +              ? raw.DeprecatedGetOriginAsURL().spec()
-+              : GetDocument().Url().GetString().Utf8());
++              : GetTopExecutionContext()->Url().GetString().Utf8());
 +      fingerprint_collector::FlushTestIfNew("getImageData", 0.0);
 +    }
 +
@@ -316,7 +316,7 @@ index 381f92b905..a432ed1578 100644
 +      fingerprint_collector::SetCurrentSite(
 +          raw.is_valid()
 +              ? raw.DeprecatedGetOriginAsURL().spec()
-+              : GetDocument().Url().GetString().Utf8());
++              : GetTopExecutionContext()->Url().GetString().Utf8());
 +      std::vector<uint8_t> pixels =
 +          fingerprint_collector::ReplayCanvasOutput("getImageData");
 +      if (!pixels.empty()) {
