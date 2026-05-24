@@ -34,7 +34,7 @@ index 557eadb182..1d5a711207 100644
 +      if (pv.find("android") != std::string::npos) {
 +        fingerprint_mobile::AndroidProfile p =
 +            fingerprint_mobile::ResolveAndroidProfile(pv);
-+        std::string major = blink::GetMajorVersion(blink::GetChromiumVersion());
++        std::string major = GetMajorVersion(GetChromiumVersion());
 +        return "Mozilla/5.0 (Linux; Android " + p.android_version +
 +               "; " + p.model_ua + ") AppleWebKit/537.36"
 +               " (KHTML, like Gecko) Chrome/" + major + ".0.0.0"
@@ -873,7 +873,7 @@ index cccfafe8f9..e927c3f680 100644
 +  // Unrecognized but non-empty — return as-is so explicit values like
 +  // "Linux aarch64" pass through unchanged
 +  if (!custom_platform.empty())
-+    return String::FromUTF8(custom_platform);
++    return String(custom_platform.c_str());
 +}
  #if BUILDFLAG(IS_ANDROID)
    return "Linux armv81";
