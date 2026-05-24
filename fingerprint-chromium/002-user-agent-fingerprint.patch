@@ -431,9 +431,9 @@ index ff82883826..486e078274 100644
 +  // the --touch-events switch or real hardware presence.
 +  {
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (cmd->HasSwitch(ungoogled::switches::kFingerprintPlatform)) {
++    if (cmd->HasSwitch(switches::kFingerprintPlatform)) {
 +      std::string pv = base::ToLowerASCII(
-+          cmd->GetSwitchValueASCII(ungoogled::switches::kFingerprintPlatform));
++          cmd->GetSwitchValueASCII(switches::kFingerprintPlatform));
 +      if (pv.find("android") != std::string::npos)
 +        touch_event_feature_detection_enabled_ = true;
 +    }
