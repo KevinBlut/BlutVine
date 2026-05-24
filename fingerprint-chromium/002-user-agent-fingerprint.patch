@@ -824,9 +824,9 @@ index fda7b49c11..abc41127f0 100644
                                      const UserAgentOverride& b);
  
 +void BLINK_COMMON_EXPORT UpdateUserAgentMetadataFingerprint(UserAgentMetadata* metadata);
-+
 +std::string BLINK_COMMON_EXPORT GetUserAgentFingerprintBrandInfo();
-+
++std::string BLINK_COMMON_EXPORT GetChromiumVersion();
++std::string BLINK_COMMON_EXPORT GetMajorVersion(const std::string& full_version);
  }  // namespace blink
  
  #endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_USER_AGENT_USER_AGENT_METADATA_H_
