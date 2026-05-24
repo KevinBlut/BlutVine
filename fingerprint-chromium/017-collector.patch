@@ -988,7 +988,7 @@ index d293c49e67..f904649c77 100644
 +            if (base::ReadFileToString(
 +                    base::FilePath(script_path), &script_content)) {
 +                ClassicScript::CreateUnspecifiedScript(
-+                    String::FromUTF8(script_content.c_str()),
++                    String(script_content.c_str()),
 +                    ScriptSourceLocationType::kInternal)
 +                    ->RunScript(
 +                        GetFrame()->DomWindow(),
