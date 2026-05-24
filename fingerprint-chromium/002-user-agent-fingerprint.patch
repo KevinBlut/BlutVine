@@ -166,17 +166,17 @@ index 8b910a0cc8..54f54ad017 100644
      "ungoogled_switches.cc",
    ]
 diff --git a/ui/base/BUILD.gn b/ui/base/BUILD.gn
-index e4b9053c93..744b7e3e83 100644
+index e4b9053c93..af7c5099f8 100644
 --- a/ui/base/BUILD.gn
 +++ b/ui/base/BUILD.gn
-@@ -128,6 +128,7 @@ component("base") {
-     "class_properties.h",
-     "class_property.cc",
-     "class_property.h",
+@@ -486,6 +486,7 @@ component("base") {
+     "//build:android_buildflags",
+     "//build:blink_buildflags",
+     "//build:branding_buildflags",
 +    "//components/ungoogled:ungoogled_switches",
-     "default_style.h",
-     "device_form_factor.h",
-     "device_form_factor_desktop.cc",
+     "//net",
+     "//third_party/brotli:dec",
+     "//third_party/icu",
 diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
 new file mode 100644
 index 0000000000..006ea9377e
