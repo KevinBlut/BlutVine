@@ -420,7 +420,7 @@ index 0000000000..b6f9d99bde
 +
 +    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
 +
-+    return db_path + "/audio/" + site + "/";
++    return db_path + "/" + site + "/";
 +}
 +
 +void FlushAudioIfNew(const uint8_t* bytes, size_t byte_len, double render_ms) {
@@ -571,7 +571,7 @@ index 0000000000..b6f9d99bde
 +
 +    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
 +
-+    return db_path + "/measureText/" + site + "/";
++    return db_path + "/" + site + "/";
 +}
 +
 +void FlushMeasureTextIfNew(const double* values, size_t count) {
@@ -711,7 +711,7 @@ index 0000000000..b6f9d99bde
 +
 +    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
 +
-+    return db_path + "/clientRects/" + site + "/";
++    return db_path + "/" + site + "/";
 +}
 +
 +void FlushClientRectsIfNew(const float* values, size_t count,
