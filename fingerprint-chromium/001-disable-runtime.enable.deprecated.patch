@@ -70,7 +70,7 @@ index b0efbe69..88bd126d 100644
                 int executionContextId);
    void messageAdded(V8ConsoleMessage*);
 -  bool enabled() const { return m_enabled; }
-+  bool enabled() const { return m_enabled; } // ugh yeah.... too lazy
++  bool enabled() const { return false; } 
  
   private:
    bool reportMessage(V8ConsoleMessage*, bool generatePreview);
