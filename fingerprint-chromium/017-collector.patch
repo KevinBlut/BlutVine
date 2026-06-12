@@ -380,8 +380,8 @@ index 0000000000..b6f9d99bde
 +
 +    if (entry.render_ms > 0.0) {
 +        // ±2% jitter — realistic variance for same hardware across runs
-+        double jitter_factor = 1.0 + (static_cast<double>(
-+            base::RandInt(-20, 20)) / 1000.0);
++        double jitter_factor = 1.0 + (static_cast<int>(
++            base::RandGenerator(41)) - 20)) / 1000.0);
 +        double target_ms = entry.render_ms * jitter_factor;
 +        double delta_ms = target_ms - elapsed_ms;
 +        if (delta_ms > 1.0) {
@@ -533,8 +533,8 @@ index 0000000000..b6f9d99bde
 +    double elapsed_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
 +
 +    if (entry.render_ms > 0.0) {
-+        double jitter_factor = 1.0 + (static_cast<double>(
-+            base::RandInt(-20, 20)) / 1000.0);
++        double jitter_factor = 1.0 + (static_cast<int>(
++            base::RandGenerator(41)) - 20)) / 1000.0);
 +        double target_ms = entry.render_ms * jitter_factor;
 +        double delta_ms = target_ms - elapsed_ms;
 +        if (delta_ms > 1.0) {
