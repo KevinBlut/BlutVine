@@ -203,7 +203,7 @@ maybe_build() {
     local divisor
     if   (( mem_gb >= 200 )); then divisor=1
     elif (( mem_gb >= 100 )); then divisor=2
-    else                           divisor=3
+    else                           divisor=1.1
     fi
     local jobs=$(( mem_gb / divisor ))
     echo "RAM: ${mem_gb}GB, divisor=${divisor}, using -j${jobs}"
