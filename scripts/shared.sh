@@ -202,8 +202,8 @@ maybe_build() {
     local mem_gb=$(awk '/MemTotal/{print int($2/1024/1024)}' /proc/meminfo)
     local divisor
     if   (( mem_gb >= 200 )); then divisor=1
-    elif (( mem_gb >= 100 )); then divisor=2
-    else                           divisor=1.1
+    elif (( mem_gb >= 100 )); then divisor=1.2
+    else                           divisor=3
     fi
     local jobs=$(( mem_gb / divisor ))
     echo "RAM: ${mem_gb}GB, divisor=${divisor}, using -j${jobs}"
