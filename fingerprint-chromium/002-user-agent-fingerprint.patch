@@ -23,7 +23,7 @@ index 557eadb182..1d5a711207 100644
 +  // Android UA — short-circuit before normal product/platform assembly.
 +  // Produces the canonical Chrome-on-Android format:
 +  //   Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36
-+  //     (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36
++  //     (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36
 +  // GetUserAgentFingerprintBrandInfo() appends e.g. " Edg/147.0.0.0"
 +  // if --fingerprint-brand=edge is set, otherwise returns "".
 +  {
@@ -209,18 +209,18 @@ index 0000000000..006ea9377e
 +// =============================================================================
 +
 +// Chromium version list (for seed-based selection)
-+constexpr const char* kChromiumVersions = "148.0.7778.178";
++constexpr const char* kChromiumVersions = "149.0.7827.114";
 +
 +// Default versions for Client Hints (Sec-CH-UA)
-+constexpr const char* kChromeDefaultVersion = "148.0.7778.178";
-+constexpr const char* kEdgeDefaultVersion = "148.0.4029.74";
-+constexpr const char* kOperaDefaultVersion = "131.0.5877.55";
-+constexpr const char* kVivaldiDefaultVersion = "7.9.3970.64";
++constexpr const char* kChromeDefaultVersion = "149.0.7827.114";
++constexpr const char* kEdgeDefaultVersion = "149.0.4022.62";
++constexpr const char* kOperaDefaultVersion = "132.0.5905.37";
++constexpr const char* kVivaldiDefaultVersion = "8.0.4033.42";
 +
 +// Default versions for User-Agent string suffix
-+constexpr const char* kEdgeUAVersion = "148.0.0.0";
-+constexpr const char* kOperaUAVersion = "131.0.0.0";
-+constexpr const char* kVivaldiUAVersion = "7.9.3970.64";
++constexpr const char* kEdgeUAVersion = "149.0.0.0";
++constexpr const char* kOperaUAVersion = "132.0.0.0";
++constexpr const char* kVivaldiUAVersion = "8.0.4033.42";
 +
 +// User-Agent string suffixes
 +constexpr const char* kEdgeUASuffix = " Edg/";
