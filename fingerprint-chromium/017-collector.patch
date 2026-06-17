@@ -33,7 +33,7 @@ index 0000000000..b6f9d99bde
 +#include <vector>
 +#include <unordered_map>
 +#include <algorithm>
-+
++#include "base/threading/scoped_allow_blocking.h"
 +#include "base/command_line.h"
 +#include "base/files/file_path.h"
 +#include "base/files/file_util.h"
@@ -182,7 +182,7 @@ index 0000000000..b6f9d99bde
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
 +    if (g_input_log.empty()) return;
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    std::string dir = GetOutputDir();
 +    if (dir.empty()) return;
 +
@@ -315,7 +315,7 @@ index 0000000000..b6f9d99bde
 +static void ReplayLoad() {
 +    g_replay_map.clear();
 +    g_replay_loaded_site = g_current_site;
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    std::string dir = GetReplayDir();
 +    if (dir.empty()) return;
 +
@@ -364,7 +364,7 @@ index 0000000000..b6f9d99bde
 +
 +    const ReplayEntry& entry = it->second;
 +    auto t0 = base::TimeTicks::Now();
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    std::ifstream f(entry.bin_path, std::ios::binary);
 +    if (!f.is_open()) {
 +        fprintf(stderr, "[FP-REPLAY MISS] site=%s trigger=%s (bin missing: %s)\n",
@@ -427,7 +427,7 @@ index 0000000000..b6f9d99bde
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
 +    if (g_input_log.empty()) return;
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    std::string dir = GetAudioDir();
 +    if (dir.empty()) return;
 +
@@ -470,7 +470,7 @@ index 0000000000..b6f9d99bde
 +static void AudioReplayLoad() {
 +    g_audio_replay_map.clear();
 +    g_audio_replay_loaded_site = g_current_site;
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    std::string dir = GetAudioDir();
 +    if (dir.empty()) return;
 +
@@ -517,7 +517,7 @@ index 0000000000..b6f9d99bde
 +
 +    const ReplayEntry& entry = it->second;
 +    auto t0 = base::TimeTicks::Now();
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    std::ifstream f(entry.bin_path, std::ios::binary);
 +    if (!f.is_open()) {
 +        fprintf(stderr,
@@ -578,7 +578,7 @@ index 0000000000..b6f9d99bde
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
 +    if (g_input_log.empty()) return;
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    std::string dir = GetMeasureTextDir();
 +    if (dir.empty()) return;
 +
@@ -621,7 +621,7 @@ index 0000000000..b6f9d99bde
 +static void MeasureTextReplayLoad() {
 +    g_measuretext_replay_map.clear();
 +    g_measuretext_replay_loaded_site = g_current_site;
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    std::string dir = GetMeasureTextDir();
 +    if (dir.empty()) return;
 +
@@ -655,7 +655,7 @@ index 0000000000..b6f9d99bde
 +std::vector<double> ReplayMeasureText() {
 +    if (g_measuretext_replay_loaded_site != g_current_site)
 +        MeasureTextReplayLoad();
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    uint64_t hash = HashInputLog();
 +    g_input_log.clear();
 +
@@ -719,7 +719,7 @@ index 0000000000..b6f9d99bde
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
 +    if (g_input_log.empty()) return;
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    std::string dir = GetClientRectsDir();
 +    if (dir.empty()) return;
 +
@@ -762,7 +762,7 @@ index 0000000000..b6f9d99bde
 +static void ClientRectsReplayLoad() {
 +    g_clientrects_replay_map.clear();
 +    g_clientrects_replay_loaded_site = g_current_site;
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    std::string dir = GetClientRectsDir();
 +    if (dir.empty()) return;
 +
@@ -796,7 +796,7 @@ index 0000000000..b6f9d99bde
 +std::vector<float> ReplayClientRects(const std::string& trigger) {
 +    if (g_clientrects_replay_loaded_site != g_current_site)
 +        ClientRectsReplayLoad();
-+
++    base::ScopedAllowBlocking allow_blocking; 
 +    uint64_t hash = HashInputLog();
 +    g_input_log.clear();
 +
