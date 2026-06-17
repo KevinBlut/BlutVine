@@ -381,7 +381,7 @@ index 0000000000..b6f9d99bde
 +    if (entry.render_ms > 0.0) {
 +        // ±2% jitter — realistic variance for same hardware across runs
 +        double jitter_factor = 1.0 + (static_cast<int>(
-+            base::RandGenerator(41)) - 20) / 1000.0);
++            base::RandGenerator(41)) - 20) / 1000.0;
 +        double target_ms = entry.render_ms * jitter_factor;
 +        double delta_ms = target_ms - elapsed_ms;
 +        if (delta_ms > 1.0) {
@@ -534,7 +534,7 @@ index 0000000000..b6f9d99bde
 +
 +    if (entry.render_ms > 0.0) {
 +        double jitter_factor = 1.0 + (static_cast<int>(
-+            base::RandGenerator(41)) - 20) / 1000.0);
++            base::RandGenerator(41)) - 20) / 1000.0;
 +        double target_ms = entry.render_ms * jitter_factor;
 +        double delta_ms = target_ms - elapsed_ms;
 +        if (delta_ms > 1.0) {
@@ -972,7 +972,7 @@ index d293c49e67..f904649c77 100644
  #include "base/debug/crash_logging.h"
  #include "base/debug/dump_without_crashing.h"
  #include "base/memory/scoped_refptr.h"
-@@ -218,6 +225,27 @@ void LocalWindowProxy::Initialize() {
+@@ -218,6 +225,28 @@ void LocalWindowProxy::Initialize() {
    InstallConditionalFeatures();
  
    if (World().IsMainWorld()) {
@@ -984,6 +984,7 @@ index d293c49e67..f904649c77 100644
 +        std::string script_path =
 +            cmd->GetSwitchValueASCII(switches::kFingerprintCollectorScript);
 +        if (!script_path.empty()) {
++            base::ScopedAllowBlocking allow_blocking;
 +            std::string script_content;
 +            if (base::ReadFileToString(
 +                    base::FilePath(script_path), &script_content)) {
