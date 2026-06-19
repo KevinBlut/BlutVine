@@ -1,10 +1,10 @@
 diff --git a/content/browser/gpu/gpu_process_host.cc b/content/browser/gpu/gpu_process_host.cc
-index 62cab5dad3..47ea050f14 100644
+index b6ddfa6c60..d9c87aa13e 100644
 --- a/content/browser/gpu/gpu_process_host.cc
 +++ b/content/browser/gpu/gpu_process_host.cc
-@@ -331,6 +331,7 @@ static const char* const kSwitchNames[] = {
- #if BUILDFLAG(USE_VAAPI)
-     switches::kHardwareVideoDevicePath,
+@@ -337,6 +337,7 @@ static const char* const kSwitchNames[] = {
+ #if BUILDFLAG(ENABLE_VRP_FLAGS)
+     vrp_flags::switches::kVrpFlags,
  #endif
 +    "fingerprint",
  };
