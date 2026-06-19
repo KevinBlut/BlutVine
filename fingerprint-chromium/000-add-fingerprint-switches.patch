@@ -2,7 +2,7 @@ diff --git a/components/ungoogled/ungoogled_switches.cc b/components/ungoogled/u
 index 15e63407e1..d249bb9a80 100644
 --- a/components/ungoogled/ungoogled_switches.cc
 +++ b/components/ungoogled/ungoogled_switches.cc
-@@ -15,4 +15,70 @@ const char kFingerprintingCanvasMeasureTextNoise[] = "fingerprinting-canvas-meas
+@@ -15,4 +15,66 @@ const char kFingerprintingCanvasMeasureTextNoise[] = "fingerprinting-canvas-meas
  // Enable fingerprinting deception for Canvas image data
  const char kFingerprintingCanvasImageDataNoise[] = "fingerprinting-canvas-image-data-noise";
  
@@ -16,10 +16,6 @@ index 15e63407e1..d249bb9a80 100644
 +// BlutVine never constructs or selects these itself.
 +// Full Mozilla/5.0 (...) UA string
 +const char kFingerprintUA[] = "fingerprint-ua";
-+// Browser brand suffix: chrome | edge | opera | vivaldi
-+const char kFingerprintBrand[] = "fingerprint-brand";
-+// Platform keyword: windows | macos | macarm | linux | android
-+const char kFingerprintPlatform[] = "fingerprint-platform";
 +// Sec-CH-UA-Platform-Version value e.g. "10.0.0", "14.0.0"
 +const char kFingerprintPlatformVersion[] = "fingerprint-platform-version";
 +
@@ -78,7 +74,7 @@ diff --git a/components/ungoogled/ungoogled_switches.h b/components/ungoogled/un
 index b7a6a75e04..35e89756f2 100644
 --- a/components/ungoogled/ungoogled_switches.h
 +++ b/components/ungoogled/ungoogled_switches.h
-@@ -15,6 +15,53 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingClientRectsNoise[];
+@@ -15,6 +15,51 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingClientRectsNoise[];
  COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingCanvasMeasureTextNoise[];
  COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingCanvasImageDataNoise[];
  
@@ -88,8 +84,6 @@ index b7a6a75e04..35e89756f2 100644
 +
 +// UA / platform — passthrough, values supplied by UAForge launcher
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintUA[];
-+COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintBrand[];
-+COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPlatform[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPlatformVersion[];
 +
 +// Client Hints — passthrough, values supplied by UAForge launcher
@@ -137,7 +131,7 @@ diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content
 index aae58d3060..5761e3d968 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
-@@ -3860,6 +3860,40 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+@@ -3860,6 +3860,38 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
        switches::kEnableWebGLDraftExtensions,
        switches::kEnableWebGPUDeveloperFeatures,
        switches::kFileUrlPathAlias,
@@ -147,8 +141,6 @@ index aae58d3060..5761e3d968 100644
 +      switches::kFingerprint,
 +      switches::kDisableGpuFingerprint,
 +      switches::kFingerprintUA,
-+      switches::kFingerprintBrand,
-+      switches::kFingerprintPlatform,
 +      switches::kFingerprintPlatformVersion,
 +      switches::kFingerprintCHUAArch,
 +      switches::kFingerprintCHUABitness,
