@@ -1,5 +1,5 @@
 diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
-index 4abe687249..caa11e5604 100644
+index 744efa3941..aae58d3060 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
 @@ -17,6 +17,8 @@
@@ -12,7 +12,7 @@ index 4abe687249..caa11e5604 100644
  #include "base/clang_profiling_buildflags.h"
  #include "base/command_line.h"
 diff --git a/content/child/runtime_features.cc b/content/child/runtime_features.cc
-index 578c7f9e2a..a9c9d83584 100644
+index 22f12b8df2..7365fe569c 100644
 --- a/content/child/runtime_features.cc
 +++ b/content/child/runtime_features.cc
 @@ -7,6 +7,8 @@
@@ -24,7 +24,7 @@ index 578c7f9e2a..a9c9d83584 100644
  #include "base/base_switches.h"
  #include "base/command_line.h"
  #include "base/feature_list.h"
-@@ -461,6 +463,10 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
+@@ -470,6 +472,10 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
         true},
        {wrf::EnableWebAudioBypassOutputBufferingOptOut,
         blink::switches::kWebAudioBypassOutputBufferingOptOut, true},
@@ -50,10 +50,10 @@ index 99a7637957..8d060ac456 100644
  };
  
 diff --git a/third_party/blink/renderer/core/html/canvas/text_metrics.cc b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
-index 2cb886e53a..5ddc877d7d 100644
+index 05abca7f39..9933a3e2bd 100644
 --- a/third_party/blink/renderer/core/html/canvas/text_metrics.cc
 +++ b/third_party/blink/renderer/core/html/canvas/text_metrics.cc
-@@ -90,6 +90,24 @@ TextMetrics::TextMetrics(const Font* font,
+@@ -91,6 +91,24 @@ TextMetrics::TextMetrics(const Font* font,
    Update(font, direction, baseline, align, text, text_painter);
  }
  
@@ -92,6 +92,7 @@ index 3d2c354897..7b3147047c 100644
    void Update(const Font*,
                const TextDirection& direction,
 diff --git a/third_party/blink/renderer/platform/exported/web_runtime_features.cc b/third_party/blink/renderer/platform/exported/web_runtime_features.cc
+index f4812d0c23..cc6c1c732d 100644
 --- a/third_party/blink/renderer/platform/exported/web_runtime_features.cc
 +++ b/third_party/blink/renderer/platform/exported/web_runtime_features.cc
 @@ -72,4 +72,12 @@ void WebRuntimeFeatures::EnableLocalNetworkAccessWebRTC(bool enable) {
@@ -108,18 +109,19 @@ diff --git a/third_party/blink/renderer/platform/exported/web_runtime_features.c
 +
  }  // namespace blink
 diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 b/third_party/blink/renderer/platform/runtime_enabled_features.json5
+index 19e4b5ec26..a0366cf65b 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -2729,6 +2729,12 @@
+@@ -2895,6 +2895,12 @@
+       name: "FixVisualRectRemoteViewportTransform",
        status: "stable",
      },
-     {
++    {
 +      name: "FingerprintingClientRectsNoise",
 +    },
 +    {
 +      name: "FingerprintingCanvasMeasureTextNoise",
 +    },
-+    {
+     {
        name: "Fledge",
        status: "stable",
-       base_feature: "none",
