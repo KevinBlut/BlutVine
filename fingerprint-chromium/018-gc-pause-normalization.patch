@@ -1,0 +1,16 @@
+diff --git a/src/heap/gc-tracer.cc b/src/heap/gc-tracer.cc
+index e3c3844c..c511d044 100644
+--- a/src/heap/gc-tracer.cc
++++ b/src/heap/gc-tracer.cc
+@@ -425,9 +425,10 @@ void GCTracer::StopObservablePause(GarbageCollector collector,
+ 
+   FetchBackgroundCounters();
+ 
+-  const base::TimeDelta duration = current_.end_time - current_.start_time;
++  base::TimeDelta duration = current_.end_time - current_.start_time;
+   auto* long_task_stats = heap_->isolate()->GetCurrentLongTaskStats();
+   const bool is_young = Heap::IsYoungGenerationCollector(collector);
++  duration = NormalizeGCPauseDuration(duration, is_young);
+   if (is_young) {
+     recorded_minor_gc_atomic_pause_.Push(
+         BytesAndDuration(current_.survived_young_object_size, duration));
