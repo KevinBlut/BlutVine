@@ -1,7 +1,7 @@
 diff --git a/src/builtins/builtins-typed-array-gen.cc b/src/builtins/builtins-typed-array-gen.cc
 index f830b666..52053a2a 100644
---- a/src/builtins/builtins-typed-array-gen.cc
-+++ b/src/builtins/builtins-typed-array-gen.cc
+--- a/v8/src/builtins/builtins-typed-array-gen.cc
++++ b/v8/src/builtins/builtins-typed-array-gen.cc
 @@ -4,6 +4,8 @@
  
  #include "src/builtins/builtins-typed-array-gen.h"
@@ -26,8 +26,8 @@ index f830b666..52053a2a 100644
  
 diff --git a/src/builtins/builtins-typed-array-gen.h b/src/builtins/builtins-typed-array-gen.h
 index 94217516..89b555e7 100644
---- a/src/builtins/builtins-typed-array-gen.h
-+++ b/src/builtins/builtins-typed-array-gen.h
+--- a/v8/src/builtins/builtins-typed-array-gen.h
++++ b/v8/src/builtins/builtins-typed-array-gen.h
 @@ -87,6 +87,9 @@ class TypedArrayBuiltinsAssembler : public CodeStubAssembler {
                                          TNode<JSTypedArray> dest,
                                          TNode<UintPtrT> start,
@@ -40,8 +40,8 @@ index 94217516..89b555e7 100644
  
 diff --git a/src/builtins/typed-array-set.tq b/src/builtins/typed-array-set.tq
 index 6fe170ed..89a2748b 100644
---- a/src/builtins/typed-array-set.tq
-+++ b/src/builtins/typed-array-set.tq
+--- a/v8/src/builtins/typed-array-set.tq
++++ b/v8/src/builtins/typed-array-set.tq
 @@ -27,6 +27,9 @@ extern macro
          uintptr                // destOffset
          ): void;
@@ -62,8 +62,8 @@ index 6fe170ed..89a2748b 100644
  }
 diff --git a/src/builtins/typed-array-slice.tq b/src/builtins/typed-array-slice.tq
 index ad10a457..df69affb 100644
---- a/src/builtins/typed-array-slice.tq
-+++ b/src/builtins/typed-array-slice.tq
+--- a/v8/src/builtins/typed-array-slice.tq
++++ b/v8/src/builtins/typed-array-slice.tq
 @@ -10,6 +10,9 @@ const kBuiltinNameSlice: constexpr string = '%TypedArray%.prototype.slice';
  extern macro TypedArrayBuiltinsAssembler::CallCCopyTypedArrayElementsSlice(
      JSTypedArray, JSTypedArray, uintptr, uintptr): void;
@@ -86,8 +86,8 @@ index ad10a457..df69affb 100644
        const newLength =
 diff --git a/src/builtins/typed-array-subarray.tq b/src/builtins/typed-array-subarray.tq
 index 820ed564..5f58cda8 100644
---- a/src/builtins/typed-array-subarray.tq
-+++ b/src/builtins/typed-array-subarray.tq
+--- a/v8/src/builtins/typed-array-subarray.tq
++++ b/v8/src/builtins/typed-array-subarray.tq
 @@ -3,6 +3,10 @@
  // found in the LICENSE file.
  
@@ -109,8 +109,8 @@ index 820ed564..5f58cda8 100644
  }
 diff --git a/src/objects/backing-store.h b/src/objects/backing-store.h
 index 4d416460..90911059 100644
---- a/src/objects/backing-store.h
-+++ b/src/objects/backing-store.h
+--- a/v8/src/objects/backing-store.h
++++ b/v8/src/objects/backing-store.h
 @@ -34,6 +34,9 @@ enum class ImmutableFlag : uint8_t { kMutable, kImmutable };
  // Whether the backing store memory is initialied to zero or not.
  enum class InitializedFlag : uint8_t { kUninitialized, kZeroInitialized };
@@ -155,8 +155,8 @@ index 4d416460..90911059 100644
    }
 diff --git a/src/objects/js-array-buffer-inl.h b/src/objects/js-array-buffer-inl.h
 index 23f4fe1e..47446814 100644
---- a/src/objects/js-array-buffer-inl.h
-+++ b/src/objects/js-array-buffer-inl.h
+--- a/v8/src/objects/js-array-buffer-inl.h
++++ b/v8/src/objects/js-array-buffer-inl.h
 @@ -19,6 +19,24 @@
  namespace v8 {
  namespace internal {
@@ -184,8 +184,8 @@ index 23f4fe1e..47446814 100644
  //
 diff --git a/src/objects/js-array-buffer.h b/src/objects/js-array-buffer.h
 index 9413d192..f9a85c2c 100644
---- a/src/objects/js-array-buffer.h
-+++ b/src/objects/js-array-buffer.h
+--- a/v8/src/objects/js-array-buffer.h
++++ b/v8/src/objects/js-array-buffer.h
 @@ -46,6 +46,11 @@ V8_OBJECT class JSArrayBuffer : public JSAPIObjectWithEmbedderSlots {
    inline size_t max_byte_length() const;
    inline void set_max_byte_length(size_t value);
@@ -200,8 +200,8 @@ index 9413d192..f9a85c2c 100644
    inline void* backing_store() const;
 diff --git a/src/runtime/runtime-typedarray.cc b/src/runtime/runtime-typedarray.cc
 index 2725e04b..62058552 100644
---- a/src/runtime/runtime-typedarray.cc
-+++ b/src/runtime/runtime-typedarray.cc
+--- a/v8/src/runtime/runtime-typedarray.cc
++++ b/v8/src/runtime/runtime-typedarray.cc
 @@ -214,6 +214,18 @@ RUNTIME_FUNCTION(Runtime_TypedArraySet) {
    return accessor->CopyElements(isolate, source, target, length, offset);
  }
@@ -223,8 +223,8 @@ index 2725e04b..62058552 100644
    size_t heap_max = isolate->array_buffer_allocator()->MaxAllocationSize();
 diff --git a/src/runtime/runtime.h b/src/runtime/runtime.h
 index b46677d7..44620ea8 100644
---- a/src/runtime/runtime.h
-+++ b/src/runtime/runtime.h
+--- a/v8/src/runtime/runtime.h
++++ b/v8/src/runtime/runtime.h
 @@ -700,6 +700,7 @@ constexpr bool CanTriggerGC(T... properties) {
    F(TypedArrayCopyElements, 3, 1)              \
    F(TypedArrayGetBuffer, 1, 1)                 \
