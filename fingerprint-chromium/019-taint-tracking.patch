@@ -1,0 +1,235 @@
+diff --git a/src/builtins/builtins-typed-array-gen.cc b/src/builtins/builtins-typed-array-gen.cc
+index f830b666..52053a2a 100644
+--- a/src/builtins/builtins-typed-array-gen.cc
++++ b/src/builtins/builtins-typed-array-gen.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "src/builtins/builtins-typed-array-gen.h"
+ 
++#include "src/objects/js-array-buffer.h"
++
+ #include "src/builtins/builtins-constructor-gen.h"
+ #include "src/builtins/builtins-utils-gen.h"
+ #include "src/builtins/builtins.h"
+@@ -20,6 +22,12 @@ namespace internal {
+ 
+ #include "src/codegen/define-code-stub-assembler-macros.inc"
+ 
++void TypedArrayBuiltinsAssembler::PropagateTaint(
++    TNode<JSTypedArray> target, TNode<JSTypedArray> source) {
++  // Use a fast runtime call to copy the taint bit.
++  CallRuntime(Runtime::kTypedArrayPropagateTaint, {target, source});
++}
++
+ // -----------------------------------------------------------------------------
+ // ES6 section 22.2 TypedArray Objects
+ 
+diff --git a/src/builtins/builtins-typed-array-gen.h b/src/builtins/builtins-typed-array-gen.h
+index 94217516..89b555e7 100644
+--- a/src/builtins/builtins-typed-array-gen.h
++++ b/src/builtins/builtins-typed-array-gen.h
+@@ -87,6 +87,9 @@ class TypedArrayBuiltinsAssembler : public CodeStubAssembler {
+                                         TNode<JSTypedArray> dest,
+                                         TNode<UintPtrT> start,
+                                         TNode<UintPtrT> end);
++                            
++  // Propagate fingerprint taint from source to target typed array.
++  void PropagateTaint(TNode<JSTypedArray> target, TNode<JSTypedArray> source);
+ 
+   using TypedArraySwitchCase = std::function<void(ElementsKind, int, int)>;
+ 
+diff --git a/src/builtins/typed-array-set.tq b/src/builtins/typed-array-set.tq
+index 6fe170ed..89a2748b 100644
+--- a/src/builtins/typed-array-set.tq
++++ b/src/builtins/typed-array-set.tq
+@@ -27,6 +27,9 @@ extern macro
+         uintptr                // destOffset
+         ): void;
+ 
++extern macro TypedArrayBuiltinsAssembler::PropagateTaint(
++    JSTypedArray, JSTypedArray): void;
++
+ // %TypedArray%.prototype.set ( overloaded [ , offset ] )
+ // https://tc39.es/ecma262/#sec-%typedarray%.prototype.set-overloaded-offset
+ transitioning javascript builtin TypedArrayPrototypeSet(
+@@ -308,5 +311,7 @@ transitioning macro TypedArrayPrototypeSetTypedArray(
+     CallCCopyTypedArrayElementsToTypedArray(
+         source, target, srcLength, targetOffset);
+   }
++
++  TypedArrayBuiltinsAssembler::PropagateTaint(target, source);
+ }
+ }
+diff --git a/src/builtins/typed-array-slice.tq b/src/builtins/typed-array-slice.tq
+index ad10a457..df69affb 100644
+--- a/src/builtins/typed-array-slice.tq
++++ b/src/builtins/typed-array-slice.tq
+@@ -10,6 +10,9 @@ const kBuiltinNameSlice: constexpr string = '%TypedArray%.prototype.slice';
+ extern macro TypedArrayBuiltinsAssembler::CallCCopyTypedArrayElementsSlice(
+     JSTypedArray, JSTypedArray, uintptr, uintptr): void;
+ 
++extern macro TypedArrayBuiltinsAssembler::PropagateTaint(
++    JSTypedArray, JSTypedArray): void;
++
+ macro FastCopy(
+     src: typed_array::AttachedJSTypedArray, dest: JSTypedArray, k: uintptr,
+     count: uintptr): void labels IfSlow {
+@@ -110,6 +113,9 @@ transitioning javascript builtin TypedArrayPrototypeSlice(
+   const dest: JSTypedArray = TypedArraySpeciesCreateByLength(
+       kBuiltinNameSlice, src, count, TypedArrayAccessMode::kWrite);
+ 
++  // Propagate fingerprint taint.
++  TypedArrayBuiltinsAssembler::PropagateTaint(dest, src);
++
+   if (count > 0) {
+     try {
+       const newLength =
+diff --git a/src/builtins/typed-array-subarray.tq b/src/builtins/typed-array-subarray.tq
+index 820ed564..5f58cda8 100644
+--- a/src/builtins/typed-array-subarray.tq
++++ b/src/builtins/typed-array-subarray.tq
+@@ -3,6 +3,10 @@
+ // found in the LICENSE file.
+ 
+ namespace typed_array {
++
++extern macro TypedArrayBuiltinsAssembler::PropagateTaint(
++    JSTypedArray, JSTypedArray): void;
++
+ // ES %TypedArray%.prototype.subarray
+ transitioning javascript builtin TypedArrayPrototypeSubArray(
+     js-implicit context: NativeContext, receiver: JSAny)(
+@@ -87,5 +91,7 @@ transitioning javascript builtin TypedArrayPrototypeSubArray(
+   return TypedArraySpeciesCreateByBuffer(
+       methodName, source, buffer, beginByteOffset, newLength,
+       TypedArrayAccessMode::kRead);
++
++  TypedArrayBuiltinsAssembler::PropagateTaint(result, source);
+ }
+ }
+diff --git a/src/objects/backing-store.h b/src/objects/backing-store.h
+index 4d416460..90911059 100644
+--- a/src/objects/backing-store.h
++++ b/src/objects/backing-store.h
+@@ -34,6 +34,9 @@ enum class ImmutableFlag : uint8_t { kMutable, kImmutable };
+ // Whether the backing store memory is initialied to zero or not.
+ enum class InitializedFlag : uint8_t { kUninitialized, kZeroInitialized };
+ 
++// Taint flag for fingerprint tracking — survives GC and sharing.
++enum class TaintFlag : uint8_t { kUntainted = 0, kTainted = 1 };
++
+ // Internal information for shared wasm memories. E.g. contains
+ // a list of all memory objects (across all isolates) that share this
+ // backing store.
+@@ -220,7 +223,8 @@ class V8_EXPORT_PRIVATE BackingStore : public BackingStoreBase {
+     kHasGuardRegions,
+     kGloballyRegistered,
+     kCustomDeleter,
+-    kEmptyDeleter
++    kEmptyDeleter,
++    kTainted,  // Fingerprint taint tracking
+   };
+ 
+   BackingStore(void* buffer_start, size_t byte_length, size_t max_byte_length,
+@@ -256,6 +260,21 @@ class V8_EXPORT_PRIVATE BackingStore : public BackingStoreBase {
+     }
+   }
+ 
++  // ---- Taint tracking ----
++  bool is_tainted() const {
++    return has_flag(kTainted);
++  }
++  void set_tainted(bool tainted) {
++    if (tainted)
++      set_flag(kTainted);
++    else
++      clear_flag(kTainted);
++  }
++  void propagate_taint_from(const BackingStore* other) {
++    if (other && other->is_tainted())
++      set_tainted(true);
++  }
++
+   bool holds_shared_ptr_to_allocator() const {
+     return has_flag(kHoldsSharedPtrToAllocater);
+   }
+diff --git a/src/objects/js-array-buffer-inl.h b/src/objects/js-array-buffer-inl.h
+index 23f4fe1e..47446814 100644
+--- a/src/objects/js-array-buffer-inl.h
++++ b/src/objects/js-array-buffer-inl.h
+@@ -19,6 +19,24 @@
+ namespace v8 {
+ namespace internal {
+ 
++bool JSArrayBuffer::is_tainted() const {
++  auto bs = GetBackingStore();
++  return bs && bs->is_tainted();
++}
++
++void JSArrayBuffer::set_tainted(bool tainted) {
++  auto bs = GetBackingStore();
++  if (bs) bs->set_tainted(tainted);
++}
++
++void JSArrayBuffer::propagate_taint_from(Tagged<JSArrayBuffer> other) {
++  auto my_bs = GetBackingStore();
++  auto other_bs = other->GetBackingStore();
++  if (my_bs && other_bs) {
++    my_bs->propagate_taint_from(other_bs.get());
++  }
++}
++
+ //
+ // JSArrayBuffer.
+ //
+diff --git a/src/objects/js-array-buffer.h b/src/objects/js-array-buffer.h
+index 9413d192..f9a85c2c 100644
+--- a/src/objects/js-array-buffer.h
++++ b/src/objects/js-array-buffer.h
+@@ -46,6 +46,11 @@ V8_OBJECT class JSArrayBuffer : public JSAPIObjectWithEmbedderSlots {
+   inline size_t max_byte_length() const;
+   inline void set_max_byte_length(size_t value);
+ 
++  // Taint tracking — delegates to BackingStore.
++  inline bool is_tainted() const;
++  inline void set_tainted(bool tainted);
++  inline void propagate_taint_from(Tagged<JSArrayBuffer> other);
++
+   // [backing_store]: backing memory for this array
+   // It should not be assumed that this will be nullptr for empty ArrayBuffers.
+   inline void* backing_store() const;
+diff --git a/src/runtime/runtime-typedarray.cc b/src/runtime/runtime-typedarray.cc
+index 2725e04b..62058552 100644
+--- a/src/runtime/runtime-typedarray.cc
++++ b/src/runtime/runtime-typedarray.cc
+@@ -214,6 +214,18 @@ RUNTIME_FUNCTION(Runtime_TypedArraySet) {
+   return accessor->CopyElements(isolate, source, target, length, offset);
+ }
+ 
++RUNTIME_FUNCTION(Runtime_TypedArrayPropagateTaint) {
++  HandleScope scope(isolate);
++  DCHECK_EQ(2, args.length());
++  Handle<JSTypedArray> target = args.at<JSTypedArray>(0);
++  Handle<JSTypedArray> source = args.at<JSTypedArray>(1);
++
++  if (source->is_tainted()) {
++    target->set_tainted(true);
++  }
++  return ReadOnlyRoots(isolate).undefined_value();
++}
++
+ RUNTIME_FUNCTION(Runtime_ArrayBufferMaxByteLength) {
+   HandleScope shs(isolate);
+   size_t heap_max = isolate->array_buffer_allocator()->MaxAllocationSize();
+diff --git a/src/runtime/runtime.h b/src/runtime/runtime.h
+index b46677d7..44620ea8 100644
+--- a/src/runtime/runtime.h
++++ b/src/runtime/runtime.h
+@@ -700,6 +700,7 @@ constexpr bool CanTriggerGC(T... properties) {
+   F(TypedArrayCopyElements, 3, 1)              \
+   F(TypedArrayGetBuffer, 1, 1)                 \
+   F(TypedArraySet, 2, 1)                       \
++  F(TypedArrayPropagateTaint, 2, 1)            \
+   F(TypedArraySortFast, 1, 1)
+ 
+ #if V8_ENABLE_DRUMBRAKE
