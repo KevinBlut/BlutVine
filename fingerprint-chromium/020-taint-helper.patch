@@ -124,3 +124,47 @@ index 0000000000..013ef28a63
 +
 +#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_FINGERPRINTING_TAINT_TRACKER_H_
 \ No newline at end of file
+diff --git a/include/v8-array-buffer.h b/include/v8-array-buffer.h
+index 4b55c445..cd469db8 100644
+--- a/v8/include/v8-array-buffer.h
++++ b/v8/include/v8-array-buffer.h
+@@ -115,6 +115,12 @@ class V8_EXPORT BackingStore : public v8::internal::BackingStoreBase {
+    */
+   static void EmptyDeleter(void* data, size_t length, void* deleter_data);
+ 
++  // ---- Fingerprint taint tracking ----
++  bool IsTainted() const;
++  void SetTainted(bool tainted);
++  // Propagate taint from another BackingStore.
++  void PropagateTaintFrom(const BackingStore& other);
++
+  private:
+   /**
+    * See [Shared]ArrayBuffer::GetBackingStore and
+diff --git a/src/api/api.cc b/src/api/api.cc
+index fe4031b1..3a672ae6 100644
+--- a/v8/src/api/api.cc
++++ b/v8/src/api/api.cc
+@@ -4268,6 +4268,22 @@ void v8::BackingStore::EmptyDeleter(void* data, size_t length,
+   DCHECK_NULL(deleter_data);
+ }
+ 
++bool v8::BackingStore::IsTainted() const {
++  return reinterpret_cast<const i::BackingStore*>(this)->is_tainted();
++}
++
++void v8::BackingStore::SetTainted(bool tainted) {
++  reinterpret_cast<i::BackingStore*>(this)->set_tainted(tainted);
++}
++
++void v8::BackingStore::PropagateTaintFrom(const BackingStore& other) {
++  auto* internal_this = reinterpret_cast<i::BackingStore*>(this);
++  const auto* internal_other =
++      reinterpret_cast<const i::BackingStore*>(&other);
++  if (internal_other->is_tainted())
++    internal_this->set_tainted(true);
++}
++
+ std::shared_ptr<v8::BackingStore> v8::ArrayBuffer::GetBackingStore() {
+   auto self = Utils::OpenDirectHandle(this);
+   std::shared_ptr<i::BackingStore> backing_store = self->GetBackingStore();
