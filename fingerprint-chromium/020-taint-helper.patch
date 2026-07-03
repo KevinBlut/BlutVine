@@ -1,0 +1,126 @@
+diff --git a/third_party/blink/renderer/core/BUILD.gn b/third_party/blink/renderer/core/BUILD.gn
+index 48897b8e14..5eaefe3dce 100644
+--- a/third_party/blink/renderer/core/BUILD.gn
++++ b/third_party/blink/renderer/core/BUILD.gn
+@@ -260,6 +260,8 @@ component("core") {
+   sources = [
+     "core_initializer.cc",
+     "core_initializer.h",
++    "fingerprinting/taint_tracker.cc",
++    "fingerprinting/taint_tracker.h",
+   ]
+ 
+   sources += blink_core_sources_bindings
+diff --git a/third_party/blink/renderer/core/fingerprinting/taint_tracker.cc b/third_party/blink/renderer/core/fingerprinting/taint_tracker.cc
+new file mode 100644
+index 0000000000..927483b72c
+--- /dev/null
++++ b/third_party/blink/renderer/core/fingerprinting/taint_tracker.cc
+@@ -0,0 +1,63 @@
++#include "third_party/blink/renderer/core/fingerprinting/taint_tracker.h"
++
++#include "base/command_line.h"
++#include "components/ungoogled/fingerprint_collector.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "third_party/blink/renderer/core/typed_arrays/array_buffer/array_buffer_contents.h"
++#include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
++#include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer_view.h"
++
++namespace blink {
++
++// Global flag — fine for single-threaded collect mode.
++static bool g_fingerprinting_detected = false;
++
++bool TaintTracker::IsFingerprintingDetected() {
++  return g_fingerprinting_detected;
++}
++
++void TaintTracker::SetFingerprintingDetected(bool value) {
++  g_fingerprinting_detected = value;
++}
++
++void TaintTracker::MarkTainted(DOMArrayBuffer* buffer) {
++  if (!buffer)
++    return;
++  auto backing = buffer->Content()->BackingStore();
++  if (backing)
++    backing->SetTainted(true);
++}
++
++void TaintTracker::MarkTainted(DOMArrayBufferView* view) {
++  if (!view)
++    return;
++  MarkTainted(view->BufferBase());
++}
++
++bool TaintTracker::IsTainted(const DOMArrayBuffer* buffer) {
++  if (!buffer)
++    return false;
++  auto backing = buffer->Content()->BackingStore();
++  return backing && backing->IsTainted();
++}
++
++bool TaintTracker::IsTainted(const DOMArrayBufferView* view) {
++  if (!view)
++    return false;
++  return IsTainted(view->BufferBase());
++}
++
++void TaintTracker::OnTaintedDataExported(const String& sink_type) {
++  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintCollect))
++    return;
++
++  // Mark fingerprinting as detected so subsequent API calls are logged.
++  SetFingerprintingDetected(true);
++
++  // Flush the current input log as a fingerprinting test.
++  // The site should already be set by the source API hooks.
++  fingerprint_collector::FlushTestIfNew(sink_type.Utf8(), 0.0);
++}
++
++}  // namespace blink
+\ No newline at end of file
+diff --git a/third_party/blink/renderer/core/fingerprinting/taint_tracker.h b/third_party/blink/renderer/core/fingerprinting/taint_tracker.h
+new file mode 100644
+index 0000000000..013ef28a63
+--- /dev/null
++++ b/third_party/blink/renderer/core/fingerprinting/taint_tracker.h
+@@ -0,0 +1,36 @@
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_FINGERPRINTING_TAINT_TRACKER_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_FINGERPRINTING_TAINT_TRACKER_H_
++
++#include "third_party/blink/renderer/core/core_export.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++
++namespace blink {
++
++class DOMArrayBuffer;
++class DOMArrayBufferView;
++class ExecutionContext;
++
++// TaintTracker monitors the flow of fingerprinting data from source APIs
++// (Canvas, WebGL, Audio) to network sinks (fetch, XHR, sendBeacon).
++class CORE_EXPORT TaintTracker {
++ public:
++  // Mark data as carrying fingerprint output.
++  static void MarkTainted(DOMArrayBuffer* buffer);
++  static void MarkTainted(DOMArrayBufferView* view);
++
++  // Check if data is tainted.
++  static bool IsTainted(const DOMArrayBuffer* buffer);
++  static bool IsTainted(const DOMArrayBufferView* view);
++
++  // Called when tainted data hits a network sink.
++  // Sets the global fingerprinting-detected flag and flushes the test recipe.
++  static void OnTaintedDataExported(const String& sink_type);
++
++  // Global flag: has any fingerprinting been detected on this page?
++  static bool IsFingerprintingDetected();
++  static void SetFingerprintingDetected(bool value);
++};
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_FINGERPRINTING_TAINT_TRACKER_H_
+\ No newline at end of file
