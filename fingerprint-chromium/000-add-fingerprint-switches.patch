@@ -1,25 +1,23 @@
 diff --git a/components/ungoogled/ungoogled_switches.cc b/components/ungoogled/ungoogled_switches.cc
-index 15e63407e1..d249bb9a80 100644
+index 15e63407e1..5480e044a1 100644
 --- a/components/ungoogled/ungoogled_switches.cc
 +++ b/components/ungoogled/ungoogled_switches.cc
-@@ -15,4 +15,66 @@ const char kFingerprintingCanvasMeasureTextNoise[] = "fingerprinting-canvas-meas
+@@ -15,4 +15,75 @@ const char kFingerprintingCanvasMeasureTextNoise[] = "fingerprinting-canvas-meas
  // Enable fingerprinting deception for Canvas image data
  const char kFingerprintingCanvasImageDataNoise[] = "fingerprinting-canvas-image-data-noise";
  
 +// Core
-+// Fingerprint seed
 +const char kFingerprint[] = "fingerprint";
-+// Disable GPU fingerprint spoofing
 +const char kDisableGpuFingerprint[] = "disable-gpu-fingerprint";
 +
-+// UA / platform — all values supplied by UAForge launcher script,
++// UA / platform — passthrough, all values supplied by launcher (Bifrost).
 +// BlutVine never constructs or selects these itself.
 +// Full Mozilla/5.0 (...) UA string
 +const char kFingerprintUA[] = "fingerprint-ua";
-+// Sec-CH-UA-Platform-Version value e.g. "10.0.0", "14.0.0"
++// Sec-CH-UA-Platform-Version e.g. "10.0.0", "14.0.0"
 +const char kFingerprintPlatformVersion[] = "fingerprint-platform-version";
 +
-+// Client Hints — all values supplied by UAForge launcher script
++// Client Hints — passthrough, all values supplied by launcher
 +// Sec-CH-UA-Arch e.g. "x86", "arm"
 +const char kFingerprintCHUAArch[] = "fingerprint-ch-arch";
 +// Sec-CH-UA-Bitness e.g. "64"
@@ -35,7 +33,7 @@ index 15e63407e1..d249bb9a80 100644
 +// Sec-CH-UA-WoW64: "?1" or "?0"
 +const char kFingerprintCHUAWoW64[] = "fingerprint-ch-wow64";
 +
-+// Screen
++// Screen — passthrough
 +const char kFingerprintScreenWidth[] = "fingerprint-screen-width";
 +const char kFingerprintScreenHeight[] = "fingerprint-screen-height";
 +const char kFingerprintScreenAvailWidth[] = "fingerprint-screen-avail-width";
@@ -48,17 +46,28 @@ index 15e63407e1..d249bb9a80 100644
 +const char kFingerprintDatabase[] = "fingerprint-database";
 +const char kFingerprintReplay[] = "fingerprint-replay";
 +
-+// GPU
-+// Explicit vendor override (disabled, use gpu-model instead)
++// GPU — passthrough, caller supplies final strings directly.
++// No model lookup or auto-derivation happens inside BlutVine.
++// UNMASKED_VENDOR_WEBGL string e.g. "NVIDIA Corporation"
 +const char kFingerprintGpuVendor[] = "fingerprint-gpu-vendor";
-+// Explicit renderer override (disabled, use gpu-model instead)
++// UNMASKED_RENDERER_WEBGL string e.g. "NVIDIA GeForce RTX 4070/PCIe/SSE2"
 +const char kFingerprintGpuRenderer[] = "fingerprint-gpu-renderer";
-+// GPU model for auto-derivation e.g. "RTX 3060", "GTX 1660 Ti"
-+const char kFingerprintGpuModel[] = "fingerprint-gpu-model";
-+// GPU driver version
++// Driver version string e.g. "537.58" — passed through for UNMASKED_RENDERER
 +const char kFingerprintGpuDriver[] = "fingerprint-gpu-driver";
-+// If present, prefer laptop GPU variants from kGpuModels[]
-+const char kFingerprintLaptop[] = "fingerprint-laptop";
++
++// WebGL limits — passthrough, caller selects values from corpus.
++// All values are integers unless noted.
++const char kFingerprintWebGLMaxTextureSize[] = "fingerprint-webgl-max-texture-size";
++const char kFingerprintWebGLMaxRenderBufferSize[] = "fingerprint-webgl-max-render-buffer-size";
++// Two comma-separated integers e.g. "32768,32768"
++const char kFingerprintWebGLMaxViewportDims[] = "fingerprint-webgl-max-viewport-dims";
++const char kFingerprintWebGLMaxVaryingVectors[] = "fingerprint-webgl-max-varying-vectors";
++const char kFingerprintWebGLMaxVertexUniformVectors[] = "fingerprint-webgl-max-vertex-uniform-vectors";
++const char kFingerprintWebGLMaxFragmentUniformVectors[] = "fingerprint-webgl-max-fragment-uniform-vectors";
++// Two comma-separated floats e.g. "1.0,10.0"
++const char kFingerprintWebGLAliasedLineWidthRange[] = "fingerprint-webgl-aliased-line-width-range";
++// Two comma-separated floats e.g. "1.0,2047.0"
++const char kFingerprintWebGLAliasedPointSizeRange[] = "fingerprint-webgl-aliased-point-size-range";
 +
 +// Hardware
 +const char kFingerprintHardwareConcurrency[] = "fingerprint-hardware-concurrency";
@@ -71,10 +80,10 @@ index 15e63407e1..d249bb9a80 100644
  }  // namespace switches
 \ No newline at end of file
 diff --git a/components/ungoogled/ungoogled_switches.h b/components/ungoogled/ungoogled_switches.h
-index b7a6a75e04..35e89756f2 100644
+index b7a6a75e04..248564da27 100644
 --- a/components/ungoogled/ungoogled_switches.h
 +++ b/components/ungoogled/ungoogled_switches.h
-@@ -15,6 +15,51 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingClientRectsNoise[];
+@@ -15,6 +15,58 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingClientRectsNoise[];
  COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingCanvasMeasureTextNoise[];
  COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingCanvasImageDataNoise[];
  
@@ -82,11 +91,11 @@ index b7a6a75e04..35e89756f2 100644
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprint[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kDisableGpuFingerprint[];
 +
-+// UA / platform — passthrough, values supplied by UAForge launcher
++// UA / platform — passthrough
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintUA[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPlatformVersion[];
 +
-+// Client Hints — passthrough, values supplied by UAForge launcher
++// Client Hints — passthrough
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCHUAArch[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCHUABitness[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCHUAModel[];
@@ -95,7 +104,7 @@ index b7a6a75e04..35e89756f2 100644
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCHUAFullVersionList[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCHUAWoW64[];
 +
-+// Screen
++// Screen — passthrough
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenWidth[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenHeight[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintScreenAvailWidth[];
@@ -108,12 +117,20 @@ index b7a6a75e04..35e89756f2 100644
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintDatabase[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintReplay[];
 +
-+// GPU
++// GPU — passthrough
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuVendor[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuRenderer[];
-+COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuModel[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuDriver[];
-+COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintLaptop[];
++
++// WebGL limits — passthrough
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintWebGLMaxTextureSize[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintWebGLMaxRenderBufferSize[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintWebGLMaxViewportDims[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintWebGLMaxVaryingVectors[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintWebGLMaxVertexUniformVectors[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintWebGLMaxFragmentUniformVectors[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintWebGLAliasedLineWidthRange[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintWebGLAliasedPointSizeRange[];
 +
 +// Hardware
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintHardwareConcurrency[];
@@ -122,16 +139,15 @@ index b7a6a75e04..35e89756f2 100644
 +// Locale
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintLocation[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintTimezone[];
-+
  }
  
  #endif  // THIRD_PARTY_UNGOOGLED_FINGERPRINTING_SWITCHES_H_
 \ No newline at end of file
 diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
-index aae58d3060..5761e3d968 100644
+index aae58d3060..601c084cfb 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
-@@ -3860,6 +3860,38 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+@@ -3860,6 +3860,44 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
        switches::kEnableWebGLDraftExtensions,
        switches::kEnableWebGPUDeveloperFeatures,
        switches::kFileUrlPathAlias,
@@ -160,9 +176,15 @@ index aae58d3060..5761e3d968 100644
 +      switches::kFingerprintReplay,
 +      switches::kFingerprintGpuVendor,
 +      switches::kFingerprintGpuRenderer,
-+      switches::kFingerprintGpuModel,
 +      switches::kFingerprintGpuDriver,
-+      switches::kFingerprintLaptop,
++      switches::kFingerprintWebGLMaxTextureSize,
++      switches::kFingerprintWebGLMaxRenderBufferSize,
++      switches::kFingerprintWebGLMaxViewportDims,
++      switches::kFingerprintWebGLMaxVaryingVectors,
++      switches::kFingerprintWebGLMaxVertexUniformVectors,
++      switches::kFingerprintWebGLMaxFragmentUniformVectors,
++      switches::kFingerprintWebGLAliasedLineWidthRange,
++      switches::kFingerprintWebGLAliasedPointSizeRange,
 +      switches::kFingerprintHardwareConcurrency,
 +      switches::kFingerprintDeviceMemory,
 +      switches::kFingerprintLocation,
