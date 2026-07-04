@@ -20,24 +20,19 @@ index 8b910a0cc8..37ddc9ccf1 100644
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_screen.cc b/components/ungoogled/fingerprint_screen.cc
 new file mode 100644
-index 0000000000..f1062909a0
+index 0000000000..e2287f8fa9
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_screen.cc
-@@ -0,0 +1,211 @@
+@@ -0,0 +1,98 @@
 +// Copyright (c) 2020 The ungoogled-chromium Authors. All rights reserved.
 +// Use of this source code is governed by a BSD-style license that can be
 +// found in the LICENSE file.
 +
 +#include "components/ungoogled/fingerprint_screen.h"
-+#include "components/ungoogled/fingerprint_data.h"
-+#include <array>
-+#include <cstddef>
-+#include "base/strings/string_util.h"
++
 +#include "base/command_line.h"
-+#include "base/hash/hash.h"
 +#include "base/strings/string_number_conversions.h"
 +#include "components/ungoogled/ungoogled_switches.h"
-+#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 +#include "ui/display/mojom/screen_orientation.mojom.h"
 +#include "ui/display/screen_info.h"
 +#include "ui/gfx/geometry/rect.h"
@@ -45,124 +40,33 @@ index 0000000000..f1062909a0
 +
 +namespace ungoogled {
 +
-+// ---------------------------------------------------------------------------
-+// Android helpers
-+// ---------------------------------------------------------------------------
-+
-+// Platform now comes from the launcher-supplied full UA string (UAForge
-+// owns UA/CH construction end to end; BlutVine never selects platform
-+// tokens itself) rather than a dedicated --fingerprint-platform switch.
-+static bool IsAndroidPlatform() {
-+  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+  if (!cmd->HasSwitch(switches::kFingerprintUA)) return false;
-+  return blink::GetPlatformFromUA(
-+      cmd->GetSwitchValueASCII(switches::kFingerprintUA)) == "android";
-+}
-+
-+// Returns the AndroidModel entry matching Sec-CH-UA-Model
-+// (--fingerprint-ch-model), or the default (pixel8) if the switch is
-+// absent or the key is unknown.
-+static const fingerprint::AndroidModel* GetAndroidModelEntry() {
-+  using namespace fingerprint;
-+  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+
-+  std::string key = "pixel8";  // default
-+  if (cmd->HasSwitch(switches::kFingerprintCHUAModel)) {
-+    std::string raw = base::ToLowerASCII(
-+        cmd->GetSwitchValueASCII(switches::kFingerprintCHUAModel));
-+    // Normalize: strip spaces and dashes
-+    std::string normalized;
-+    for (char c : raw)
-+      if (c != ' ' && c != '-') normalized += c;
-+    if (!normalized.empty()) key = normalized;
-+  }
-+
-+  for (const auto& m : kAndroidModels) {
-+    if (key == m.key) return &m;
-+  }
-+
-+  // Fallback: pixel8
-+  for (const auto& m : kAndroidModels) {
-+    if (std::string("pixel8") == m.key) return &m;
-+  }
-+  return &kAndroidModels[0];
-+}
-+
-+// ---------------------------------------------------------------------------
-+
 +bool IsFingerprintScreenSpoofingEnabled() {
-+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-+      switches::kFingerprint);
-+}
-+
-+static uint32_t GetFingerprintSeed() {
-+  const std::string seed_str =
-+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-+          switches::kFingerprint);
-+  return base::PersistentHash(seed_str);
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  return cmd->HasSwitch(switches::kFingerprintScreenWidth) &&
++         cmd->HasSwitch(switches::kFingerprintScreenHeight);
 +}
 +
 +float GetSpoofedDevicePixelRatio() {
 +  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+
++  double val = 1.0;
 +  if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
-+    double val = 0.0;
-+    if (base::StringToDouble(
-+            cmd->GetSwitchValueASCII(
-+                switches::kFingerprintScreenDevicePixelRatio),
-+            &val) &&
-+        val > 0.0) {
-+      return static_cast<float>(val);
-+    }
++    base::StringToDouble(
++        cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio),
++        &val);
 +  }
-+
-+  // Android: use model DPR
-+  if (IsAndroidPlatform())
-+    return GetAndroidModelEntry()->dpr;
-+
-+  // Seed-based fallback: 80% -> 1.0, 10% -> 1.25, 5% -> 1.5, 5% -> 2.0
-+  const uint32_t r = (GetFingerprintSeed() >> 8) % 100;
-+  if (r < 80) return 1.0f;
-+  if (r < 90) return 1.25f;
-+  if (r < 95) return 1.5f;
-+  return 2.0f;
++  return static_cast<float>(val);
 +}
 +
 +display::ScreenInfo GetSpoofedScreenInfo() {
 +  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+  const uint32_t seed = GetFingerprintSeed();
 +
-+  // Android: use model-specific dimensions and portrait orientation
-+  if (IsAndroidPlatform()) {
-+    const auto* m = GetAndroidModelEntry();
-+    display::ScreenInfo info;
-+    info.rect                = gfx::Rect(0, 0, m->screen_width, m->screen_height);
-+    // availHeight excludes the Android nav bar
-+    info.available_rect      = gfx::Rect(0, 0, m->screen_width,
-+                                         m->screen_height - m->nav_bar_height);
-+    info.device_scale_factor = m->dpr;
-+    info.depth               = 24;
-+    info.depth_per_component = 8;
-+    info.is_monochrome       = false;
-+    info.orientation_angle   = 0;
-+    info.orientation_type    =
-+        display::mojom::ScreenOrientation::kPortraitPrimary;
-+    info.display_id          = static_cast<int64_t>(seed & 0x7FFFFFFF);
-+    info.is_extended         = false;
-+    info.is_primary          = true;
-+    info.is_internal         = true;  // mobile display is always internal
-+    return info;
-+  }
++  int width = 1920, height = 1080, avail_width = 0, avail_height = 0;
 +
-+  int width = 0, height = 0, avail_width = 0, avail_height = 0;
++  base::StringToInt(cmd->GetSwitchValueASCII(switches::kFingerprintScreenWidth),
++                    &width);
++  base::StringToInt(cmd->GetSwitchValueASCII(switches::kFingerprintScreenHeight),
++                    &height);
 +
-+  // Explicit overrides take priority.
-+  if (cmd->HasSwitch(switches::kFingerprintScreenWidth))
-+    base::StringToInt(
-+        cmd->GetSwitchValueASCII(switches::kFingerprintScreenWidth), &width);
-+  if (cmd->HasSwitch(switches::kFingerprintScreenHeight))
-+    base::StringToInt(
-+        cmd->GetSwitchValueASCII(switches::kFingerprintScreenHeight), &height);
 +  if (cmd->HasSwitch(switches::kFingerprintScreenAvailWidth))
 +    base::StringToInt(
 +        cmd->GetSwitchValueASCII(switches::kFingerprintScreenAvailWidth),
@@ -172,23 +76,8 @@ index 0000000000..f1062909a0
 +        cmd->GetSwitchValueASCII(switches::kFingerprintScreenAvailHeight),
 +        &avail_height);
 +
-+  // Seed-based fallback for width/height.
-+  if (width <= 0 || height <= 0) {
-+    struct Resolution { int w, h; };
-+    static constexpr std::array<Resolution, 4> kDesktopResolutions = {{
-+        {1920, 1080}, {1440, 900}, {2560, 1440}, {3840, 2160},
-+    }};
-+    static constexpr std::array<Resolution, 4> kLaptopResolutions = {{
-+        {1920, 1080}, {1366, 768}, {1536, 864}, {1440, 900},
-+    }};
-+    bool is_laptop = cmd->HasSwitch(switches::kFingerprintLaptop);
-+    const auto& resolutions = is_laptop ? kLaptopResolutions : kDesktopResolutions;
-+    const auto& res = resolutions[seed % resolutions.size()];
-+    width  = res.w;
-+    height = res.h;
-+  }
 +  if (avail_width  <= 0) avail_width  = width;
-+  if (avail_height <= 0) avail_height = height - 40;  // typical taskbar height
++  if (avail_height <= 0) avail_height = height - 40;
 +
 +  display::ScreenInfo info;
 +  info.rect                = gfx::Rect(0, 0, width, height);
@@ -200,7 +89,6 @@ index 0000000000..f1062909a0
 +  info.orientation_angle   = 0;
 +  info.orientation_type    =
 +      display::mojom::ScreenOrientation::kLandscapePrimary;
-+  info.display_id          = static_cast<int64_t>(seed & 0x7FFFFFFF);
 +  info.is_extended         = false;
 +  info.is_primary          = true;
 +  info.is_internal         = false;
@@ -209,28 +97,27 @@ index 0000000000..f1062909a0
 +
 +gfx::Rect GetSpoofedWindowRect() {
 +  const display::ScreenInfo info = GetSpoofedScreenInfo();
-+
-+  // Android: outerWidth/Height == full screen dimensions (no window chrome)
-+  if (IsAndroidPlatform()) {
-+    return gfx::Rect(0, 0, info.rect.width(), info.rect.height());
-+  }
-+
-+  // Outer window includes decorations: subtract typical border + title/taskbar.
-+  const int width  = info.rect.width()  - 16;
-+  const int height = info.rect.height() - 80;
-+  return gfx::Rect(0, 0, width, height);
++  // Outer window: subtract typical window decoration (border + title bar)
++  return gfx::Rect(0, 0,
++                   info.rect.width()  - 16,
++                   info.rect.height() - 80);
 +}
 +
 +int GetSpoofedInnerHeight() {
-+  // Android: subtract status bar + address bar + nav bar
-+  if (IsAndroidPlatform()) {
-+    const auto* m = GetAndroidModelEntry();
-+    return m->screen_height
-+           - m->status_bar_height
-+           - m->address_bar_height
-+           - m->nav_bar_height;
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++
++  // If the caller supplied an explicit avail height, use it as inner height
++  // base (it already accounts for device-specific chrome bars).
++  if (cmd->HasSwitch(switches::kFingerprintScreenAvailHeight)) {
++    int avail_height = 0;
++    base::StringToInt(
++        cmd->GetSwitchValueASCII(switches::kFingerprintScreenAvailHeight),
++        &avail_height);
++    if (avail_height > 0)
++      return avail_height;
 +  }
-+  // Desktop: fixed estimate
++
++  // Fallback: screen height minus a fixed estimate for browser chrome
 +  return GetSpoofedWindowRect().height() - 85;
 +}
 +
@@ -238,7 +125,7 @@ index 0000000000..f1062909a0
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_screen.h b/components/ungoogled/fingerprint_screen.h
 new file mode 100644
-index 0000000000..a59898b238
+index 0000000000..376f4906bf
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_screen.h
 @@ -0,0 +1,33 @@
@@ -249,27 +136,27 @@ index 0000000000..a59898b238
 +#ifndef COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
 +#define COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
 +
++#include "base/component_export.h"
 +#include "ui/display/screen_info.h"
 +#include "ui/gfx/geometry/rect.h"
-+#include "base/component_export.h"
++
 +namespace ungoogled {
 +
-+// Returns true if screen spoofing is active (i.e. --fingerprint is present).
++// Returns true if screen spoofing is active, i.e. at minimum
++// --fingerprint-screen-width and --fingerprint-screen-height are present.
 +COMPONENT_EXPORT(UNGOOGLED) bool IsFingerprintScreenSpoofingEnabled();
 +
-+// Returns the spoofed device pixel ratio derived from the fingerprint seed,
-+// or from --fingerprint-screen-device-pixel-ratio if explicitly set.
++// Returns the spoofed device pixel ratio from --fingerprint-screen-device-pixel-ratio.
 +COMPONENT_EXPORT(UNGOOGLED) float GetSpoofedDevicePixelRatio();
 +
-+// Returns a fully populated display::ScreenInfo with spoofed dimensions/DPR.
++// Returns a fully populated display::ScreenInfo built from switch values.
 +COMPONENT_EXPORT(UNGOOGLED) display::ScreenInfo GetSpoofedScreenInfo();
 +
-+// Returns the spoofed outer window rect (for outerWidth/Height, screenX/Y).
++// Returns the spoofed outer window rect (outerWidth/Height, screenX/Y).
 +COMPONENT_EXPORT(UNGOOGLED) gfx::Rect GetSpoofedWindowRect();
 +
-+// Returns the spoofed innerHeight accounting for browser chrome bars.
-+// For Android: subtracts nav bar + status bar + address bar.
-+// For desktop: subtracts a fixed 85px estimate.
++// Returns the spoofed innerHeight. Uses avail height if supplied by caller,
++// otherwise estimates from window height.
 +COMPONENT_EXPORT(UNGOOGLED) int GetSpoofedInnerHeight();
 +
 +}  // namespace ungoogled
