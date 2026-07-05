@@ -1,5 +1,5 @@
 diff --git a/third_party/blink/renderer/modules/webaudio/analyser_node.cc b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
-index 688a2fec77..21c67cda44 100644
+index 688a2fec77..xxxxxxxx 100644
 --- a/third_party/blink/renderer/modules/webaudio/analyser_node.cc
 +++ b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
 @@ -25,6 +25,10 @@
@@ -13,7 +13,7 @@ index 688a2fec77..21c67cda44 100644
  #include "third_party/blink/renderer/bindings/modules/v8/v8_analyser_options.h"
  #include "third_party/blink/renderer/modules/webaudio/analyser_handler.h"
  #include "third_party/blink/renderer/modules/webaudio/audio_graph_tracer.h"
-@@ -117,17 +121,57 @@ double AnalyserNode::smoothingTimeConstant() const {
+@@ -117,17 +121,69 @@ double AnalyserNode::smoothingTimeConstant() const {
  }
  
  void AnalyserNode::getFloatFrequencyData(NotShared<DOMFloat32Array> array) {
@@ -25,6 +25,11 @@ index 688a2fec77..21c67cda44 100644
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
 +            : context()->GetExecutionContext()->Url().GetString().Utf8());
++    // Log fftSize/2 as test identity so HashInputLog() produces a key that
++    // distinguishes this call. Must fire under both modes so collect and
++    // replay hash to the same value.
++    fingerprint_collector::LogAudioInput(
++        1, static_cast<int>(array->length()), 0.0f);
 +  }
    GetAnalyserHandler().GetFloatFrequencyData(array.Get(),
                                               context()->currentTime());
@@ -39,6 +44,8 @@ index 688a2fec77..21c67cda44 100644
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
 +            : context()->GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::LogAudioInput(
++        1, static_cast<int>(array->length()), 0.0f);
 +  }
    GetAnalyserHandler().GetByteFrequencyData(array.Get(),
                                              context()->currentTime());
@@ -53,6 +60,8 @@ index 688a2fec77..21c67cda44 100644
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
 +            : context()->GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::LogAudioInput(
++        1, static_cast<int>(array->length()), 0.0f);
 +  }
    GetAnalyserHandler().GetFloatTimeDomainData(array.Get());
  }
@@ -66,13 +75,15 @@ index 688a2fec77..21c67cda44 100644
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
 +            : context()->GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::LogAudioInput(
++        1, static_cast<int>(array->length()), 0.0f);
 +  }
 +  GetAnalyserHandler().GetByteTimeDomainData(array.Get());
 +}
 +
  void AnalyserNode::setPeriodicWave(PeriodicWave* wave) {
 diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
-index 626582e39b..1aa9e24f95 100644
+index 626582e39b..xxxxxxxx 100644
 --- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
 +++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
 @@ -25,6 +25,13 @@
@@ -89,7 +100,7 @@ index 626582e39b..1aa9e24f95 100644
  #include "base/metrics/histogram_functions.h"
  #include "base/metrics/histogram_macros.h"
  #include "media/base/audio_bus.h"
-@@ -180,6 +187,18 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
+@@ -180,6 +187,21 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
    destination_node_ = OfflineAudioDestinationNode::Create(
        this, number_of_channels, number_of_frames, sample_rate);
    Initialize();
@@ -104,6 +115,13 @@ index 626582e39b..1aa9e24f95 100644
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
 +            : window->Url().GetString().Utf8());
++    // Log constructor params as test identity so HashInputLog() produces a
++    // meaningful key. Without this every OfflineAudioContext on a given site
++    // hashes to the zero-input FNV64 IV and all entries collide.
++    fingerprint_collector::LogAudioInput(
++        number_of_channels,
++        static_cast<int>(number_of_frames),
++        sample_rate);
 +  }
  }
  
@@ -168,7 +186,7 @@ index 626582e39b..1aa9e24f95 100644
      // promise too.
      DispatchEvent(*OfflineAudioCompletionEvent::Create(rendered_buffer));
 diff --git a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc b/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
-index 4ff2fecc93..92fca78dbf 100644
+index 4ff2fecc93..xxxxxxxx 100644
 --- a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
 +++ b/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
 @@ -31,6 +31,10 @@
@@ -182,12 +200,14 @@ index 4ff2fecc93..92fca78dbf 100644
  #include "base/compiler_specific.h"
  #include "media/base/audio_bus.h"
  #include "third_party/blink/renderer/platform/audio/audio_bus.h"
-@@ -109,6 +113,21 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
+@@ -109,6 +113,23 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
      DoFFTAnalysis();
    }
  
 +  // Replay: substitute corpus frequency bin data before dB conversion.
 +  // Site is set by analyser_node.cc before this call.
++  // LogAudioInput was already called in analyser_node.cc — g_input_log is
++  // populated, hash will match the collected key.
 +  // .bin format: raw float32 LE, length = (fftSize / 2) floats.
 +  {
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
@@ -204,7 +224,7 @@ index 4ff2fecc93..92fca78dbf 100644
    // Convert from linear magnitude to floating-point decibels.
    const size_t source_length = magnitude_buffer_.size();
    const size_t len = std::min(source_length, destination_array->length());
-@@ -149,6 +165,21 @@ void RealtimeAnalyser::GetByteFrequencyData(DOMUint8Array* destination_array,
+@@ -149,6 +165,22 @@ void RealtimeAnalyser::GetByteFrequencyData(DOMUint8Array* destination_array,
      DoFFTAnalysis();
    }
  
@@ -226,7 +246,7 @@ index 4ff2fecc93..92fca78dbf 100644
    // FIXME: Is it worth caching the data so we don't have to do the conversion
    const size_t source_length = magnitude_buffer_.size();
    const size_t len = std::min(source_length, destination_array->length());
-@@ -190,4 +219,19 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
+@@ -190,4 +219,21 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
      const unsigned write_index = GetWriteIndex();
  
 +    // Replay: substitute corpus time domain data.
@@ -246,7 +266,7 @@ index 4ff2fecc93..92fca78dbf 100644
 +
      base::span<float> destination = destination_array->AsSpan();
      for (unsigned i = 0; i < len; ++i) {
-@@ -233,4 +265,19 @@ void RealtimeAnalyser::GetByteTimeDomainData(
+@@ -233,4 +265,21 @@ void RealtimeAnalyser::GetByteTimeDomainData(
      const unsigned write_index = GetWriteIndex();
  
 +    // Replay: substitute corpus byte time domain data.
