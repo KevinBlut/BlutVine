@@ -1,5 +1,5 @@
 diff --git a/components/ungoogled/BUILD.gn b/components/ungoogled/BUILD.gn
-index eb72b607f8..8279148133 100644
+index 37ddc9ccf1..4d284e24bd 100644
 --- a/components/ungoogled/BUILD.gn
 +++ b/components/ungoogled/BUILD.gn
 @@ -4,6 +4,8 @@
@@ -8,10 +8,10 @@ index eb72b607f8..8279148133 100644
    sources = [
 +    "fingerprint_collector.cc",
 +    "fingerprint_collector.h",
-     "fingerprint_data.h",
      "fingerprint_screen.cc",
      "fingerprint_screen.h",
-@@ -14,5 +16,5 @@ component("ungoogled_switches") {
+     "ungoogled_switches.h",
+@@ -12,5 +14,5 @@ component("ungoogled_switches") {
  
    defines = [ "IS_UNGOOGLED_IMPL" ]
  
@@ -21,10 +21,10 @@ index eb72b607f8..8279148133 100644
 \ No newline at end of file
 diff --git a/components/ungoogled/fingerprint_collector.cc b/components/ungoogled/fingerprint_collector.cc
 new file mode 100644
-index 0000000000..b6f9d99bde
+index 0000000000..ec3049d072
 --- /dev/null
 +++ b/components/ungoogled/fingerprint_collector.cc
-@@ -0,0 +1,804 @@
+@@ -0,0 +1,758 @@
 +#include "components/ungoogled/fingerprint_collector.h"
 +
 +#include <fstream>
@@ -122,9 +122,9 @@ index 0000000000..b6f9d99bde
 +
 +static std::string GetOutputDir() {
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++    if (!cmd->HasSwitch(switches::kFingerprintCollectDatabase))
 +        return "";
-+    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintCollectDatabase);
 +    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
 +    return db_path + "/" + site + "/";
 +}
@@ -275,41 +275,13 @@ index 0000000000..b6f9d99bde
 +static thread_local std::unordered_map<uint64_t, ReplayEntry> g_replay_map;
 +static thread_local std::string g_replay_loaded_site;
 +
++// Replay DB path is pre-assembled by Bifrost (caller side) and passed in
++// as --fingerprint-replay-database. BlutVine never constructs corpus paths.
 +static std::string GetReplayDir() {
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++    if (!cmd->HasSwitch(switches::kFingerprintReplayDatabase))
 +        return "";
-+
-+    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
-+
-+    std::string gpu_model = "unknown_gpu";
-+    if (cmd->HasSwitch(switches::kFingerprintGpuModel))
-+        gpu_model = cmd->GetSwitchValueASCII(switches::kFingerprintGpuModel);
-+    std::transform(gpu_model.begin(), gpu_model.end(), gpu_model.begin(), ::tolower);
-+    std::replace(gpu_model.begin(), gpu_model.end(), ' ', '_');
-+
-+    std::string os_version = "unknown_os";
-+    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
-+        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
-+    std::transform(os_version.begin(), os_version.end(), os_version.begin(), ::tolower);
-+    std::replace(os_version.begin(), os_version.end(), ' ', '_');
-+
-+    std::string driver = "unknown_driver";
-+    if (cmd->HasSwitch(switches::kFingerprintGpuDriver))
-+        driver = cmd->GetSwitchValueASCII(switches::kFingerprintGpuDriver);
-+    std::transform(driver.begin(), driver.end(), driver.begin(), ::tolower);
-+    std::replace(driver.begin(), driver.end(), ' ', '_');
-+
-+    std::string dpr = "1_0";
-+    if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
-+        dpr = cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio);
-+        std::replace(dpr.begin(), dpr.end(), '.', '_');
-+    }
-+
-+    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
-+
-+    return db_path + "/" + gpu_model + "/" + os_version + "/" +
-+           driver + "/" + dpr + "/" + site + "/";
++    return cmd->GetSwitchValueASCII(switches::kFingerprintReplayDatabase);
 +}
 +
 +static void ReplayLoad() {
@@ -405,22 +377,20 @@ index 0000000000..b6f9d99bde
 +// Audio Collect + Replay
 +// ---------------------------------------------------------------------------
 +
-+static std::string GetAudioDir() {
++static std::string GetAudioCollectDir() {
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++    if (!cmd->HasSwitch(switches::kFingerprintCollectDatabase))
 +        return "";
-+
-+    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
-+
-+    std::string os_version = "unknown_os";
-+    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
-+        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
-+    std::transform(os_version.begin(), os_version.end(), os_version.begin(), ::tolower);
-+    std::replace(os_version.begin(), os_version.end(), ' ', '_');
-+
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintCollectDatabase);
 +    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
-+
 +    return db_path + "/" + site + "/";
++}
++
++static std::string GetAudioReplayDir() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintReplayDatabase))
++        return "";
++    return cmd->GetSwitchValueASCII(switches::kFingerprintReplayDatabase);
 +}
 +
 +void FlushAudioIfNew(const uint8_t* bytes, size_t byte_len, double render_ms) {
@@ -428,7 +398,7 @@ index 0000000000..b6f9d99bde
 +    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
 +    if (g_input_log.empty()) return;
 +    base::ScopedAllowBlocking allow_blocking; 
-+    std::string dir = GetAudioDir();
++    std::string dir = GetAudioCollectDir();
 +    if (dir.empty()) return;
 +
 +    uint64_t h = HashInputLog();
@@ -471,7 +441,7 @@ index 0000000000..b6f9d99bde
 +    g_audio_replay_map.clear();
 +    g_audio_replay_loaded_site = g_current_site;
 +    base::ScopedAllowBlocking allow_blocking; 
-+    std::string dir = GetAudioDir();
++    std::string dir = GetAudioReplayDir();
 +    if (dir.empty()) return;
 +
 +    base::FilePath dir_path(dir);
@@ -550,28 +520,20 @@ index 0000000000..b6f9d99bde
 +// measureText Collect + Replay
 +// ---------------------------------------------------------------------------
 +
-+static std::string GetMeasureTextDir() {
++static std::string GetMeasureTextCollectDir() {
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++    if (!cmd->HasSwitch(switches::kFingerprintCollectDatabase))
 +        return "";
-+
-+    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
-+
-+    std::string os_version = "unknown_os";
-+    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
-+        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
-+    std::transform(os_version.begin(), os_version.end(), os_version.begin(), ::tolower);
-+    std::replace(os_version.begin(), os_version.end(), ' ', '_');
-+
-+    std::string dpr = "1_0";
-+    if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
-+        dpr = cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio);
-+        std::replace(dpr.begin(), dpr.end(), '.', '_');
-+    }
-+
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintCollectDatabase);
 +    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
-+
 +    return db_path + "/" + site + "/";
++}
++
++static std::string GetMeasureTextReplayDir() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintReplayDatabase))
++        return "";
++    return cmd->GetSwitchValueASCII(switches::kFingerprintReplayDatabase);
 +}
 +
 +void FlushMeasureTextIfNew(const double* values, size_t count) {
@@ -579,7 +541,7 @@ index 0000000000..b6f9d99bde
 +    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
 +    if (g_input_log.empty()) return;
 +    base::ScopedAllowBlocking allow_blocking; 
-+    std::string dir = GetMeasureTextDir();
++    std::string dir = GetMeasureTextCollectDir();
 +    if (dir.empty()) return;
 +
 +    uint64_t h = HashInputLog();
@@ -622,7 +584,7 @@ index 0000000000..b6f9d99bde
 +    g_measuretext_replay_map.clear();
 +    g_measuretext_replay_loaded_site = g_current_site;
 +    base::ScopedAllowBlocking allow_blocking; 
-+    std::string dir = GetMeasureTextDir();
++    std::string dir = GetMeasureTextReplayDir();
 +    if (dir.empty()) return;
 +
 +    base::FilePath dir_path(dir);
@@ -690,28 +652,20 @@ index 0000000000..b6f9d99bde
 +// clientRects Collect + Replay
 +// ---------------------------------------------------------------------------
 +
-+static std::string GetClientRectsDir() {
++static std::string GetClientRectsCollectDir() {
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+    if (!cmd->HasSwitch(switches::kFingerprintDatabase))
++    if (!cmd->HasSwitch(switches::kFingerprintCollectDatabase))
 +        return "";
-+
-+    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintDatabase);
-+
-+    std::string os_version = "unknown_os";
-+    if (cmd->HasSwitch(switches::kFingerprintPlatformVersion))
-+        os_version = cmd->GetSwitchValueASCII(switches::kFingerprintPlatformVersion);
-+    std::transform(os_version.begin(), os_version.end(), os_version.begin(), ::tolower);
-+    std::replace(os_version.begin(), os_version.end(), ' ', '_');
-+
-+    std::string dpr = "1_0";
-+    if (cmd->HasSwitch(switches::kFingerprintScreenDevicePixelRatio)) {
-+        dpr = cmd->GetSwitchValueASCII(switches::kFingerprintScreenDevicePixelRatio);
-+        std::replace(dpr.begin(), dpr.end(), '.', '_');
-+    }
-+
++    std::string db_path = cmd->GetSwitchValueASCII(switches::kFingerprintCollectDatabase);
 +    std::string site = g_current_site.empty() ? "unknown" : SanitizeForPath(g_current_site);
-+
 +    return db_path + "/" + site + "/";
++}
++
++static std::string GetClientRectsReplayDir() {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (!cmd->HasSwitch(switches::kFingerprintReplayDatabase))
++        return "";
++    return cmd->GetSwitchValueASCII(switches::kFingerprintReplayDatabase);
 +}
 +
 +void FlushClientRectsIfNew(const float* values, size_t count,
@@ -720,7 +674,7 @@ index 0000000000..b6f9d99bde
 +    if (!cmd->HasSwitch(switches::kFingerprintCollect)) return;
 +    if (g_input_log.empty()) return;
 +    base::ScopedAllowBlocking allow_blocking; 
-+    std::string dir = GetClientRectsDir();
++    std::string dir = GetClientRectsCollectDir();
 +    if (dir.empty()) return;
 +
 +    uint64_t h = HashInputLog();
@@ -763,7 +717,7 @@ index 0000000000..b6f9d99bde
 +    g_clientrects_replay_map.clear();
 +    g_clientrects_replay_loaded_site = g_current_site;
 +    base::ScopedAllowBlocking allow_blocking; 
-+    std::string dir = GetClientRectsDir();
++    std::string dir = GetClientRectsReplayDir();
 +    if (dir.empty()) return;
 +
 +    base::FilePath dir_path(dir);
@@ -955,7 +909,7 @@ index 0000000000..e3c020222d
 +}  // namespace fingerprint_collector
 \ No newline at end of file
 diff --git a/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc b/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
-index d293c49e67..f904649c77 100644
+index a3f5649de4..51dbc514e5 100644
 --- a/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
 +++ b/third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc
 @@ -32,6 +32,13 @@
