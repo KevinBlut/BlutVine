@@ -2,7 +2,7 @@ diff --git a/third_party/blink/renderer/modules/webaudio/analyser_node.cc b/thir
 index 688a2fec77..21c67cda44 100644
 --- a/third_party/blink/renderer/modules/webaudio/analyser_node.cc
 +++ b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
-@@ -25,6 +25,11 @@
+@@ -25,6 +25,10 @@
  
  #include "third_party/blink/renderer/modules/webaudio/analyser_node.h"
  
@@ -10,16 +10,16 @@ index 688a2fec77..21c67cda44 100644
 +#include "components/ungoogled/ungoogled_switches.h"
 +#include "components/ungoogled/fingerprint_collector.h"
 +#include "url/gurl.h"
-+#include "third_party/blink/renderer/platform/weborigin/kurl.h"
  #include "third_party/blink/renderer/bindings/modules/v8/v8_analyser_options.h"
  #include "third_party/blink/renderer/modules/webaudio/analyser_handler.h"
  #include "third_party/blink/renderer/modules/webaudio/audio_graph_tracer.h"
-@@ -117,6 +122,14 @@ double AnalyserNode::smoothingTimeConstant() const {
+@@ -117,17 +121,57 @@ double AnalyserNode::smoothingTimeConstant() const {
  }
  
  void AnalyserNode::getFloatFrequencyData(NotShared<DOMFloat32Array> array) {
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-+          switches::kFingerprintReplay)) {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprintReplay) ||
++      cmd->HasSwitch(switches::kFingerprintCollect)) {
 +    GURL raw(context()->GetExecutionContext()->Url().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
 +        raw.is_valid()
@@ -29,12 +29,25 @@ index 688a2fec77..21c67cda44 100644
    GetAnalyserHandler().GetFloatFrequencyData(array.Get(),
                                               context()->currentTime());
  }
-@@ -127,6 +140,14 @@ void AnalyserNode::getByteFrequencyData(NotShared<DOMUint8Array> array) {
+ 
+ void AnalyserNode::getByteFrequencyData(NotShared<DOMUint8Array> array) {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprintReplay) ||
++      cmd->HasSwitch(switches::kFingerprintCollect)) {
++    GURL raw(context()->GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : context()->GetExecutionContext()->Url().GetString().Utf8());
++  }
+   GetAnalyserHandler().GetByteFrequencyData(array.Get(),
+                                             context()->currentTime());
  }
  
  void AnalyserNode::getFloatTimeDomainData(NotShared<DOMFloat32Array> array) {
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-+          switches::kFingerprintReplay)) {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprintReplay) ||
++      cmd->HasSwitch(switches::kFingerprintCollect)) {
 +    GURL raw(context()->GetExecutionContext()->Url().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
 +        raw.is_valid()
@@ -44,6 +57,20 @@ index 688a2fec77..21c67cda44 100644
    GetAnalyserHandler().GetFloatTimeDomainData(array.Get());
  }
  
++void AnalyserNode::getByteTimeDomainData(NotShared<DOMUint8Array> array) {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprintReplay) ||
++      cmd->HasSwitch(switches::kFingerprintCollect)) {
++    GURL raw(context()->GetExecutionContext()->Url().GetString().Utf8());
++    fingerprint_collector::SetCurrentSite(
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : context()->GetExecutionContext()->Url().GetString().Utf8());
++  }
++  GetAnalyserHandler().GetByteTimeDomainData(array.Get());
++}
++
+ void AnalyserNode::setPeriodicWave(PeriodicWave* wave) {
 diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
 index 626582e39b..1aa9e24f95 100644
 --- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
@@ -61,66 +88,44 @@ index 626582e39b..1aa9e24f95 100644
 +
  #include "base/metrics/histogram_functions.h"
  #include "base/metrics/histogram_macros.h"
- #include "media/base/audio_glitch_info.h"
-@@ -180,6 +187,25 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
+ #include "media/base/audio_bus.h"
+@@ -180,6 +187,18 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
    destination_node_ = OfflineAudioDestinationNode::Create(
        this, number_of_channels, number_of_frames, sample_rate);
    Initialize();
 +
-+  // Collect mode: log constructor params as the recipe.
-+  // numberOfChannels + numberOfFrames + sampleRate uniquely identify the
-+  // audio fingerprint test — the DSP graph is always the same per site
-+  // so these params are sufficient as the hash key.
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-+          switches::kFingerprintCollect)) {
++  // Set site at construction so it is available when FireCompletionEvent
++  // runs — both collect and replay need this established upfront.
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprintCollect) ||
++      cmd->HasSwitch(switches::kFingerprintReplay)) {
 +    GURL raw(window->Url().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
-+       raw.is_valid()
-+           ? raw.DeprecatedGetOriginAsURL().spec()
-+           : window->Url().GetString().Utf8());
-+    fingerprint_collector::LogCanvasInput(
-+        "OfflineAudioContext", "",
-+        static_cast<double>(number_of_channels),
-+        static_cast<double>(number_of_frames),
-+        std::to_string(sample_rate),
-+        0, 0);
++        raw.is_valid()
++            ? raw.DeprecatedGetOriginAsURL().spec()
++            : window->Url().GetString().Utf8());
 +  }
  }
  
  OfflineAudioContext::~OfflineAudioContext() {
-@@ -419,6 +445,81 @@ void OfflineAudioContext::FireCompletionEvent() {
+@@ -419,6 +438,58 @@ void OfflineAudioContext::FireCompletionEvent() {
        return;
      }
  
-+    const base::CommandLine* command_line =
-+        base::CommandLine::ForCurrentProcess();
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +
-+    // Replay mode: substitute stored float32 buffer for the real rendered output.
-+    // Path: {replay_db}/audio/{os}/{site}/{hash}_audio.bin
++    // Replay: substitute corpus float32 buffer for the real rendered output.
 +    // .bin format: raw float32 LE, all channels concatenated:
-+    //   [ch0_s0, ch0_s1, ..., ch0_sN, ch1_s0, ..., ch1_sN, ...]
-+    if (command_line->HasSwitch(switches::kFingerprintReplay)) {
-+      GURL raw(GetExecutionContext()->Url().GetString().Utf8());
-+      fingerprint_collector::SetCurrentSite(
-+        raw.is_valid()
-+            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : GetExecutionContext()->Url().GetString().Utf8());
-+      fingerprint_collector::LogCanvasInput(
-+        "OfflineAudioContext", "",
-+        static_cast<double>(rendered_buffer->numberOfChannels()),
-+        static_cast<double>(rendered_buffer->length()),
-+        std::to_string(rendered_buffer->sampleRate()),
-+        0, 0);
-+      std::vector<uint8_t> bytes =
-+          fingerprint_collector::ReplayAudioOutput();
++    //   [ch0_s0, ..., ch0_sN, ch1_s0, ..., ch1_sN, ...]
++    if (cmd->HasSwitch(switches::kFingerprintReplay)) {
++      std::vector<uint8_t> bytes = fingerprint_collector::ReplayAudioOutput();
 +      if (!bytes.empty()) {
 +        size_t expected =
 +            static_cast<size_t>(rendered_buffer->numberOfChannels()) *
 +            static_cast<size_t>(rendered_buffer->length()) *
 +            sizeof(float);
 +        if (bytes.size() == expected) {
-+          const float* src =
-+              reinterpret_cast<const float*>(bytes.data());
++          const float* src = reinterpret_cast<const float*>(bytes.data());
 +          for (unsigned ch = 0;
 +               ch < rendered_buffer->numberOfChannels(); ++ch) {
 +            NotShared<DOMFloat32Array> array =
@@ -135,37 +140,29 @@ index 626582e39b..1aa9e24f95 100644
 +                  bytes.size(), expected);
 +        }
 +      }
-+      // Fall through to fire completion event with whatever buffer we have.
 +    }
 +
-+    // Collect mode: flush recipe JSON + save raw float32 .bin.
-+    // Flushed here (not in constructor) so the hash covers the full
-+    // context params — consistent with canvas flush-at-output pattern.
-+     if (command_line->HasSwitch(switches::kFingerprintCollect)) {
-+       GURL raw(GetExecutionContext()->Url().GetString().Utf8());
-+       fingerprint_collector::SetCurrentSite(
-+         raw.is_valid()
-+            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : GetExecutionContext()->Url().GetString().Utf8());
-+       auto t0 = base::TimeTicks::Now();
-+       size_t total_floats =
-+           static_cast<size_t>(rendered_buffer->numberOfChannels()) *
-+           static_cast<size_t>(rendered_buffer->length());
-+       std::vector<float> audio_data;
-+       audio_data.reserve(total_floats);
-+       for (unsigned ch = 0;
-+            ch < rendered_buffer->numberOfChannels(); ++ch) {
-+         NotShared<DOMFloat32Array> array =
-+             rendered_buffer->getChannelData(ch);
-+         const float* src = array->Data();
-+         audio_data.insert(audio_data.end(), src, src + array->length());
-+       }
-+       double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
-+       fingerprint_collector::FlushAudioIfNew(
-+           reinterpret_cast<const uint8_t*>(audio_data.data()),
-+           audio_data.size() * sizeof(float),
-+           render_ms);
-+     }
++    // Collect: flush recipe JSON + raw float32 .bin.
++    // render_ms is 0.0 — DSP rendering is already complete by the time
++    // FireCompletionEvent is called; timing is not meaningful here.
++    if (cmd->HasSwitch(switches::kFingerprintCollect)) {
++      size_t total_floats =
++          static_cast<size_t>(rendered_buffer->numberOfChannels()) *
++          static_cast<size_t>(rendered_buffer->length());
++      std::vector<float> audio_data;
++      audio_data.reserve(total_floats);
++      for (unsigned ch = 0;
++           ch < rendered_buffer->numberOfChannels(); ++ch) {
++        NotShared<DOMFloat32Array> array =
++            rendered_buffer->getChannelData(ch);
++        const float* src = array->Data();
++        audio_data.insert(audio_data.end(), src, src + array->length());
++      }
++      fingerprint_collector::FlushAudioIfNew(
++          reinterpret_cast<const uint8_t*>(audio_data.data()),
++          audio_data.size() * sizeof(float),
++          0.0);
++    }
 +
      // Call the offline rendering completion event listener and resolve the
      // promise too.
@@ -185,22 +182,17 @@ index 4ff2fecc93..92fca78dbf 100644
  #include "base/compiler_specific.h"
  #include "media/base/audio_bus.h"
  #include "third_party/blink/renderer/platform/audio/audio_bus.h"
-@@ -109,6 +113,26 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
+@@ -109,6 +113,21 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
      DoFFTAnalysis();
    }
  
++  // Replay: substitute corpus frequency bin data before dB conversion.
++  // Site is set by analyser_node.cc before this call.
++  // .bin format: raw float32 LE, length = (fftSize / 2) floats.
 +  {
 +    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+
-+    // Replay: substitute stored frequency bin data.
-+    // .bin format: raw float32 LE, length = (fftSize / 2) floats (freq bins)
 +    if (cmd->HasSwitch(switches::kFingerprintReplay)) {
-+      fingerprint_collector::LogCanvasInput(
-+         "AnalyserGetFloatFrequencyData", "",
-+         static_cast<double>(fft_size_), 0.0,
-+         "", 0, 0);
-+      std::vector<uint8_t> bytes =
-+          fingerprint_collector::ReplayAudioOutput();
++      std::vector<uint8_t> bytes = fingerprint_collector::ReplayAudioOutput();
 +      if (!bytes.empty() &&
 +          bytes.size() == destination_array->length() * sizeof(float)) {
 +        memcpy(destination_array->Data(), bytes.data(), bytes.size());
@@ -212,22 +204,38 @@ index 4ff2fecc93..92fca78dbf 100644
    // Convert from linear magnitude to floating-point decibels.
    const size_t source_length = magnitude_buffer_.size();
    const size_t len = std::min(source_length, destination_array->length());
-@@ -177,6 +201,26 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
+@@ -149,6 +165,21 @@ void RealtimeAnalyser::GetByteFrequencyData(DOMUint8Array* destination_array,
+     DoFFTAnalysis();
+   }
  
++  // Replay: substitute corpus byte frequency data before dB conversion.
++  // Site is set by analyser_node.cc before this call.
++  // .bin format: raw uint8, length = (fftSize / 2) bytes.
++  {
++    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++    if (cmd->HasSwitch(switches::kFingerprintReplay)) {
++      std::vector<uint8_t> bytes = fingerprint_collector::ReplayAudioOutput();
++      if (!bytes.empty() &&
++          bytes.size() == destination_array->length()) {
++        memcpy(destination_array->Data(), bytes.data(), bytes.size());
++        return;
++      }
++    }
++  }
++
+   // FIXME: Is it worth caching the data so we don't have to do the conversion
+   const size_t source_length = magnitude_buffer_.size();
+   const size_t len = std::min(source_length, destination_array->length());
+@@ -190,4 +219,19 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
      const unsigned write_index = GetWriteIndex();
  
++    // Replay: substitute corpus time domain data.
++    // Site is set by analyser_node.cc before this call.
++    // .bin format: raw float32 LE, length = fftSize floats.
 +    {
 +      const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+
-+      // Replay: substitute stored time domain data.
-+      // .bin format: raw float32 LE, length = fftSize floats (time samples)
 +      if (cmd->HasSwitch(switches::kFingerprintReplay)) {
-+      fingerprint_collector::LogCanvasInput(
-+         "AnalyserGetFloatTimeDomainData", "",
-+         static_cast<double>(fft_size_), 0.0,
-+         "", 0, 0);
-+        std::vector<uint8_t> bytes =
-+            fingerprint_collector::ReplayAudioOutput();
++        std::vector<uint8_t> bytes = fingerprint_collector::ReplayAudioOutput();
 +        if (!bytes.empty() &&
 +            bytes.size() == destination_array->length() * sizeof(float)) {
 +          memcpy(destination_array->Data(), bytes.data(), bytes.size());
@@ -238,4 +246,23 @@ index 4ff2fecc93..92fca78dbf 100644
 +
      base::span<float> destination = destination_array->AsSpan();
      for (unsigned i = 0; i < len; ++i) {
-       // Buffer access is protected due to modulo operation.
+@@ -233,4 +265,19 @@ void RealtimeAnalyser::GetByteTimeDomainData(
+     const unsigned write_index = GetWriteIndex();
+ 
++    // Replay: substitute corpus byte time domain data.
++    // Site is set by analyser_node.cc before this call.
++    // .bin format: raw uint8, length = fftSize bytes.
++    {
++      const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++      if (cmd->HasSwitch(switches::kFingerprintReplay)) {
++        std::vector<uint8_t> bytes = fingerprint_collector::ReplayAudioOutput();
++        if (!bytes.empty() &&
++            bytes.size() == destination_array->length()) {
++          memcpy(destination_array->Data(), bytes.data(), bytes.size());
++          return;
++        }
++      }
++    }
++
+     base::span<unsigned char> destination = destination_array->AsSpan();
+     for (unsigned i = 0; i < len; ++i) {
