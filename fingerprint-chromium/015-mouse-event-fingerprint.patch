@@ -1,5 +1,5 @@
 diff --git a/third_party/blink/renderer/core/events/mouse_event.h b/third_party/blink/renderer/core/events/mouse_event.h
-index 3ce3540e01..8cae7893c8 100644
+index 3ce3540e01..25648669bd 100644
 --- a/third_party/blink/renderer/core/events/mouse_event.h
 +++ b/third_party/blink/renderer/core/events/mouse_event.h
 @@ -26,6 +26,8 @@
@@ -19,21 +19,21 @@ index 3ce3540e01..8cae7893c8 100644
 -  virtual double screenY() const { return std::floor(screen_y_); }
 +  virtual double screenX() const {
 +    if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+        const gfx::Rect bounds = ungoogled::GetSpoofedScreenInfo().rect;
-+        const double raw = std::floor(screen_x_);
-+        if (raw < 0.0) return 0.0;
-+        if (raw > bounds.width() - 1) return bounds.width() - 1;
-+        return raw;
++      const gfx::Rect bounds = ungoogled::GetSpoofedWindowRect();
++      const double raw = std::floor(screen_x_);
++      if (raw < 0.0) return 0.0;
++      if (raw > bounds.width() - 1) return bounds.width() - 1;
++      return raw;
 +    }
 +    return std::floor(screen_x_);
 +  }
 +  virtual double screenY() const {
 +    if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
-+        const gfx::Rect bounds = ungoogled::GetSpoofedScreenInfo().rect;
-+        const double raw = std::floor(screen_y_);
-+        if (raw < 0.0) return 0.0;
-+        if (raw > bounds.height() - 1) return bounds.height() - 1;
-+        return raw;
++      const gfx::Rect bounds = ungoogled::GetSpoofedWindowRect();
++      const double raw = std::floor(screen_y_);
++      if (raw < 0.0) return 0.0;
++      if (raw > bounds.height() - 1) return bounds.height() - 1;
++      return raw;
 +    }
 +    return std::floor(screen_y_);
 +  }
