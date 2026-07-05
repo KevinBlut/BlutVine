@@ -1,113 +1,5 @@
-diff --git a/components/ungoogled/fingerprint_data.h b/components/ungoogled/fingerprint_data.h
-index dd57eb68ad..cfecdbae08 100644
---- a/components/ungoogled/fingerprint_data.h
-+++ b/components/ungoogled/fingerprint_data.h
-@@ -322,6 +322,103 @@ constexpr GpuModelInfo kGpuModels[] = {
- 
- constexpr size_t kGpuModelCount = sizeof(kGpuModels) / sizeof(kGpuModels[0]);
- 
-+
-+// =============================================================================
-+// WebGL GPU Limits
-+// =============================================================================
-+// All NVIDIA architectures (Pascal through Blackwell) share the same WebGL
-+// limits. The only meaningful distinction is the driver stack:
-+//   - Windows ANGLE/D3D11:          aliased_line_width_range [1, 1]
-+//   - Linux NVIDIA proprietary:     aliased_line_width_range [1, 10]
-+//   - Linux Mesa/nouveau/zink:      aliased_line_width_range [1, 7.375]
-+//
-+// Detected from --fingerprint-gpu-model + --fingerprint-platform +
-+// renderer string (presence of "Mesa" or "nouveau" signals Mesa stack).
-+// =============================================================================
-+
-+struct GpuLimits {
-+    int   max_texture_size;
-+    int   max_render_buffer_size;
-+    int   max_viewport_dims[2];
-+    int   max_varying_vectors;
-+    int   max_vertex_uniform_vectors;
-+    int   max_fragment_uniform_vectors;
-+    float aliased_line_width_range[2];
-+    float aliased_point_size_range[2];
-+};
-+
-+// Windows ANGLE/D3D11 — all NVIDIA architectures
-+constexpr GpuLimits kGpuLimitsWindows = {
-+    32768,          // MAX_TEXTURE_SIZE
-+    32768,          // MAX_RENDER_BUFFER_SIZE
-+    {32768, 32768}, // MAX_VIEWPORT_DIMS
-+    31,             // MAX_VARYING_VECTORS
-+    1024,           // MAX_VERTEX_UNIFORM_VECTORS
-+    1024,           // MAX_FRAGMENT_UNIFORM_VECTORS
-+    {1.0f, 1.0f},  // ALIASED_LINE_WIDTH_RANGE — D3D11 always [1, 1]
-+    {1.0f, 2047.0f} // ALIASED_POINT_SIZE_RANGE
-+};
-+
-+// Linux NVIDIA proprietary driver — all NVIDIA architectures
-+constexpr GpuLimits kGpuLimitsLinuxNvidia = {
-+    32768,          // MAX_TEXTURE_SIZE
-+    32768,          // MAX_RENDER_BUFFER_SIZE
-+    {32768, 32768}, // MAX_VIEWPORT_DIMS
-+    31,             // MAX_VARYING_VECTORS
-+    1024,           // MAX_VERTEX_UNIFORM_VECTORS
-+    1024,           // MAX_FRAGMENT_UNIFORM_VECTORS
-+    {1.0f, 10.0f}, // ALIASED_LINE_WIDTH_RANGE — NVIDIA proprietary
-+    {1.0f, 2047.0f} // ALIASED_POINT_SIZE_RANGE
-+};
-+
-+// Linux Mesa (nouveau/zink/Mesa NVIDIA) — all NVIDIA architectures
-+constexpr GpuLimits kGpuLimitsLinuxMesa = {
-+    32768,          // MAX_TEXTURE_SIZE
-+    32768,          // MAX_RENDER_BUFFER_SIZE
-+    {32768, 32768}, // MAX_VIEWPORT_DIMS
-+    31,             // MAX_VARYING_VECTORS
-+    1024,           // MAX_VERTEX_UNIFORM_VECTORS
-+    1024,           // MAX_FRAGMENT_UNIFORM_VECTORS
-+    {1.0f, 7.375f}, // ALIASED_LINE_WIDTH_RANGE — Mesa default
-+    {1.0f, 2047.0f} // ALIASED_POINT_SIZE_RANGE
-+};
-+
-+// Apple Silicon via Metal
-+constexpr GpuLimits kGpuLimitsApple = {
-+    16384,          // MAX_TEXTURE_SIZE
-+    16384,          // MAX_RENDER_BUFFER_SIZE
-+    {16384, 16384}, // MAX_VIEWPORT_DIMS
-+    31,             // MAX_VARYING_VECTORS
-+    1024,           // MAX_VERTEX_UNIFORM_VECTORS
-+    1024,           // MAX_FRAGMENT_UNIFORM_VECTORS
-+    {1.0f, 1.0f},  // ALIASED_LINE_WIDTH_RANGE — Metal always [1, 1]
-+    {1.0f, 2047.0f} // ALIASED_POINT_SIZE_RANGE
-+};
-+
-+// Android Adreno (Qualcomm) — common across Adreno 6xx/7xx
-+constexpr GpuLimits kGpuLimitsAndroidAdreno = {
-+    16384,          // MAX_TEXTURE_SIZE
-+    16384,          // MAX_RENDER_BUFFER_SIZE
-+    {16384, 16384}, // MAX_VIEWPORT_DIMS
-+    31,             // MAX_VARYING_VECTORS
-+    256,            // MAX_VERTEX_UNIFORM_VECTORS
-+    224,            // MAX_FRAGMENT_UNIFORM_VECTORS
-+    {1.0f, 1.0f},  // ALIASED_LINE_WIDTH_RANGE
-+    {1.0f, 2048.0f} // ALIASED_POINT_SIZE_RANGE
-+};
-+
-+// Android Mali (ARM) — common across Mali-G series
-+constexpr GpuLimits kGpuLimitsAndroidMali = {
-+    16384,          // MAX_TEXTURE_SIZE
-+    16384,          // MAX_RENDER_BUFFER_SIZE
-+    {16384, 16384}, // MAX_VIEWPORT_DIMS
-+    31,             // MAX_VARYING_VECTORS
-+    256,            // MAX_VERTEX_UNIFORM_VECTORS
-+    256,            // MAX_FRAGMENT_UNIFORM_VECTORS
-+    {1.0f, 1.0f},  // ALIASED_LINE_WIDTH_RANGE
-+    {1.0f, 2048.0f} // ALIASED_POINT_SIZE_RANGE
-+};
-+
- }  // namespace fingerprint
- }  // namespace ungoogled
- 
 diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
-index 18aaa25ad7..2c33c2a8e0 100644
+index 1569afaa6a..b54ea3871e 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
 @@ -6,6 +6,11 @@
@@ -133,7 +25,7 @@ index 18aaa25ad7..2c33c2a8e0 100644
 +            ? raw.DeprecatedGetOriginAsURL().spec()
 +            : Host()->GetExecutionContextUrl().GetString().Utf8());
 +    auto t0 = base::TimeTicks::Now();
-+    ContextGL()->Finish();  // ensure GPU sync before measuring
++    ContextGL()->Finish();
 +    double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
 +    fingerprint_collector::FlushTestIfNew("getBufferSubData", render_ms);
 +  }
@@ -156,30 +48,31 @@ index 18aaa25ad7..2c33c2a8e0 100644
  
  void WebGL2RenderingContextBase::blitFramebuffer(GLint src_x0,
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index 55af6d0d70..d920c8803a 100644
+index d56d915a58..b2abf8b76d 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-@@ -28,6 +28,15 @@
- #include <memory>
- #include <utility>
+@@ -30,6 +30,15 @@
+ 
+ #include "third_party/blink/renderer/modules/webgl/gpu_fingerprint.h"
  
 +#include "third_party/blink/renderer/modules/webgl/gpu_fingerprint.h"
 +#include "base/command_line.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_split.h"
 +#include "base/strings/string_util.h"
-+#include "components/ungoogled/fingerprint_data.h"
 +#include "components/ungoogled/ungoogled_switches.h"
-+#include <random>
 +#include "components/ungoogled/fingerprint_collector.h"
 +#include "base/time/time.h"
 +
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
  #include "base/compiler_specific.h"
-@@ -763,7 +772,43 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+@@ -852,6 +861,45 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
    // regardless of preserveDrawingBuffer.
    GetDrawingBuffer()->RequireExplicitBufferClear();
  
--  return MakeGarbageCollected<ImageBitmap>(std::move(image));
++  auto image = GetDrawingBuffer()->TransferToStaticBitmapImage();
++
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
 +    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
@@ -192,159 +85,133 @@ index 55af6d0d70..d920c8803a 100644
 +    fingerprint_collector::FlushTestIfNew("transferToImageBitmap", render_ms);
 +  }
 +
-+  scoped_refptr<StaticBitmapImage> sbi =
-+      GetDrawingBuffer()->TransferToStaticBitmapImage();
-+
-+  if (sbi && base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
++  if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(
++                   switches::kFingerprintReplay)) {
 +    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
 +        raw.is_valid()
 +            ? raw.DeprecatedGetOriginAsURL().spec()
 +            : Host()->GetExecutionContextUrl().GetString().Utf8());
-+    std::vector<uint8_t> pixels =
-+        fingerprint_collector::ReplayCanvasOutput("transferToImageBitmap");
-+    if (!pixels.empty()) {
++    std::vector<uint8_t> replay_pixels = fingerprint_collector::ReplayWebGLTransfer();
++    if (!replay_pixels.empty()) {
++      gfx::Size sz = image->GetSize();
 +      SkImageInfo info = SkImageInfo::Make(
-+          sbi->width(), sbi->height(),
-+          kRGBA_8888_SkColorType, kUnpremul_SkAlphaType);
-+      sk_sp<SkData> sk_data = SkData::MakeWithCopy(pixels.data(), pixels.size());
-+      sk_sp<SkImage> sk_image = SkImages::RasterFromData(
-+          info, sk_data, info.minRowBytes());
-+      if (sk_image)
-+        return MakeGarbageCollected<ImageBitmap>(
-+            UnacceleratedStaticBitmapImage::Create(std::move(sk_image)));
++          sz.width(), sz.height(), kN32_SkColorType, kPremul_SkAlphaType);
++      size_t row_bytes = info.minRowBytes();
++      if (replay_pixels.size() >= info.computeByteSize(row_bytes)) {
++        SkPixmap pixmap(info, replay_pixels.data(), row_bytes);
++        sk_sp<SkImage> sk_image = SkImages::RasterFromPixmap(
++            pixmap, nullptr, nullptr);
++        if (sk_image) {
++          image = UnacceleratedStaticBitmapImage::Create(
++              std::move(sk_image), ImageOrientationEnum::kDefault);
++        }
++      }
 +    }
 +  }
 +
-+  return MakeGarbageCollected<ImageBitmap>(std::move(sbi));
+   return MakeGarbageCollected<ImageBitmap>(std::move(image));
  }
  
- void WebGLRenderingContextBase::drawingBufferStorage(GLenum sizedformat,
-@@ -3784,6 +3829,69 @@ void WebGLRenderingContextBase::RecordANGLEImplementation() {
+@@ -3890,6 +3938,45 @@ void WebGLRenderingContextBase::RecordANGLEImplementation() {
                              webgl_angle_implementation);
  }
  
-+namespace {
-+
-+const ungoogled::fingerprint::GpuLimits* GetFingerprintGpuLimits() {
-+    using namespace ungoogled::fingerprint;
-+    const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
-+
-+    if (!cmd->HasSwitch(switches::kFingerprint))
-+        return nullptr;
-+
-+    // Determine platform
-+    std::string platform = cmd->HasSwitch(switches::kFingerprintPlatform)
-+        ? cmd->GetSwitchValueASCII(switches::kFingerprintPlatform)
-+        : "Linux x86_64";
-+
-+    bool is_windows = platform.find("Win") != std::string::npos ||
-+                      platform.find("win") != std::string::npos;
-+    bool is_mac     = platform.find("mac") != std::string::npos ||
-+                      platform.find("Mac") != std::string::npos;
-+
-+    if (is_mac)
-+        return &kGpuLimitsApple;
-+
-+    if (is_windows)
-+        return &kGpuLimitsWindows;
-+
-+    // Android — key off model to distinguish Adreno (Pixel/most) vs Mali (some Samsung)
-+    bool is_android = platform.find("android") != std::string::npos;
-+    if (is_android) {
-+        std::string model;
-+        if (cmd->HasSwitch(switches::kFingerprintMobileModel))
-+            model = base::ToLowerASCII(
-+                cmd->GetSwitchValueASCII(switches::kFingerprintMobileModel));
-+        // Samsung Galaxy uses Mali, everything else (Pixel, most others) uses Adreno
-+        bool is_mali = model.find("s2") != std::string::npos ||
-+                       model.find("s3") != std::string::npos ||
-+                       model.find("s4") != std::string::npos ||
-+                       model.find("a5") != std::string::npos ||
-+                       model.find("a3") != std::string::npos;
-+        return is_mali ? &kGpuLimitsAndroidMali : &kGpuLimitsAndroidAdreno;
-+    }
-+
-+    // Linux — distinguish proprietary NVIDIA vs Mesa from renderer string.
-+    // Check explicit renderer override first, then auto-built renderer.
-+    // Mesa renderer strings contain "Mesa" or "nouveau".
-+    bool is_mesa = false;
-+    if (cmd->HasSwitch(switches::kFingerprintGpuRenderer)) {
-+        std::string renderer =
-+            cmd->GetSwitchValueASCII(switches::kFingerprintGpuRenderer);
-+        is_mesa = renderer.find("Mesa") != std::string::npos ||
-+                  renderer.find("nouveau") != std::string::npos;
-+    }
-+    // If using --fingerprint-gpu-model, the auto-built Linux renderer
-+    // uses GetLinuxGpuString() which does NOT include "Mesa", so it
-+    // always maps to proprietary NVIDIA limits — correct default for
-+    // users spoofing a real NVIDIA identity on Linux.
-+    // If you want Mesa limits, use explicit --fingerprint-gpu-renderer
-+    // with a Mesa-format string.
-+
-+    return is_mesa ? &kGpuLimitsLinuxMesa : &kGpuLimitsLinuxNvidia;
++// ---------------------------------------------------------------------------
++// WebGL limit helpers — read switch value and return as int, or -1 if absent.
++// ---------------------------------------------------------------------------
++static int GetWebGLLimitInt(const char* switch_name) {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (!cmd->HasSwitch(switch_name)) return -1;
++  int val = -1;
++  base::StringToInt(cmd->GetSwitchValueASCII(switch_name), &val);
++  return val;
 +}
 +
-+}  // namespace
++// Two comma-separated floats e.g. "1.0,10.0" -> pair, or {-1,-1} if absent.
++static std::pair<float, float> GetWebGLLimitFloatPair(const char* switch_name) {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (!cmd->HasSwitch(switch_name)) return {-1.f, -1.f};
++  std::string raw = cmd->GetSwitchValueASCII(switch_name);
++  auto parts = base::SplitString(raw, ",", base::TRIM_WHITESPACE,
++                                 base::SPLIT_WANT_NONEMPTY);
++  if (parts.size() < 2) return {-1.f, -1.f};
++  float a = -1.f, b = -1.f;
++  base::StringToFloat(parts[0], &a);
++  base::StringToFloat(parts[1], &b);
++  return {a, b};
++}
++
++// Two comma-separated ints e.g. "32768,32768" -> pair, or {-1,-1} if absent.
++static std::pair<int, int> GetWebGLLimitIntPair(const char* switch_name) {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (!cmd->HasSwitch(switch_name)) return {-1, -1};
++  std::string raw = cmd->GetSwitchValueASCII(switch_name);
++  auto parts = base::SplitString(raw, ",", base::TRIM_WHITESPACE,
++                                 base::SPLIT_WANT_NONEMPTY);
++  if (parts.size() < 2) return {-1, -1};
++  int a = -1, b = -1;
++  base::StringToInt(parts[0], &a);
++  base::StringToInt(parts[1], &b);
++  return {a, b};
++}
 +
  ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
                                                      GLenum pname) {
    if (isContextLost())
-@@ -3871,21 +3979,49 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3977,23 +4064,51 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
        return GetIntParameter(script_state, pname);
      case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
--      return GetIntParameter(script_state, pname);
 +    {
-+        const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
-+        if (limits)
-+            return WebGLAny(script_state, limits->max_fragment_uniform_vectors);
-+        return GetIntParameter(script_state, pname);
++      int v = GetWebGLLimitInt(switches::kFingerprintWebGLMaxFragmentUniformVectors);
++      if (v >= 0) return WebGLAny(script_state, v);
+       return GetIntParameter(script_state, pname);
 +    }
      case GL_MAX_RENDERBUFFER_SIZE:
--      return GetIntParameter(script_state, pname);
 +    {
-+        const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
-+        if (limits)
-+            return WebGLAny(script_state, limits->max_render_buffer_size);
-+        return GetIntParameter(script_state, pname);
++      int v = GetWebGLLimitInt(switches::kFingerprintWebGLMaxRenderBufferSize);
++      if (v >= 0) return WebGLAny(script_state, v);
+       return GetIntParameter(script_state, pname);
 +    }
      case GL_MAX_TEXTURE_IMAGE_UNITS:
        return GetIntParameter(script_state, pname);
      case GL_MAX_TEXTURE_SIZE:
 +    {
-+      const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
-+      if (limits) {
-+        uint32_t seed = 0;
-+        base::StringToUint(base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(switches::kFingerprint), &seed);
-+        return WebGLAny(script_state, limits->max_texture_size - static_cast<int>(seed % 3));
-+      }
++      int v = GetWebGLLimitInt(switches::kFingerprintWebGLMaxTextureSize);
++      if (v >= 0) return WebGLAny(script_state, v);
        return GetIntParameter(script_state, pname);
 +    }
      case GL_MAX_VARYING_VECTORS:
--      return GetIntParameter(script_state, pname);
 +    {
-+        const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
-+        if (limits)
-+            return WebGLAny(script_state, limits->max_varying_vectors);
-+        return GetIntParameter(script_state, pname);
++      int v = GetWebGLLimitInt(switches::kFingerprintWebGLMaxVaryingVectors);
++      if (v >= 0) return WebGLAny(script_state, v);
+       return GetIntParameter(script_state, pname);
 +    }
      case GL_MAX_VERTEX_ATTRIBS:
        return GetIntParameter(script_state, pname);
      case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:
        return GetIntParameter(script_state, pname);
      case GL_MAX_VERTEX_UNIFORM_VECTORS:
--      return GetIntParameter(script_state, pname);
 +    {
-+        const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
-+        if (limits)
-+            return WebGLAny(script_state, limits->max_vertex_uniform_vectors);
-+        return GetIntParameter(script_state, pname);
++      int v = GetWebGLLimitInt(switches::kFingerprintWebGLMaxVertexUniformVectors);
++      if (v >= 0) return WebGLAny(script_state, v);
+       return GetIntParameter(script_state, pname);
 +    }
      case GL_MAX_VIEWPORT_DIMS:
++    {
++      auto [w, h] = GetWebGLLimitIntPair(switches::kFingerprintWebGLMaxViewportDims);
++      if (w >= 0 && h >= 0) {
++        std::array<GLint, 2> dims = {w, h};
++        return WebGLAny(script_state,
++                        DOMInt32Array::Create(base::span(dims)));
++      }
        return GetWebGLIntArrayParameter(script_state, pname);
++    }
      case GL_PACK_ALIGNMENT:
-@@ -3901,7 +4037,15 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+       return GetIntParameter(script_state, pname);
+     case GL_POLYGON_OFFSET_FACTOR:
+@@ -4007,7 +4122,15 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GL_RENDERBUFFER_BINDING:
        return WebGLAny(script_state, renderbuffer_binding_.Get());
      case GL_RENDERER:
@@ -360,7 +227,7 @@ index 55af6d0d70..d920c8803a 100644
      case GL_SAMPLE_ALPHA_TO_COVERAGE:
        return GetBooleanParameter(script_state, pname);
      case GL_SAMPLE_BUFFERS:
-@@ -3979,7 +4123,14 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -4085,7 +4208,14 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GC3D_UNPACK_COLORSPACE_CONVERSION_WEBGL:
        return WebGLAny(script_state, unpack_colorspace_conversion_);
      case GL_VENDOR:
@@ -375,7 +242,7 @@ index 55af6d0d70..d920c8803a 100644
      case GL_VERSION:
        return WebGLAny(
            script_state,
-@@ -5164,6 +5315,30 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+@@ -5266,6 +5396,30 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
        return;
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
@@ -406,7 +273,7 @@ index 55af6d0d70..d920c8803a 100644
    }
  }
  
-@@ -7747,47 +7922,75 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
+@@ -7865,47 +8019,78 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
  ScriptValue WebGLRenderingContextBase::GetWebGLFloatArrayParameter(
      ScriptState* script_state,
      GLenum pname) {
@@ -449,18 +316,20 @@ index 55af6d0d70..d920c8803a 100644
 +    }
 +
 +    if (pname == GL_ALIASED_LINE_WIDTH_RANGE) {
-+        const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
-+        if (limits) {
-+            value[0] = limits->aliased_line_width_range[0];
-+            value[1] = limits->aliased_line_width_range[1];
++        auto [lo, hi] = GetWebGLLimitFloatPair(
++            switches::kFingerprintWebGLAliasedLineWidthRange);
++        if (lo >= 0.f && hi >= 0.f) {
++            value[0] = lo;
++            value[1] = hi;
 +        }
 +    }
 +
 +    if (pname == GL_ALIASED_POINT_SIZE_RANGE) {
-+        const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
-+        if (limits) {
-+            value[0] = limits->aliased_point_size_range[0];
-+            value[1] = limits->aliased_point_size_range[1];
++        auto [lo, hi] = GetWebGLLimitFloatPair(
++            switches::kFingerprintWebGLAliasedPointSizeRange);
++        if (lo >= 0.f && hi >= 0.f) {
++            value[0] = lo;
++            value[1] = hi;
 +        }
 +    }
 +
@@ -506,10 +375,11 @@ index 55af6d0d70..d920c8803a 100644
 +    }
 +
 +    if (pname == GL_MAX_VIEWPORT_DIMS) {
-+        const ungoogled::fingerprint::GpuLimits* limits = GetFingerprintGpuLimits();
-+        if (limits) {
-+            value[0] = limits->max_viewport_dims[0];
-+            value[1] = limits->max_viewport_dims[1];
++        auto [w, h] = GetWebGLLimitIntPair(
++            switches::kFingerprintWebGLMaxViewportDims);
++        if (w >= 0 && h >= 0) {
++            value[0] = w;
++            value[1] = h;
 +        }
 +    }
 +
