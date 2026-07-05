@@ -2,7 +2,7 @@ diff --git a/components/ungoogled/ungoogled_switches.cc b/components/ungoogled/u
 index 15e63407e1..5480e044a1 100644
 --- a/components/ungoogled/ungoogled_switches.cc
 +++ b/components/ungoogled/ungoogled_switches.cc
-@@ -15,4 +15,75 @@ const char kFingerprintingCanvasMeasureTextNoise[] = "fingerprinting-canvas-meas
+@@ -15,4 +15,76 @@ const char kFingerprintingCanvasMeasureTextNoise[] = "fingerprinting-canvas-meas
  // Enable fingerprinting deception for Canvas image data
  const char kFingerprintingCanvasImageDataNoise[] = "fingerprinting-canvas-image-data-noise";
  
@@ -41,10 +41,11 @@ index 15e63407e1..5480e044a1 100644
 +const char kFingerprintScreenDevicePixelRatio[] = "fingerprint-screen-device-pixel-ratio";
 +
 +// Collector / replay
-+const char kFingerprintCollect[] = "fingerprint-collect";
++const char kFingerprintCollect[]         = "fingerprint-collect";
 +const char kFingerprintCollectorScript[] = "fingerprint-collector-script";
-+const char kFingerprintDatabase[] = "fingerprint-database";
-+const char kFingerprintReplay[] = "fingerprint-replay";
++const char kFingerprintCollectDatabase[] = "fingerprint-collect-database";
++const char kFingerprintReplay[]          = "fingerprint-replay";
++const char kFingerprintReplayDatabase[]  = "fingerprint-replay-database";
 +
 +// GPU — passthrough, caller supplies final strings directly.
 +// No model lookup or auto-derivation happens inside BlutVine.
@@ -83,7 +84,7 @@ diff --git a/components/ungoogled/ungoogled_switches.h b/components/ungoogled/un
 index b7a6a75e04..248564da27 100644
 --- a/components/ungoogled/ungoogled_switches.h
 +++ b/components/ungoogled/ungoogled_switches.h
-@@ -15,6 +15,58 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingClientRectsNoise[];
+@@ -15,6 +15,59 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingClientRectsNoise[];
  COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingCanvasMeasureTextNoise[];
  COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintingCanvasImageDataNoise[];
  
@@ -114,8 +115,9 @@ index b7a6a75e04..248564da27 100644
 +// Collector / replay
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCollect[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCollectorScript[];
-+COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintDatabase[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintCollectDatabase[];
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintReplay[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintReplayDatabase[];
 +
 +// GPU — passthrough
 +COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintGpuVendor[];
@@ -147,7 +149,7 @@ diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content
 index aae58d3060..601c084cfb 100644
 --- a/content/browser/renderer_host/render_process_host_impl.cc
 +++ b/content/browser/renderer_host/render_process_host_impl.cc
-@@ -3860,6 +3860,44 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+@@ -3860,6 +3860,45 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
        switches::kEnableWebGLDraftExtensions,
        switches::kEnableWebGPUDeveloperFeatures,
        switches::kFileUrlPathAlias,
@@ -172,8 +174,9 @@ index aae58d3060..601c084cfb 100644
 +      switches::kFingerprintScreenDevicePixelRatio,
 +      switches::kFingerprintCollect,
 +      switches::kFingerprintCollectorScript,
-+      switches::kFingerprintDatabase,
++      switches::kFingerprintCollectDatabase,
 +      switches::kFingerprintReplay,
++      switches::kFingerprintReplayDatabase,
 +      switches::kFingerprintGpuVendor,
 +      switches::kFingerprintGpuRenderer,
 +      switches::kFingerprintGpuDriver,
