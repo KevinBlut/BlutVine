@@ -1,5 +1,5 @@
 diff --git a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
-index 1569afaa6a..b54ea3871e 100644
+index 1569afaa6a..e74d93926d 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
 @@ -6,6 +6,11 @@
@@ -14,11 +14,27 @@ index 1569afaa6a..b54ea3871e 100644
  #include "base/compiler_specific.h"
  #include "base/containers/heap_array.h"
  #include "base/numerics/checked_math.h"
-@@ -457,6 +462,32 @@ void WebGL2RenderingContextBase::getBufferSubData(
+@@ -457,6 +462,46 @@ void WebGL2RenderingContextBase::getBufferSubData(
                       static_cast<size_t>(destination_byte_length)));
  
    ContextGL()->UnmapBuffer(target);
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++
++  // Both modes: log buffer target + byte length as test identity.
++  // No canvas draw commands precede a compute buffer readback.
++  {
++    const base::CommandLine* cmd_bsd =
++        base::CommandLine::ForCurrentProcess();
++    if (cmd_bsd->HasSwitch(switches::kFingerprintCollect) ||
++        cmd_bsd->HasSwitch(switches::kFingerprintReplay)) {
++      fingerprint_collector::LogRectInput(
++          static_cast<double>(target), 0.0,
++          static_cast<double>(destination_byte_length), 0.0);
++    }
++  }
++
++  // Collect only: set site, flush to "webgl" category.
++  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintCollect)) {
 +    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
 +    fingerprint_collector::SetCurrentSite(
 +        raw.is_valid()
@@ -27,17 +43,15 @@ index 1569afaa6a..b54ea3871e 100644
 +    auto t0 = base::TimeTicks::Now();
 +    ContextGL()->Finish();
 +    double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
-+    fingerprint_collector::FlushTestIfNew("getBufferSubData", render_ms);
++    fingerprint_collector::FlushTestIfNew(
++        "getBufferSubData", render_ms, "webgl");
 +  }
 +
++  // Replay: no SetCurrentSite.
 +  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
 +          switches::kFingerprintReplay)) {
-+    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
-+    fingerprint_collector::SetCurrentSite(
-+        raw.is_valid()
-+            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : Host()->GetExecutionContextUrl().GetString().Utf8());
-+    std::vector<uint8_t> pixels = fingerprint_collector::ReplayWebGLOutput();
++    std::vector<uint8_t> pixels =
++        fingerprint_collector::ReplayWebGLOutput();
 +    if (!pixels.empty() && destination_data_ptr) {
 +      memcpy(destination_data_ptr, pixels.data(),
 +             std::min(pixels.size(),
@@ -48,7 +62,7 @@ index 1569afaa6a..b54ea3871e 100644
  
  void WebGL2RenderingContextBase::blitFramebuffer(GLint src_x0,
 diff --git a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
-index d56d915a58..b2abf8b76d 100644
+index d56d915a58..3c3f0a15a2 100644
 --- a/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 +++ b/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
 @@ -30,6 +30,15 @@
@@ -67,41 +81,72 @@ index d56d915a58..b2abf8b76d 100644
  #include "base/bit_cast.h"
  #include "base/byte_size.h"
  #include "base/compiler_specific.h"
-@@ -852,6 +861,45 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+@@ -839,6 +848,7 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+     ExceptionState& exception_state) {
+   WebFeature feature = WebFeature::kOffscreenCanvasTransferToImageBitmapWebGL;
+   UseCounter::Count(ExecutionContext::From(script_state), feature);
++  
+   if (!GetDrawingBuffer()) {
+     exception_state.ThrowDOMException(
+         DOMExceptionCode::kInvalidStateError,
+@@ -846,12 +856,68 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+     return nullptr;
+   }
+ 
++  {
++    const base::CommandLine* cmd_tib =
++        base::CommandLine::ForCurrentProcess();
++        
++    // Both modes: log drawing buffer dimensions as WebGL test identity.
++    // WebGL draw calls don't go through LogCanvasInput so g_input_log is
++    // otherwise always empty here.
++    if (cmd_tib->HasSwitch(switches::kFingerprintCollect) ||
++        cmd_tib->HasSwitch(switches::kFingerprintReplay)) {
++      gfx::Size sz = GetDrawingBuffer()->Size();
++      fingerprint_collector::LogRectInput(
++          0.0, 0.0,
++          static_cast<double>(sz.width()),
++          static_cast<double>(sz.height()));
++    }
++
++    // Collect only: set site for DB bucketing, flush recipe to "webgl" category.
++    if (cmd_tib->HasSwitch(switches::kFingerprintCollect)) {
++      GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
++      fingerprint_collector::SetCurrentSite(
++          raw.is_valid()
++              ? raw.DeprecatedGetOriginAsURL().spec()
++              : Host()->GetExecutionContextUrl().GetString().Utf8());
++              
++      auto t0 = base::TimeTicks::Now();
++      GetDrawingBuffer()->ResolveAndBindForReadAndDraw();
++      double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
++      fingerprint_collector::FlushTestIfNew(
++          "transferToImageBitmap", render_ms, "webgl");
++    }
++  }
++
+   auto image = GetDrawingBuffer()->TransferToStaticBitmapImage();
+ 
+   // Per spec, the drawing buffer must be cleared after transferToImageBitmap(),
    // regardless of preserveDrawingBuffer.
    GetDrawingBuffer()->RequireExplicitBufferClear();
  
-+  auto image = GetDrawingBuffer()->TransferToStaticBitmapImage();
-+
-+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
-+    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
-+    fingerprint_collector::SetCurrentSite(
-+        raw.is_valid()
-+            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : Host()->GetExecutionContextUrl().GetString().Utf8());
-+    auto t0 = base::TimeTicks::Now();
-+    GetDrawingBuffer()->ResolveAndBindForReadAndDraw();
-+    double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
-+    fingerprint_collector::FlushTestIfNew("transferToImageBitmap", render_ms);
-+  }
-+
++  // Replay: no SetCurrentSite — BuildReplayDir uses switches directly.
 +  if (image && base::CommandLine::ForCurrentProcess()->HasSwitch(
 +                   switches::kFingerprintReplay)) {
-+    GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
-+    fingerprint_collector::SetCurrentSite(
-+        raw.is_valid()
-+            ? raw.DeprecatedGetOriginAsURL().spec()
-+            : Host()->GetExecutionContextUrl().GetString().Utf8());
-+    std::vector<uint8_t> replay_pixels = fingerprint_collector::ReplayWebGLTransfer();
++    std::vector<uint8_t> replay_pixels =
++        fingerprint_collector::ReplayWebGLTransfer();
++    
 +    if (!replay_pixels.empty()) {
 +      gfx::Size sz = image->GetSize();
 +      SkImageInfo info = SkImageInfo::Make(
 +          sz.width(), sz.height(), kN32_SkColorType, kPremul_SkAlphaType);
 +      size_t row_bytes = info.minRowBytes();
++      
 +      if (replay_pixels.size() >= info.computeByteSize(row_bytes)) {
 +        SkPixmap pixmap(info, replay_pixels.data(), row_bytes);
-+        sk_sp<SkImage> sk_image = SkImages::RasterFromPixmap(
-+            pixmap, nullptr, nullptr);
++        sk_sp<SkImage> sk_image = SkImages::RasterFromPixmap(pixmap, nullptr, nullptr);
++        
 +        if (sk_image) {
 +          image = UnacceleratedStaticBitmapImage::Create(
 +              std::move(sk_image), ImageOrientationEnum::kDefault);
@@ -113,7 +158,7 @@ index d56d915a58..b2abf8b76d 100644
    return MakeGarbageCollected<ImageBitmap>(std::move(image));
  }
  
-@@ -3890,6 +3938,45 @@ void WebGLRenderingContextBase::RecordANGLEImplementation() {
+@@ -3890,6 +3956,45 @@ void WebGLRenderingContextBase::RecordANGLEImplementation() {
                              webgl_angle_implementation);
  }
  
@@ -159,12 +204,13 @@ index d56d915a58..b2abf8b76d 100644
  ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
                                                      GLenum pname) {
    if (isContextLost())
-@@ -3977,23 +4064,51 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -3977,23 +4082,54 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
        return GetIntParameter(script_state, pname);
      case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
 +    {
-+      int v = GetWebGLLimitInt(switches::kFingerprintWebGLMaxFragmentUniformVectors);
++      int v = GetWebGLLimitInt(
++          switches::kFingerprintWebGLMaxFragmentUniformVectors);
 +      if (v >= 0) return WebGLAny(script_state, v);
        return GetIntParameter(script_state, pname);
 +    }
@@ -194,13 +240,15 @@ index d56d915a58..b2abf8b76d 100644
        return GetIntParameter(script_state, pname);
      case GL_MAX_VERTEX_UNIFORM_VECTORS:
 +    {
-+      int v = GetWebGLLimitInt(switches::kFingerprintWebGLMaxVertexUniformVectors);
++      int v = GetWebGLLimitInt(
++          switches::kFingerprintWebGLMaxVertexUniformVectors);
 +      if (v >= 0) return WebGLAny(script_state, v);
        return GetIntParameter(script_state, pname);
 +    }
      case GL_MAX_VIEWPORT_DIMS:
 +    {
-+      auto [w, h] = GetWebGLLimitIntPair(switches::kFingerprintWebGLMaxViewportDims);
++      auto [w, h] = GetWebGLLimitIntPair(
++          switches::kFingerprintWebGLMaxViewportDims);
 +      if (w >= 0 && h >= 0) {
 +        std::array<GLint, 2> dims = {w, h};
 +        return WebGLAny(script_state,
@@ -211,42 +259,46 @@ index d56d915a58..b2abf8b76d 100644
      case GL_PACK_ALIGNMENT:
        return GetIntParameter(script_state, pname);
      case GL_POLYGON_OFFSET_FACTOR:
-@@ -4007,7 +4122,15 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -4007,7 +4143,9 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GL_RENDERBUFFER_BINDING:
        return WebGLAny(script_state, renderbuffer_binding_.Get());
      case GL_RENDERER:
 +    {
        return WebGLAny(script_state, String("WebKit WebGL"));
-+      //{
-+      //    std::string r = GetGLRendererStringForFingerprint();
-+      //    if (!r.empty())
-+      //        return WebGLAny(script_state, String(r));
-+      //    return WebGLAny(script_state, String(ContextGL()->GetString(GL_RENDERER)));
-+      //}
 +    }
      case GL_SAMPLE_ALPHA_TO_COVERAGE:
        return GetBooleanParameter(script_state, pname);
      case GL_SAMPLE_BUFFERS:
-@@ -4085,7 +4208,14 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
+@@ -4085,7 +4223,9 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
      case GC3D_UNPACK_COLORSPACE_CONVERSION_WEBGL:
        return WebGLAny(script_state, unpack_colorspace_conversion_);
      case GL_VENDOR:
 +    {
        return WebGLAny(script_state, String("WebKit"));
-+      //{
-+      //    std::string v = GetGLVendorStringForFingerprint();
-+      //    if (!v.empty())
-+      //        return WebGLAny(script_state, String(v));
-+      //    return WebGLAny(script_state, String(ContextGL()->GetString(GL_VENDOR)));
 +    }
      case GL_VERSION:
        return WebGLAny(
            script_state,
-@@ -5266,6 +5396,30 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
+@@ -5266,6 +5406,44 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
        return;
      }
      ContextGL()->ReadPixels(x, y, width, height, format, type, data);
-+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintCollect)) {
++    // Both modes: log read region as test identity before collect/replay.
++    // No canvas draw commands precede a WebGL readback.
++    {
++      const base::CommandLine* cmd_rp =
++          base::CommandLine::ForCurrentProcess();
++      if (cmd_rp->HasSwitch(switches::kFingerprintCollect) ||
++          cmd_rp->HasSwitch(switches::kFingerprintReplay)) {
++        fingerprint_collector::LogRectInput(
++            static_cast<double>(x), static_cast<double>(y),
++            static_cast<double>(width), static_cast<double>(height));
++      }
++    }
++
++    // Collect only: set site, flush to "webgl" category.
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++            switches::kFingerprintCollect)) {
 +      GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
 +      fingerprint_collector::SetCurrentSite(
 +          raw.is_valid()
@@ -255,136 +307,63 @@ index d56d915a58..b2abf8b76d 100644
 +      auto t0 = base::TimeTicks::Now();
 +      ContextGL()->Finish();
 +      double render_ms = (base::TimeTicks::Now() - t0).InMillisecondsF();
-+      fingerprint_collector::FlushTestIfNew("readPixels", render_ms);
++      fingerprint_collector::FlushTestIfNew("readPixels", render_ms, "webgl");
 +    }
 +
-+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kFingerprintReplay)) {
-+      GURL raw(Host()->GetExecutionContextUrl().GetString().Utf8());
-+      fingerprint_collector::SetCurrentSite(
-+          raw.is_valid()
-+              ? raw.DeprecatedGetOriginAsURL().spec()
-+              : Host()->GetExecutionContextUrl().GetString().Utf8());
-+      std::vector<uint8_t> replay_pixels = fingerprint_collector::ReplayWebGLOutput();
++    // Replay: no SetCurrentSite.
++    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
++            switches::kFingerprintReplay)) {
++      std::vector<uint8_t> replay_pixels =
++          fingerprint_collector::ReplayWebGLOutput();
 +      if (!replay_pixels.empty() && data) {
 +        size_t expected = static_cast<size_t>(width) * height * 4;
-+        memcpy(data, replay_pixels.data(), std::min(replay_pixels.size(), expected));
++        memcpy(data, replay_pixels.data(),
++               std::min(replay_pixels.size(), expected));
 +      }
 +    }
    }
  }
  
-@@ -7865,47 +8019,78 @@ ScriptValue WebGLRenderingContextBase::GetUnsignedIntParameter(
- ScriptValue WebGLRenderingContextBase::GetWebGLFloatArrayParameter(
-     ScriptState* script_state,
-     GLenum pname) {
--  std::array<GLfloat, 4> value = {0};
--  if (!isContextLost())
--    ContextGL()->GetFloatv(pname, value.data());
--  unsigned length = 0;
--  switch (pname) {
--    case GL_ALIASED_POINT_SIZE_RANGE:
--    case GL_ALIASED_LINE_WIDTH_RANGE:
--    case GL_DEPTH_RANGE:
--      length = 2;
--      break;
--    case GL_BLEND_COLOR:
--    case GL_COLOR_CLEAR_VALUE:
--      length = 4;
--      break;
--    default:
--      NOTIMPLEMENTED();
--  }
--  return WebGLAny(script_state,
--                  DOMFloat32Array::Create(base::span(value).first(length)));
-+    std::array<GLfloat, 4> value = {0};
-+    if (!isContextLost())
-+        ContextGL()->GetFloatv(pname, value.data());
+@@ -7882,6 +8060,25 @@ ScriptValue WebGLRenderingContextBase::GetWebGLFloatArrayParameter(
+     default:
+       NOTIMPLEMENTED();
+   }
 +
-+    unsigned length = 0;
-+    switch (pname) {
-+        case GL_ALIASED_POINT_SIZE_RANGE:
-+        case GL_ALIASED_LINE_WIDTH_RANGE:
-+        case GL_DEPTH_RANGE:
-+            length = 2;
-+            break;
-+        case GL_BLEND_COLOR:
-+        case GL_COLOR_CLEAR_VALUE:
-+            length = 4;
-+            break;
-+        default:
-+            NOTIMPLEMENTED();
-+    }
++  if (pname == GL_ALIASED_LINE_WIDTH_RANGE) {
++      auto [lo, hi] = GetWebGLLimitFloatPair(
++          switches::kFingerprintWebGLAliasedLineWidthRange);
++      if (lo >= 0.f && hi >= 0.f) {
++          value[0] = lo;
++          value[1] = hi;
++      }
++  }
 +
-+    if (pname == GL_ALIASED_LINE_WIDTH_RANGE) {
-+        auto [lo, hi] = GetWebGLLimitFloatPair(
-+            switches::kFingerprintWebGLAliasedLineWidthRange);
-+        if (lo >= 0.f && hi >= 0.f) {
-+            value[0] = lo;
-+            value[1] = hi;
-+        }
-+    }
++  if (pname == GL_ALIASED_POINT_SIZE_RANGE) {
++      auto [lo, hi] = GetWebGLLimitFloatPair(
++          switches::kFingerprintWebGLAliasedPointSizeRange);
++      if (lo >= 0.f && hi >= 0.f) {
++          value[0] = lo;
++          value[1] = hi;
++      }
++  }
 +
-+    if (pname == GL_ALIASED_POINT_SIZE_RANGE) {
-+        auto [lo, hi] = GetWebGLLimitFloatPair(
-+            switches::kFingerprintWebGLAliasedPointSizeRange);
-+        if (lo >= 0.f && hi >= 0.f) {
-+            value[0] = lo;
-+            value[1] = hi;
-+        }
-+    }
-+
-+    return WebGLAny(script_state,
-+                    DOMFloat32Array::Create(base::span(value).first(length)));
+   return WebGLAny(script_state,
+                   DOMFloat32Array::Create(base::span(value).first(length)));
  }
- 
- ScriptValue WebGLRenderingContextBase::GetWebGLIntArrayParameter(
-     ScriptState* script_state,
-     GLenum pname) {
--  std::array<GLint, 4> value = {0};
--  if (!isContextLost())
--    ContextGL()->GetIntegerv(pname, value.data());
--  unsigned length = 0;
--  switch (pname) {
--    case GL_MAX_VIEWPORT_DIMS:
--      length = 2;
--      break;
--    case GL_SCISSOR_BOX:
--    case GL_VIEWPORT:
--      length = 4;
--      break;
--    default:
--      NOTIMPLEMENTED();
--  }
--  return WebGLAny(script_state,
--                  DOMInt32Array::Create(base::span(value).first(length)));
-+    std::array<GLint, 4> value = {0};
-+    if (!isContextLost())
-+        ContextGL()->GetIntegerv(pname, value.data());
+@@ -7904,6 +8101,16 @@ ScriptValue WebGLRenderingContextBase::GetWebGLIntArrayParameter(
+     default:
+       NOTIMPLEMENTED();
+   }
 +
-+    unsigned length = 0;
-+    switch (pname) {
-+        case GL_MAX_VIEWPORT_DIMS:
-+            length = 2;
-+            break;
-+        case GL_SCISSOR_BOX:
-+        case GL_VIEWPORT:
-+            length = 4;
-+            break;
-+        default:
-+            NOTIMPLEMENTED();
-+    }
-+
-+    if (pname == GL_MAX_VIEWPORT_DIMS) {
-+        auto [w, h] = GetWebGLLimitIntPair(
-+            switches::kFingerprintWebGLMaxViewportDims);
-+        if (w >= 0 && h >= 0) {
-+            value[0] = w;
-+            value[1] = h;
-+        }
-+    }
-+
-+    return WebGLAny(script_state,
-+                    DOMInt32Array::Create(base::span(value).first(length)));
++  if (pname == GL_MAX_VIEWPORT_DIMS) {
++      auto [w, h] = GetWebGLLimitIntPair(
++          switches::kFingerprintWebGLMaxViewportDims);
++      if (w >= 0 && h >= 0) {
++          value[0] = w;
++          value[1] = h;
++      }
++  }
++  
+   return WebGLAny(script_state,
+                   DOMInt32Array::Create(base::span(value).first(length)));
  }
- 
- WebGLTexture* WebGLRenderingContextBase::ValidateTexture2DBinding(
