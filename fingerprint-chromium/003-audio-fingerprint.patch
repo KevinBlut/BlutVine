@@ -1,5 +1,5 @@
 diff --git a/third_party/blink/renderer/modules/webaudio/analyser_node.cc b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
-index 688a2fec77..xxxxxxxx 100644
+index 688a2fec77..f762dd254c 100644
 --- a/third_party/blink/renderer/modules/webaudio/analyser_node.cc
 +++ b/third_party/blink/renderer/modules/webaudio/analyser_node.cc
 @@ -25,6 +25,10 @@
@@ -13,7 +13,7 @@ index 688a2fec77..xxxxxxxx 100644
  #include "third_party/blink/renderer/bindings/modules/v8/v8_analyser_options.h"
  #include "third_party/blink/renderer/modules/webaudio/analyser_handler.h"
  #include "third_party/blink/renderer/modules/webaudio/audio_graph_tracer.h"
-@@ -117,17 +121,81 @@ double AnalyserNode::smoothingTimeConstant() const {
+@@ -117,20 +121,88 @@ double AnalyserNode::smoothingTimeConstant() const {
  }
  
  void AnalyserNode::getFloatFrequencyData(NotShared<DOMFloat32Array> array) {
@@ -82,7 +82,7 @@ index 688a2fec77..xxxxxxxx 100644
    GetAnalyserHandler().GetFloatTimeDomainData(array.Get());
  }
  
-+void AnalyserNode::getByteTimeDomainData(NotShared<DOMUint8Array> array) {
+ void AnalyserNode::getByteTimeDomainData(NotShared<DOMUint8Array> array) {
 +  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
 +
 +  if (cmd->HasSwitch(switches::kFingerprintCollect)) {
@@ -98,13 +98,12 @@ index 688a2fec77..xxxxxxxx 100644
 +    fingerprint_collector::LogAudioInput(
 +        1, static_cast<int>(array->length()), 0.0f);
 +  }
-+
-+  GetAnalyserHandler().GetByteTimeDomainData(array.Get());
-+}
-+
- void AnalyserNode::setPeriodicWave(PeriodicWave* wave) {
++  
+   GetAnalyserHandler().GetByteTimeDomainData(array.Get());
+ }
+ 
 diff --git a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
-index 626582e39b..xxxxxxxx 100644
+index a63cffefb5..da222647fd 100644
 --- a/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
 +++ b/third_party/blink/renderer/modules/webaudio/offline_audio_context.cc
 @@ -25,6 +25,13 @@
@@ -120,8 +119,8 @@ index 626582e39b..xxxxxxxx 100644
 +
  #include "base/metrics/histogram_functions.h"
  #include "base/metrics/histogram_macros.h"
- #include "media/base/audio_bus.h"
-@@ -180,6 +187,25 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
+ #include "media/base/audio_glitch_info.h"
+@@ -186,6 +193,28 @@ OfflineAudioContext::OfflineAudioContext(LocalDOMWindow* window,
    destination_node_ = OfflineAudioDestinationNode::Create(
        this, number_of_channels, number_of_frames, sample_rate);
    Initialize();
@@ -150,7 +149,7 @@ index 626582e39b..xxxxxxxx 100644
  }
  
  OfflineAudioContext::~OfflineAudioContext() {
-@@ -419,6 +438,58 @@ void OfflineAudioContext::FireCompletionEvent() {
+@@ -425,6 +454,60 @@ void OfflineAudioContext::FireCompletionEvent() {
        return;
      }
  
@@ -212,7 +211,7 @@ index 626582e39b..xxxxxxxx 100644
      // promise too.
      DispatchEvent(*OfflineAudioCompletionEvent::Create(rendered_buffer));
 diff --git a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc b/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
-index 4ff2fecc93..xxxxxxxx 100644
+index 4ff2fecc93..6034ac915b 100644
 --- a/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
 +++ b/third_party/blink/renderer/modules/webaudio/realtime_analyser.cc
 @@ -31,6 +31,10 @@
@@ -226,7 +225,7 @@ index 4ff2fecc93..xxxxxxxx 100644
  #include "base/compiler_specific.h"
  #include "media/base/audio_bus.h"
  #include "third_party/blink/renderer/platform/audio/audio_bus.h"
-@@ -109,6 +113,19 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
+@@ -109,6 +113,22 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
      DoFFTAnalysis();
    }
  
@@ -249,7 +248,7 @@ index 4ff2fecc93..xxxxxxxx 100644
    // Convert from linear magnitude to floating-point decibels.
    const size_t source_length = magnitude_buffer_.size();
    const size_t len = std::min(source_length, destination_array->length());
-@@ -149,6 +165,18 @@ void RealtimeAnalyser::GetByteFrequencyData(DOMUint8Array* destination_array,
+@@ -133,6 +153,20 @@ void RealtimeAnalyser::GetByteFrequencyData(DOMUint8Array* destination_array,
      DoFFTAnalysis();
    }
  
@@ -268,9 +267,10 @@ index 4ff2fecc93..xxxxxxxx 100644
 +  }
 +
    // FIXME: Is it worth caching the data so we don't have to do the conversion
-   const size_t source_length = magnitude_buffer_.size();
-   const size_t len = std::min(source_length, destination_array->length());
-@@ -190,4 +219,19 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
+   // every time?  Perhaps not, since we expect many calls in the same
+   // rendering quantum.
+@@ -177,6 +211,20 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
+ 
      const unsigned write_index = GetWriteIndex();
  
 +    // Replay: substitute corpus time domain data.
@@ -289,7 +289,9 @@ index 4ff2fecc93..xxxxxxxx 100644
 +
      base::span<float> destination = destination_array->AsSpan();
      for (unsigned i = 0; i < len; ++i) {
-@@ -233,4 +265,18 @@ void RealtimeAnalyser::GetByteTimeDomainData(
+       // Buffer access is protected due to modulo operation.
+@@ -202,6 +250,20 @@ void RealtimeAnalyser::GetByteTimeDomainData(DOMUint8Array* destination_array) {
+ 
      const unsigned write_index = GetWriteIndex();
  
 +    // Replay: substitute corpus byte time domain data.
@@ -308,3 +310,4 @@ index 4ff2fecc93..xxxxxxxx 100644
 +
      base::span<unsigned char> destination = destination_array->AsSpan();
      for (unsigned i = 0; i < len; ++i) {
+       // Buffer access is protected due to modulo operation.
