@@ -1,0 +1,96 @@
+diff --git a/components/ungoogled/ungoogled_switches.cc b/components/ungoogled/ungoogled_switches.cc
+index e315048d84..26cc937358 100644
+--- a/components/ungoogled/ungoogled_switches.cc
++++ b/components/ungoogled/ungoogled_switches.cc
+@@ -124,4 +124,10 @@ const char kFingerprintAudioMaxChannelCount[] = "fingerprint-audio-max-channel-c
+ // audio-capture, video-capture, clipboard-read, clipboard-write).
+ const char kFingerprintPermissions[] = "fingerprint-permissions";
+ 
+-}  // namespace switches
+\ No newline at end of file
++// Plugins — boolean flag; presence synthesizes application/pdf into PluginData
++// so that DOMPluginArray's built-in IsPdfViewerAvailable() gate passes,
++// yielding the spec'd 5-tuple PDF plugin list on navigator.plugins.
++// Unset → real PluginRegistry (empty in headless, real plugins otherwise).
++const char kFingerprintPlugins[] = "fingerprint-plugins";
++
++}  // namespace switches
+diff --git a/components/ungoogled/ungoogled_switches.h b/components/ungoogled/ungoogled_switches.h
+index 092a292b97..d716b45e08 100644
+--- a/components/ungoogled/ungoogled_switches.h
++++ b/components/ungoogled/ungoogled_switches.h
+@@ -94,6 +94,9 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintAudioMaxChannelCount[]
+ 
+ // Permissions
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPermissions[];
++
++// Plugins
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPlugins[];
+ }
+ 
+-#endif  // THIRD_PARTY_UNGOOGLED_FINGERPRINTING_SWITCHES_H_
+\ No newline at end of file
++#endif  // THIRD_PARTY_UNGOOGLED_FINGERPRINTING_SWITCHES_H_
+diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
+index 2469362ad4..973a61ecae 100644
+--- a/content/browser/renderer_host/render_process_host_impl.cc
++++ b/content/browser/renderer_host/render_process_host_impl.cc
+@@ -3918,6 +3918,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+       switches::kFingerprintDnsNoPrefetch,
+       switches::kFingerprintDnsNoSystemFallback,
+       switches::kFingerprintPermissions,
++      switches::kFingerprintPlugins,
+       switches::kForceDeviceScaleFactor,
+       switches::kForceDisplayColorProfile,
+       switches::kForceHighContrast,
+diff --git a/third_party/blink/renderer/core/page/plugin_data.cc b/third_party/blink/renderer/core/page/plugin_data.cc
+index df54464ab2..c4acb0bfed 100644
+--- a/third_party/blink/renderer/core/page/plugin_data.cc
++++ b/third_party/blink/renderer/core/page/plugin_data.cc
+@@ -104,30 +104,22 @@ void PluginData::UpdatePluginList() {
+   registry->GetPlugins(&plugins);
+ 
+   if (plugins.empty() &&
+-      base::CommandLine::ForCurrentProcess()->HasSwitch("fingerprint")) {
+-    static constexpr const char* kNames[] = {
+-        "PDF Viewer",
+-        "Chrome PDF Viewer",
+-        "Chromium PDF Viewer",
+-        "Microsoft Edge PDF Viewer",
+-        "WebKit built-in PDF",
+-    };
+-    for (const char* nm : kNames) {
+-      auto* pi = MakeGarbageCollected<PluginInfo>(
+-          String(nm),
+-          String("internal-pdf-viewer"),
+-          String("Portable Document Format"),
+-          Color::FromRGBA32(0xFFFFFFFFu),
+-          /*may_use_external_handler=*/false);
+-      plugins_.push_back(pi);
+-      auto* mi = MakeGarbageCollected<MimeClassInfo>(
+-          String("application/pdf"),
+-          String("Portable Document Format"),
+-          *pi,
+-          Vector<String>{String("pdf")});
+-      pi->AddMimeType(mi);
+-      mimes_.push_back(mi);
+-    }
++      base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintPlugins)) {
++    auto* pi = MakeGarbageCollected<PluginInfo>(
++        String("internal-pdf-viewer"),
++        String("internal-pdf-viewer"),
++        String("Portable Document Format"),
++        Color::FromRGBA32(0xFFFFFFFFu),
++        /*may_use_external_handler=*/false);
++    plugins_.push_back(pi);
++    auto* mi = MakeGarbageCollected<MimeClassInfo>(
++        String("application/pdf"),
++        String("Portable Document Format"),
++        *pi,
++        Vector<String>{String("pdf")});
++    pi->AddMimeType(mi);
++    mimes_.push_back(mi);
+   }
+   for (const auto& plugin : plugins) {
+     auto* plugin_info = MakeGarbageCollected<PluginInfo>(

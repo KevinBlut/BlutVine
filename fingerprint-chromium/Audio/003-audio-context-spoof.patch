@@ -1,0 +1,149 @@
+diff --git a/components/ungoogled/ungoogled_switches.cc b/components/ungoogled/ungoogled_switches.cc
+index b16e5a1e4b..f15a933333 100644
+--- a/components/ungoogled/ungoogled_switches.cc
++++ b/components/ungoogled/ungoogled_switches.cc
+@@ -96,4 +96,14 @@ const char kFingerprintConnectionEct[] = "fingerprint-connection-ect";
+ const char kFingerprintLocation[] = "fingerprint-location";
+ const char kFingerprintTimezone[] = "timezone";
+ 
++// Audio hardware profile — passthrough, all values supplied by launcher.
++// Sample rate e.g. "44100"
++const char kFingerprintAudioSampleRate[] = "fingerprint-audio-sample-rate";
++// Frames per buffer e.g. "128"
++const char kFingerprintAudioFramesPerBuffer[] = "fingerprint-audio-frames-per-buffer";
++// Output latency in seconds e.g. "0.008"
++const char kFingerprintAudioOutputLatency[] = "fingerprint-audio-output-latency";
++// Max channel count e.g. "2"
++const char kFingerprintAudioMaxChannelCount[] = "fingerprint-audio-max-channel-count";
++
+ }  // namespace switches
+\ No newline at end of file
+diff --git a/components/ungoogled/ungoogled_switches.h b/components/ungoogled/ungoogled_switches.h
+index cd2fe6006b..8c0a8f2fcc 100644
+--- a/components/ungoogled/ungoogled_switches.h
++++ b/components/ungoogled/ungoogled_switches.h
+@@ -77,6 +77,12 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintConnectionEct[];
+ // Locale
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintLocation[];
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintTimezone[];
++
++// Audio hardware profile — passthrough
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintAudioSampleRate[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintAudioFramesPerBuffer[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintAudioOutputLatency[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintAudioMaxChannelCount[];
+ }
+ 
+ #endif  // THIRD_PARTY_UNGOOGLED_FINGERPRINTING_SWITCHES_H_
+\ No newline at end of file
+diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
+index 9bb8b2f48a..828e523998 100644
+--- a/content/browser/renderer_host/render_process_host_impl.cc
++++ b/content/browser/renderer_host/render_process_host_impl.cc
+@@ -3904,6 +3904,10 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+       switches::kFingerprintConnectionEct,
+       switches::kFingerprintLocation,
+       switches::kFingerprintTimezone,
++      switches::kFingerprintAudioSampleRate,
++      switches::kFingerprintAudioFramesPerBuffer,
++      switches::kFingerprintAudioOutputLatency,
++      switches::kFingerprintAudioMaxChannelCount,
+       switches::kForceDeviceScaleFactor,
+       switches::kForceDisplayColorProfile,
+       switches::kForceHighContrast,
+diff --git a/third_party/blink/renderer/modules/webaudio/audio_context.cc b/third_party/blink/renderer/modules/webaudio/audio_context.cc
+index e60e454815..1fc238c726 100644
+--- a/third_party/blink/renderer/modules/webaudio/audio_context.cc
++++ b/third_party/blink/renderer/modules/webaudio/audio_context.cc
+@@ -4,6 +4,10 @@
+ 
+ #include "third_party/blink/renderer/modules/webaudio/audio_context.h"
+ 
++#include "base/command_line.h"
++#include "base/strings/string_number_conversions.h"
++#include "components/ungoogled/ungoogled_switches.h"
++
+ #include <atomic>
+ 
+ #include "base/functional/callback_helpers.h"
+@@ -1151,6 +1155,16 @@ double AudioContext::outputLatency() const {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(main_thread_sequence_checker_);
+   DCHECK(destination());
+ 
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprint)) {
++    std::string val =
++        cmd->GetSwitchValueASCII(switches::kFingerprintAudioOutputLatency);
++    double parsed;
++    if (!val.empty() && base::StringToDouble(val, &parsed)) {
++      return parsed;
++    }
++  }
++
+   DeferredTaskHandler::GraphAutoLocker locker(this);
+ 
+   double factor = GetOutputLatencyQuantizingFactor();
+diff --git a/third_party/blink/renderer/modules/webaudio/realtime_audio_destination_handler.cc b/third_party/blink/renderer/modules/webaudio/realtime_audio_destination_handler.cc
+index 1cc00b018c..88a86c80a2 100644
+--- a/third_party/blink/renderer/modules/webaudio/realtime_audio_destination_handler.cc
++++ b/third_party/blink/renderer/modules/webaudio/realtime_audio_destination_handler.cc
+@@ -4,8 +4,11 @@
+ 
+ #include "third_party/blink/renderer/modules/webaudio/realtime_audio_destination_handler.h"
+ 
++#include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "base/metrics/histogram_macros.h"
++#include "base/strings/string_number_conversions.h"
++#include "components/ungoogled/ungoogled_switches.h"
+ #include "media/base/output_device_info.h"
+ #include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
+@@ -186,13 +189,28 @@ void RealtimeAudioDestinationHandler::RestartRendering() {
+ }
+ 
+ uint32_t RealtimeAudioDestinationHandler::MaxChannelCount() const {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprint)) {
++    std::string val =
++        cmd->GetSwitchValueASCII(switches::kFingerprintAudioMaxChannelCount);
++    int parsed;
++    if (!val.empty() && base::StringToInt(val, &parsed) && parsed >= 2) {
++      return static_cast<uint32_t>(parsed);
++    }
++  }
+   return platform_destination_->MaxChannelCount();
+ }
+ 
+ double RealtimeAudioDestinationHandler::SampleRate() const {
+-  // This can be accessed from both threads (main and audio), so it is
+-  // possible that `platform_destination_` is not fully functional when it
+-  // is accssed by the audio thread.
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprint)) {
++    std::string val =
++        cmd->GetSwitchValueASCII(switches::kFingerprintAudioSampleRate);
++    double parsed;
++    if (!val.empty() && base::StringToDouble(val, &parsed) && parsed > 0) {
++      return parsed;
++    }
++  }
+   return platform_destination_ ? platform_destination_->SampleRate() : 0;
+ }
+ 
+@@ -338,6 +356,15 @@ int RealtimeAudioDestinationHandler::GetFramesPerBuffer() const {
+   DCHECK(IsMainThread());
+   DCHECK(IsInitialized());
+ 
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch(switches::kFingerprint)) {
++    std::string val =
++        cmd->GetSwitchValueASCII(switches::kFingerprintAudioFramesPerBuffer);
++    int parsed;
++    if (!val.empty() && base::StringToInt(val, &parsed) && parsed > 0) {
++      return parsed;
++    }
++  }
+   return platform_destination_ ? platform_destination_->FramesPerBuffer() : 0;
+ }
+ 

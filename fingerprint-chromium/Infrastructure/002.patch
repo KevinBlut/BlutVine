@@ -1,0 +1,89 @@
+diff --git a/headless/lib/renderer/headless_content_renderer_client.cc b/headless/lib/renderer/headless_content_renderer_client.cc
+index 3b96bfd0a5..08ae460d15 100644
+--- a/headless/lib/renderer/headless_content_renderer_client.cc
++++ b/headless/lib/renderer/headless_content_renderer_client.cc
+@@ -17,6 +17,8 @@
+ #include "printing/buildflags/buildflags.h"
+ #include "third_party/blink/public/platform/url_loader_throttle_provider.h"
+ #include "third_party/blink/public/web/modules/credentialmanagement/throttle_helper.h"
++#include "third_party/blink/public/web/web_script_controller.h"
++#include "v8/include/v8-extension.h"
+ 
+ #if BUILDFLAG(ENABLE_PRINTING)
+ #include "components/printing/renderer/print_render_frame_helper.h"
+@@ -103,6 +105,63 @@ HeadlessContentRendererClient::HeadlessContentRendererClient() {
+ 
+ HeadlessContentRendererClient::~HeadlessContentRendererClient() = default;
+ 
++namespace {
++// V8 extension gated behind --fingerprint that installs a window.chrome
++// polyfill (loadTimes, csi, runtime, app) and strips CDP/ChromeDriver
++// automation globals (cdc_*, __webdriver*, __selenium*).
++constexpr char kFingerprintExtensionSource[] =
++    // window.chrome polyfill
++    "var chrome;"
++    "if (!chrome) chrome = {};"
++    "chrome.loadTimes = function() {"
++    "  return {requestTime: 0, startLoadTime: 0, commitLoadTime: 0,"
++    "    finishDocumentLoadTime: 0, finishLoadTime: 0,"
++    "    firstPaintTime: 0, firstPaintAfterLoadTime: 0,"
++    "    navigationType: 'Other', wasFetchedViaSpdy: false,"
++    "    wasNpnNegotiated: false, npnNegotiatedProtocol: 'unknown',"
++    "    wasAlternateProtocolAvailable: false,"
++    "    connectionInfo: 'unknown'};"
++    "};"
++    "chrome.csi = function() {"
++    "  return {startE: Date.now(), onloadT: Date.now(),"
++    "    pageT: 0, tran: 15};"
++    "};"
++    "chrome.runtime = {};"
++    "chrome.app = {isInstalled: false};"
++    // cdc_ / automation globals strip
++    "(function(){"
++    "  var blocked=['cdc_','__webdriver_','__webdriver',"
++    "    '__selenium','__driver_evaluate','__webdriver_evaluate',"
++    "    '__fxdriver_evaluate','__driver_unwrapped',"
++    "    '__webdriver_unwrapped','__fxdriver_unwrapped',"
++    "    '__selenium_evaluate','__selenium_unwrapped',"
++    "    '__fxdriver_evaluate','__lastWatirAlert',"
++    "    '__lastWatirConfirm','__lastWatirPrompt'];"
++    "  blocked.forEach(function(name){"
++    "    try{Object.defineProperty(globalThis,name,"
++    "      {value:undefined,configurable:false,writable:false,"
++    "       enumerable:false});}catch(e){}"
++    "  });"
++    "  var origDP=Object.defineProperty;"
++    "  Object.defineProperty=function(o,p,d){"
++    "    if(typeof p==='string'&&(p.indexOf('cdc_')===0"
++    "      ||p.indexOf('__webdriver')===0"
++    "      ||p.indexOf('__selenium')===0"
++    "      ||p.indexOf('__$webdriver')===0))return o;"
++    "    return origDP.apply(this,arguments);"
++    "  };"
++    "})();";
++}  // namespace
++
++void HeadlessContentRendererClient::RenderThreadStarted() {
++  if (!base::CommandLine::ForCurrentProcess()->HasSwitch("fingerprint"))
++    return;
++  blink::WebScriptController::RegisterExtension(
++      std::unique_ptr<v8::Extension>(
++          new v8::Extension("fingerprint",
++                            kFingerprintExtensionSource)));
++}
++
+ void HeadlessContentRendererClient::RenderFrameCreated(
+     content::RenderFrame* render_frame) {
+ #if BUILDFLAG(ENABLE_PRINTING)
+diff --git a/headless/lib/renderer/headless_content_renderer_client.h b/headless/lib/renderer/headless_content_renderer_client.h
+index a4fc6a7682..ad6d9be5f0 100644
+--- a/headless/lib/renderer/headless_content_renderer_client.h
++++ b/headless/lib/renderer/headless_content_renderer_client.h
+@@ -24,6 +24,7 @@ class HeadlessContentRendererClient : public content::ContentRendererClient {
+   // content::ContentRendererClient overrides.
+   bool IsDecoderSupportedVideoType(const media::VideoType& type) override;
+   bool ShouldSuppressAudioTracks() override;
++  void RenderThreadStarted() override;
+   void RenderFrameCreated(content::RenderFrame* render_frame) override;
+   std::unique_ptr<blink::URLLoaderThrottleProvider>
+   CreateURLLoaderThrottleProvider(

@@ -1,0 +1,96 @@
+diff --git a/third_party/blink/renderer/modules/netinfo/network_information.cc b/third_party/blink/renderer/modules/netinfo/network_information.cc
+index 976a3c8c36..19bdb8e0ea 100644
+--- a/third_party/blink/renderer/modules/netinfo/network_information.cc
++++ b/third_party/blink/renderer/modules/netinfo/network_information.cc
+@@ -6,7 +6,10 @@
+ 
+ #include <algorithm>
+ 
++#include "base/command_line.h"
++#include "base/strings/string_number_conversions.h"
+ #include "base/time/time.h"
++#include "components/ungoogled/ungoogled_switches.h"
+ #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
+ #include "third_party/blink/public/platform/task_type.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_connection_type.h"
+@@ -73,6 +76,24 @@ String GetConsoleLogStringForWebHoldback() {
+          "and so may be inaccurate";
+ }
+ 
++WebConnectionType ParseConnectionTypeString(const std::string& s) {
++  if (s == "cellular") return kWebConnectionTypeCellular4G;
++  if (s == "bluetooth") return kWebConnectionTypeBluetooth;
++  if (s == "ethernet") return kWebConnectionTypeEthernet;
++  if (s == "wifi") return kWebConnectionTypeWifi;
++  if (s == "wimax") return kWebConnectionTypeWimax;
++  if (s == "other") return kWebConnectionTypeOther;
++  if (s == "none") return kWebConnectionTypeNone;
++  return kWebConnectionTypeUnknown;
++}
++
++WebEffectiveConnectionType ParseEctString(const std::string& s) {
++  if (s == "slow-2g") return WebEffectiveConnectionType::kTypeSlow2G;
++  if (s == "2g") return WebEffectiveConnectionType::kType2G;
++  if (s == "3g") return WebEffectiveConnectionType::kType3G;
++  return WebEffectiveConnectionType::kType4G;
++}
++
+ }  // namespace
+ 
+ NetworkInformation::~NetworkInformation() {
+@@ -84,6 +105,12 @@ bool NetworkInformation::IsObserving() const {
+ }
+ 
+ V8ConnectionType NetworkInformation::type() const {
++  auto* cl = base::CommandLine::ForCurrentProcess();
++  if (cl->HasSwitch(switches::kFingerprintConnectionType)) {
++    return V8ConnectionType(ConnectionTypeToEnum(
++        ParseConnectionTypeString(
++            cl->GetSwitchValueASCII(switches::kFingerprintConnectionType))));
++  }
+   if (RuntimeEnabledFeatures::NetInfoConstantTypeEnabled()) {
+     return V8ConnectionType(V8ConnectionType::Enum::kUnknown);
+   }
+@@ -111,6 +138,13 @@ double NetworkInformation::downlinkMax() const {
+ }
+ 
+ V8EffectiveConnectionType NetworkInformation::effectiveType() {
++  auto* cl = base::CommandLine::ForCurrentProcess();
++  if (cl->HasSwitch(switches::kFingerprintConnectionEct)) {
++    return V8EffectiveConnectionType(
++        EffectiveConnectionTypeToEnum(
++            ParseEctString(
++                cl->GetSwitchValueASCII(switches::kFingerprintConnectionEct))));
++  }
+   MaybeShowWebHoldbackConsoleMsg();
+   std::optional<WebEffectiveConnectionType> override_ect =
+       GetNetworkStateNotifier().GetWebHoldbackEffectiveType();
+@@ -132,6 +166,13 @@ V8EffectiveConnectionType NetworkInformation::effectiveType() {
+ }
+ 
+ uint32_t NetworkInformation::rtt() {
++  auto* cl = base::CommandLine::ForCurrentProcess();
++  if (cl->HasSwitch(switches::kFingerprintConnectionRtt)) {
++    unsigned v = 0;
++    if (base::StringToUint(
++            cl->GetSwitchValueASCII(switches::kFingerprintConnectionRtt), &v))
++      return v;
++  }
+   MaybeShowWebHoldbackConsoleMsg();
+   std::optional<base::TimeDelta> override_rtt =
+       GetNetworkStateNotifier().GetWebHoldbackHttpRtt();
+@@ -148,6 +189,14 @@ uint32_t NetworkInformation::rtt() {
+ }
+ 
+ double NetworkInformation::downlink() {
++  auto* cl = base::CommandLine::ForCurrentProcess();
++  if (cl->HasSwitch(switches::kFingerprintConnectionDownlink)) {
++    double v = 0.0;
++    if (base::StringToDouble(
++            cl->GetSwitchValueASCII(switches::kFingerprintConnectionDownlink),
++            &v) && v > 0.0)
++      return v;
++  }
+   MaybeShowWebHoldbackConsoleMsg();
+   std::optional<double> override_downlink_mbps =
+       GetNetworkStateNotifier().GetWebHoldbackDownlinkThroughputMbps();

@@ -1,0 +1,99 @@
+diff --git a/third_party/blink/renderer/modules/webaudio/audio_worklet_processor.cc b/third_party/blink/renderer/modules/webaudio/audio_worklet_processor.cc
+index 4b35cc4adc..5195afd2df 100644
+--- a/third_party/blink/renderer/modules/webaudio/audio_worklet_processor.cc
++++ b/third_party/blink/renderer/modules/webaudio/audio_worklet_processor.cc
+@@ -8,6 +8,9 @@
+ 
+ #include "base/compiler_specific.h"
+ #include "base/containers/span.h"
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "components/ungoogled/fingerprint_collector.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_microtasks_scope.h"
+ #include "third_party/blink/renderer/bindings/core/v8/worker_or_worklet_script_controller.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_blink_audio_worklet_process_callback.h"
+@@ -491,9 +494,84 @@ bool AudioWorkletProcessor::Process(
+   DCHECK_EQ(inputs_.Get(isolate)->Length(), inputs.size());
+   DCHECK_EQ(input_array_buffers_.size(), inputs.size());
+ 
++  // BlutVine: record test identity (params only, not the data).
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++
++  unsigned total_channels = 0;
++  size_t bus_length = 0;
++  for (uint32_t bus = 0; bus < inputs.size(); ++bus) {
++    if (inputs[bus]) {
++      total_channels += inputs[bus]->NumberOfChannels();
++      bus_length = inputs[bus]->length();
++    }
++  }
++  if ((cmd->HasSwitch(switches::kFingerprintCollect) ||
++       cmd->HasSwitch(switches::kFingerprintReplay)) &&
++      total_channels > 0 && bus_length > 0) {
++    fingerprint_collector::LogAudioInput(
++        static_cast<int>(total_channels),
++        static_cast<int>(bus_length), 0.0f);
++  }
++
+   // Copies `inputs` to the internal `input_array_buffers_`.
+   CopyPortToArrayBuffers(isolate, inputs, input_array_buffers_);
+ 
++  // BlutVine: replay‑miss noise fallback for AudioWorklet input data.
++  // No collect per‑quantum (the log was already recorded above — see
++  // ReplayLookup which hashes + clears it).  Flush happens below for
++  // the standalone‑collect case.
++  if (cmd->HasSwitch(switches::kFingerprintReplay) &&
++      total_channels > 0 && bus_length > 0) {
++    std::vector<uint8_t> bytes = fingerprint_collector::ReplayAudioOutput();
++    size_t expected = total_channels * bus_length * sizeof(float);
++    if (!bytes.empty() && bytes.size() == expected) {
++      const float* src = reinterpret_cast<const float*>(bytes.data());
++      size_t offset = 0;
++      for (uint32_t bus = 0; bus < input_array_buffers_.size(); ++bus) {
++        for (uint32_t ch = 0; ch < input_array_buffers_[bus].size(); ++ch) {
++          auto backing_store =
++              input_array_buffers_[bus][ch].Get(isolate)->GetBackingStore();
++          float* dst = static_cast<float*>(backing_store->Data());
++          size_t len = backing_store->ByteLength() / sizeof(float);
++          memcpy(dst, src + offset, len * sizeof(float));
++          offset += len;
++        }
++      }
++    } else {
++      // Replay miss: apply deterministic noise as fallback.
++      for (uint32_t bus = 0; bus < input_array_buffers_.size(); ++bus) {
++        for (uint32_t ch = 0; ch < input_array_buffers_[bus].size(); ++ch) {
++          auto backing_store =
++              input_array_buffers_[bus][ch].Get(isolate)->GetBackingStore();
++          fingerprint_collector::ApplyAudioNoiseFloat(
++              static_cast<float*>(backing_store->Data()),
++              backing_store->ByteLength() / sizeof(float));
++        }
++      }
++    }
++  }
++
++  // BlutVine: collect flush — only writes when `--fingerprint-collect`
++  // is set without `--fingerprint-replay` (replay already cleared the
++  // input log above, so FlushAudioIfNew would see an empty log).
++  if (cmd->HasSwitch(switches::kFingerprintCollect) &&
++      total_channels > 0 && bus_length > 0) {
++    std::vector<uint8_t> audio_data;
++    for (uint32_t bus = 0; bus < input_array_buffers_.size(); ++bus) {
++      for (uint32_t ch = 0; ch < input_array_buffers_[bus].size(); ++ch) {
++        auto backing_store =
++            input_array_buffers_[bus][ch].Get(isolate)->GetBackingStore();
++        const uint8_t* src = static_cast<const uint8_t*>(backing_store->Data());
++        audio_data.insert(audio_data.end(), src,
++                          src + backing_store->ByteLength());
++      }
++    }
++    if (!audio_data.empty()) {
++      fingerprint_collector::FlushAudioIfNew(
++          audio_data.data(), audio_data.size(), 0.0);
++    }
++  }
++
+   // 2nd JS arg `outputs_`. Compare `outputs` and `outputs_`. Then allocates the
+   // data container if necessary.
+   if (!PortTopologyMatches(isolate, context, outputs, outputs_)) {

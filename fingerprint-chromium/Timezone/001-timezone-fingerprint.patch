@@ -1,0 +1,110 @@
+diff --git a/content/renderer/render_thread_impl.cc b/content/renderer/render_thread_impl.cc
+index 65ae831c47..2bd5c70935 100644
+--- a/content/renderer/render_thread_impl.cc
++++ b/content/renderer/render_thread_impl.cc
+@@ -842,6 +842,12 @@ void RenderThreadImpl::InitializeWebKit(mojo::BinderMap* binders) {
+   blink::Initialize(blink_platform_impl_.get(), binders,
+                     main_thread_scheduler_.get());
+ 
++  // Apply a renderer-wide timezone override after blink::Initialize() so the
++  // main-thread V8 isolate exists and receives the configuration-change
++  // notification. Uses the raw "timezone" switch string because
++  // content/renderer does not depend on components/ungoogled.
++  blink::BlutVineSetTimeZoneOverride(command_line.GetSwitchValueASCII("timezone"));
++
+   if (!command_line.HasSwitch(switches::kDisableThreadedCompositing))
+     InitializeCompositorThread();
+ 
+diff --git a/headless/lib/headless_content_main_delegate.cc b/headless/lib/headless_content_main_delegate.cc
+index 36afd34701..4e943fdeb9 100644
+--- a/headless/lib/headless_content_main_delegate.cc
++++ b/headless/lib/headless_content_main_delegate.cc
+@@ -236,6 +236,17 @@ std::optional<int> HeadlessContentMainDelegate::BasicStartupComplete() {
+   if (command_line->HasSwitch(::switches::kProcessType)) {
+     return std::nullopt;
+   }
++  // BlutVine: when --fingerprint-location is supplied but --lang is not,
++  // forward it so the application locale (Accept-Language, Intl.*, CSS
++  // :lang()) agrees with navigator.language(s), which Navigator/002 already
++  // derives from the same switch. Uses the raw "fingerprint-location" string
++  // because headless does not depend on components/ungoogled.
++  if (!command_line->HasSwitch(::switches::kLang) &&
++      command_line->HasSwitch("fingerprint-location")) {
++    command_line->AppendSwitchASCII(
++        ::switches::kLang,
++        command_line->GetSwitchValueASCII("fingerprint-location"));
++  }
+   // The DevTools remote debugging pipe file descriptors need to be checked
+   // before any other files are opened, see https://crbug.com/1423048.
+ #if BUILDFLAG(IS_WIN)
+diff --git a/third_party/blink/public/web/blink.h b/third_party/blink/public/web/blink.h
+index e4c9ca755c..1f69ba461c 100644
+--- a/third_party/blink/public/web/blink.h
++++ b/third_party/blink/public/web/blink.h
+@@ -31,6 +31,7 @@
+ #ifndef THIRD_PARTY_BLINK_PUBLIC_WEB_BLINK_H_
+ #define THIRD_PARTY_BLINK_PUBLIC_WEB_BLINK_H_
+ 
++#include <string>
+ #include <vector>
+ 
+ #include "third_party/blink/public/platform/web_common.h"
+@@ -149,6 +150,12 @@ BLINK_EXPORT void SetCorsExemptHeaderList(
+ BLINK_EXPORT void OnProcessForegrounded();
+ BLINK_EXPORT void OnProcessBackgrounded();
+ 
++// Installs a renderer-wide timezone override: updates ICU's default timezone
++// and notifies V8/Intl so `Intl.resolvedOptions().timeZone`, `Date`, and
++// worker isolates all reflect the new zone. Must be called after the main
++// thread V8 isolate has been created (i.e. after `Initialize()`).
++BLINK_EXPORT void BlutVineSetTimeZoneOverride(const std::string& iana_id);
++
+ }  // namespace blink
+ 
+ #endif  // THIRD_PARTY_BLINK_PUBLIC_WEB_BLINK_H_
+diff --git a/third_party/blink/renderer/controller/blink_initializer.cc b/third_party/blink/renderer/controller/blink_initializer.cc
+index 4d1f2acf58..e9135339ec 100644
+--- a/third_party/blink/renderer/controller/blink_initializer.cc
++++ b/third_party/blink/renderer/controller/blink_initializer.cc
+@@ -35,6 +35,7 @@
+ #include <utility>
+ 
+ #include "base/command_line.h"
++#include "base/no_destructor.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "build/build_config.h"
+ #include "mojo/public/cpp/bindings/binder_map.h"
+@@ -60,6 +61,7 @@
+ #include "third_party/blink/renderer/core/frame/display_cutout_client_impl.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/loader/loader_factory_for_frame.h"
++#include "third_party/blink/renderer/core/timezone/timezone_controller.h"
+ #include "third_party/blink/renderer/modules/ml/webnn/webnn_introspection_impl.h"
+ #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
+ #include "third_party/blink/renderer/platform/disk_data_allocator.h"
+@@ -367,4 +369,25 @@ void OnProcessBackgrounded() {
+   Partitions::AdjustPartitionsForBackground();
+ }
+ 
++// Function defined in third_party/blink/public/web/blink.h.
++void BlutVineSetTimeZoneOverride(const std::string& iana_id) {
++  if (iana_id.empty()) {
++    return;
++  }
++
++  auto result = TimeZoneController::SetTimeZoneOverride(
++      String::FromUtf8(iana_id));
++
++  // The handle is intentionally leaked: TimeZoneOverride's destructor calls
++  // ClearTimeZoneOverride(), which would restore the host (real) timezone as
++  // soon as our unique_ptr went out of scope. The override must survive for
++  // the lifetime of the renderer process.
++  static base::NoDestructor<
++      std::unique_ptr<TimeZoneController::TimeZoneOverride>>
++      leaked_handle(nullptr);
++  if (result.handle) {
++    *leaked_handle = std::move(result.handle);
++  }
++}
++
+ }  // namespace blink

@@ -1,0 +1,67 @@
+diff --git a/components/ungoogled/ungoogled_switches.cc b/components/ungoogled/ungoogled_switches.cc
+index 26cc937358..38abcec21c 100644
+--- a/components/ungoogled/ungoogled_switches.cc
++++ b/components/ungoogled/ungoogled_switches.cc
+@@ -130,4 +130,9 @@ const char kFingerprintPermissions[] = "fingerprint-permissions";
+ // Unset → real PluginRegistry (empty in headless, real plugins otherwise).
+ const char kFingerprintPlugins[] = "fingerprint-plugins";
+ 
++// Storage — passthrough; launcher supplies the quota in MB that
++// navigator.storage.estimate()/webkitTemporaryStorage/storageBuckets report.
++// Value e.g. "5000" (5 GB). Unset → real quota from QuotaManager.
++const char kFingerprintStorageQuota[] = "fingerprint-storage-quota";
++
+ }  // namespace switches
+diff --git a/components/ungoogled/ungoogled_switches.h b/components/ungoogled/ungoogled_switches.h
+index d716b45e08..2315f27e17 100644
+--- a/components/ungoogled/ungoogled_switches.h
++++ b/components/ungoogled/ungoogled_switches.h
+@@ -97,6 +97,9 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPermissions[];
+ 
+ // Plugins
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPlugins[];
++
++// Storage
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintStorageQuota[];
+ }
+ 
+ #endif  // THIRD_PARTY_UNGOOGLED_FINGERPRINTING_SWITCHES_H_
+diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
+index 973a61ecae..60c493c47b 100644
+--- a/content/browser/renderer_host/render_process_host_impl.cc
++++ b/content/browser/renderer_host/render_process_host_impl.cc
+@@ -3919,6 +3919,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+       switches::kFingerprintDnsNoSystemFallback,
+       switches::kFingerprintPermissions,
+       switches::kFingerprintPlugins,
++      switches::kFingerprintStorageQuota,
+       switches::kForceDeviceScaleFactor,
+       switches::kForceDisplayColorProfile,
+       switches::kForceHighContrast,
+diff --git a/storage/browser/quota/quota_manager_impl.cc b/storage/browser/quota/quota_manager_impl.cc
+index 2ea77a5999..8c7a0f1604 100644
+--- a/storage/browser/quota/quota_manager_impl.cc
++++ b/storage/browser/quota/quota_manager_impl.cc
+@@ -140,6 +140,22 @@ int64_t CalculateReportedQuota(int64_t total_space_bytes,
+   base::ClampedNumeric<int64_t> clamped_total_space_bytes(total_space_bytes);
+   base::ClampedNumeric<int64_t> clamped_usage_bytes(usage_bytes);
+ 
++  // BlutVine: --fingerprint-storage-quota=<MB> overrides the quota reported
++  // to every JS quota surface (navigator.storage.estimate(), the legacy
++  // navigator.webkitTemporaryStorage.queryUsageAndQuota(), and
++  // navigator.storageBuckets.estimate()), since this is the single choke point
++  // they all flow through. Usage stays real. Unset → real quota behavior.
++  const base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++  if (command_line->HasSwitch("fingerprint-storage-quota")) {
++    uint64_t mb = 0;
++    if (base::StringToUint64(
++            command_line->GetSwitchValueASCII("fingerprint-storage-quota"),
++            &mb) &&
++        mb > 0) {
++      return static_cast<int64_t>(mb * 1024ULL * 1024ULL);
++    }
++  }
++
+   // The flag kIncognitoStaticStorageQuota fixes the return value in incognito
+   // to 10 GiB + usage, as in regular mode.
+   bool enforce_static_quota_for_incognito =

@@ -1,0 +1,47 @@
+diff --git a/third_party/blink/renderer/core/page/plugin_data.cc b/third_party/blink/renderer/core/page/plugin_data.cc
+index 3b79146c85..df54464ab2 100644
+--- a/third_party/blink/renderer/core/page/plugin_data.cc
++++ b/third_party/blink/renderer/core/page/plugin_data.cc
+@@ -24,6 +24,8 @@
+ #include "third_party/blink/renderer/core/page/plugin_data.h"
+ 
+ #include "mojo/public/cpp/bindings/remote.h"
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
+ #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
+ #include "third_party/blink/public/mojom/plugins/plugin_registry.mojom-blink.h"
+ #include "third_party/blink/public/platform/file_path_conversion.h"
+@@ -100,6 +102,33 @@ void PluginData::UpdatePluginList() {
+       registry.BindNewPipeAndPassReceiver());
+   Vector<mojom::blink::PluginInfoPtr> plugins;
+   registry->GetPlugins(&plugins);
++
++  if (plugins.empty() &&
++      base::CommandLine::ForCurrentProcess()->HasSwitch("fingerprint")) {
++    static constexpr const char* kNames[] = {
++        "PDF Viewer",
++        "Chrome PDF Viewer",
++        "Chromium PDF Viewer",
++        "Microsoft Edge PDF Viewer",
++        "WebKit built-in PDF",
++    };
++    for (const char* nm : kNames) {
++      auto* pi = MakeGarbageCollected<PluginInfo>(
++          String(nm),
++          String("internal-pdf-viewer"),
++          String("Portable Document Format"),
++          Color::FromRGBA32(0xFFFFFFFFu),
++          /*may_use_external_handler=*/false);
++      plugins_.push_back(pi);
++      auto* mi = MakeGarbageCollected<MimeClassInfo>(
++          String("application/pdf"),
++          String("Portable Document Format"),
++          *pi,
++          Vector<String>{String("pdf")});
++      pi->AddMimeType(mi);
++      mimes_.push_back(mi);
++    }
++  }
+   for (const auto& plugin : plugins) {
+     auto* plugin_info = MakeGarbageCollected<PluginInfo>(
+         std::move(plugin->name), FilePathToString(plugin->filename),

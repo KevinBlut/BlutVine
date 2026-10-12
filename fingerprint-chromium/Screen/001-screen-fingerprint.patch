@@ -1,0 +1,288 @@
+diff --git a/components/ungoogled/BUILD.gn b/components/ungoogled/BUILD.gn
+index 5d561454d8..debc375f1b 100644
+--- a/components/ungoogled/BUILD.gn
++++ b/components/ungoogled/BUILD.gn
+@@ -6,11 +6,13 @@ component("ungoogled_switches") {
+   sources = [
+     "fingerprint_collector.cc",
+     "fingerprint_collector.h",
++    "fingerprint_screen.cc",
++    "fingerprint_screen.h",
+     "ungoogled_switches.h",
+     "ungoogled_switches.cc",
+   ]
+ 
+   defines = [ "IS_UNGOOGLED_IMPL" ]
+ 
+-  deps = [ "//base", "//skia", "//url" ]
++  deps = [ "//base", "//skia", "//ui/gfx/geometry", "//url" ]
+ }
+\ No newline at end of file
+diff --git a/components/ungoogled/fingerprint_screen.cc b/components/ungoogled/fingerprint_screen.cc
+new file mode 100644
+index 0000000000..e8a13d9494
+--- /dev/null
++++ b/components/ungoogled/fingerprint_screen.cc
+@@ -0,0 +1,46 @@
++// Copyright 2026 The ungoogled-chromium Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "components/ungoogled/fingerprint_screen.h"
++
++#include "base/command_line.h"
++#include "base/strings/string_number_conversions.h"
++#include "components/ungoogled/ungoogled_switches.h"
++#include "ui/gfx/geometry/rect.h"
++
++namespace ungoogled {
++
++bool IsFingerprintScreenSpoofingEnabled() {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  return cmd->HasSwitch(switches::kFingerprintScreenWidth) &&
++         cmd->HasSwitch(switches::kFingerprintScreenHeight);
++}
++
++gfx::Rect GetSpoofedWindowRect() {
++  const base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++
++  int width = 0;
++  int height = 0;
++  base::StringToInt(
++      cmd->GetSwitchValueASCII(switches::kFingerprintScreenWidth), &width);
++  base::StringToInt(
++      cmd->GetSwitchValueASCII(switches::kFingerprintScreenHeight), &height);
++
++  int avail_width = width;
++  int avail_height = height;
++  if (cmd->HasSwitch(switches::kFingerprintScreenAvailWidth)) {
++    base::StringToInt(
++        cmd->GetSwitchValueASCII(switches::kFingerprintScreenAvailWidth),
++        &avail_width);
++  }
++  if (cmd->HasSwitch(switches::kFingerprintScreenAvailHeight)) {
++    base::StringToInt(
++        cmd->GetSwitchValueASCII(switches::kFingerprintScreenAvailHeight),
++        &avail_height);
++  }
++
++  return gfx::Rect(0, 0, avail_width, avail_height);
++}
++
++}  // namespace ungoogled
+diff --git a/components/ungoogled/fingerprint_screen.h b/components/ungoogled/fingerprint_screen.h
+new file mode 100644
+index 0000000000..3113f2cb4d
+--- /dev/null
++++ b/components/ungoogled/fingerprint_screen.h
+@@ -0,0 +1,19 @@
++// Copyright 2026 The ungoogled-chromium Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
++#define COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
++
++#include "base/component_export.h"
++#include "ui/gfx/geometry/rect.h"
++
++namespace ungoogled {
++
++COMPONENT_EXPORT(UNGOOGLED) bool IsFingerprintScreenSpoofingEnabled();
++
++COMPONENT_EXPORT(UNGOOGLED) gfx::Rect GetSpoofedWindowRect();
++
++}  // namespace ungoogled
++
++#endif  // COMPONENTS_UNGOOGLED_FINGERPRINT_SCREEN_H_
+diff --git a/headless/lib/browser/command_line_handler.cc b/headless/lib/browser/command_line_handler.cc
+index a069eaef49..97ba689ac9 100644
+--- a/headless/lib/browser/command_line_handler.cc
++++ b/headless/lib/browser/command_line_handler.cc
+@@ -11,6 +11,7 @@
+ #include "base/files/file_util.h"
+ #include "base/logging.h"
+ #include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
+ #include "build/build_config.h"
+ #include "cc/base/switches.h"
+ #include "components/headless/screen_info/headless_screen_info.h"
+@@ -149,6 +150,89 @@ bool HandleFontRenderHinting(base::CommandLine& command_line,
+   return true;
+ }
+ 
++void HandleFingerprintScreenBridge(base::CommandLine& command_line,
++                                   HeadlessBrowser::Options& options) {
++  if (!command_line.HasSwitch("fingerprint-screen-width") ||
++      !command_line.HasSwitch("fingerprint-screen-height")) {
++    return;
++  }
++
++  if (command_line.HasSwitch(switches::kWindowSize) ||
++      command_line.HasSwitch(switches::kScreenInfo)) {
++    return;
++  }
++
++  int screen_width = 0;
++  int screen_height = 0;
++  base::StringToInt(
++      command_line.GetSwitchValueASCII("fingerprint-screen-width"),
++      &screen_width);
++  base::StringToInt(
++      command_line.GetSwitchValueASCII("fingerprint-screen-height"),
++      &screen_height);
++  if (screen_width <= 0 || screen_height <= 0) {
++    return;
++  }
++
++  int avail_width = screen_width;
++  int avail_height = screen_height;
++  if (command_line.HasSwitch("fingerprint-screen-avail-width")) {
++    base::StringToInt(
++        command_line.GetSwitchValueASCII("fingerprint-screen-avail-width"),
++        &avail_width);
++  }
++  if (command_line.HasSwitch("fingerprint-screen-avail-height")) {
++    base::StringToInt(
++        command_line.GetSwitchValueASCII("fingerprint-screen-avail-height"),
++        &avail_height);
++  }
++
++  double dpr = 1.0;
++  if (command_line.HasSwitch("fingerprint-screen-device-pixel-ratio")) {
++    base::StringToDouble(
++        command_line.GetSwitchValueASCII("fingerprint-screen-device-pixel-ratio"),
++        &dpr);
++  }
++  if (dpr <= 0.0) {
++    dpr = 1.0;
++  }
++
++  int taskbar_bottom = screen_height - avail_height;
++  if (taskbar_bottom < 0) {
++    taskbar_bottom = 0;
++  }
++  int taskbar_right = screen_width - avail_width;
++  if (taskbar_right < 0) {
++    taskbar_right = 0;
++  }
++
++  constexpr int kChromeUiHeight = 85;
++  int window_height = avail_height - kChromeUiHeight;
++  if (window_height < 100) {
++    window_height = avail_height;
++  }
++
++  options.screen_info_spec = base::ReplaceStringPlaceholders(
++      "{$1,$2 $3x$4 colorDepth=24 devicePixelRatio=$5$6$7}",
++      {
++          base::NumberToString(0),
++          base::NumberToString(0),
++          base::NumberToString(screen_width),
++          base::NumberToString(screen_height),
++          base::NumberToString(dpr),
++          taskbar_bottom > 0
++              ? " workAreaBottom=" + base::NumberToString(taskbar_bottom)
++              : "",
++          taskbar_right > 0
++              ? " workAreaRight=" + base::NumberToString(taskbar_right)
++              : "",
++      },
++      nullptr);
++
++  options.window_size =
++      gfx::Size(avail_width, window_height);
++}
++
+ base::FilePath EnsureDirectoryExists(const base::FilePath& file_path) {
+   if (!base::DirectoryExists(file_path) && !base::CreateDirectory(file_path)) {
+     PLOG(ERROR) << "Could not create directory " << file_path;
+@@ -238,6 +322,8 @@ bool HandleCommandLineSwitches(base::CommandLine& command_line,
+     }
+   }
+ 
++  HandleFingerprintScreenBridge(command_line, options);
++
+   if (command_line.HasSwitch(switches::kUserAgent)) {
+     std::string user_agent =
+         command_line.GetSwitchValueASCII(switches::kUserAgent);
+diff --git a/headless/lib/browser/headless_web_contents_impl.cc b/headless/lib/browser/headless_web_contents_impl.cc
+index ae616fa9c3..e806ccc2e8 100644
+--- a/headless/lib/browser/headless_web_contents_impl.cc
++++ b/headless/lib/browser/headless_web_contents_impl.cc
+@@ -430,6 +430,11 @@ HeadlessWindowState HeadlessWebContentsImpl::GetWindowState() const {
+ }
+ 
+ void HeadlessWebContentsImpl::SetBounds(const gfx::Rect& bounds) {
++  base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
++  if (cmd->HasSwitch("fingerprint-screen-width") &&
++      cmd->HasSwitch("fingerprint-screen-height")) {
++    return;
++  }
+   headless_window_->SetBounds(bounds);
+ }
+ 
+diff --git a/third_party/blink/renderer/core/DEPS b/third_party/blink/renderer/core/DEPS
+index 4c5a9da4fd..2517fe3588 100644
+--- a/third_party/blink/renderer/core/DEPS
++++ b/third_party/blink/renderer/core/DEPS
+@@ -70,6 +70,7 @@ include_rules = [
+     "+components/attribution_reporting/features.h",
+     "+components/performance_manager/public/mojom/coordination_unit.mojom-blink.h",
+     "+components/performance_manager/public/mojom/web_memory.mojom-blink.h",
++    "+components/ungoogled",
+     "+components/viz/common/frame_timing_details.h",
+     "+components/viz/common/navigation_id.h",
+     "+components/viz/common/surfaces/tracked_element_rects.h",
+diff --git a/third_party/blink/renderer/core/frame/local_dom_window.cc b/third_party/blink/renderer/core/frame/local_dom_window.cc
+index f442c8d8e3..42497d0bda 100644
+--- a/third_party/blink/renderer/core/frame/local_dom_window.cc
++++ b/third_party/blink/renderer/core/frame/local_dom_window.cc
+@@ -33,6 +33,7 @@
+ #include "base/command_line.h"
+ #include "base/metrics/histogram_macros.h"
+ #include "base/task/single_thread_task_runner.h"
++#include "components/ungoogled/fingerprint_screen.h"
+ #include "base/trace_event/trace_id_helper.h"
+ #include "base/trace_event/typed_macros.h"
+ #include "build/build_config.h"
+@@ -1577,6 +1578,9 @@ int LocalDOMWindow::outerHeight() const {
+ 
+   LocalFrame* frame = GetFrame();
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
++    return ungoogled::GetSpoofedWindowRect().height();
++
+   // FencedFrames should return innerHeight to prevent passing
+   // arbitrary data through the window height.
+   if (frame->IsInFencedFrameTree()) {
+@@ -1602,6 +1606,9 @@ int LocalDOMWindow::outerWidth() const {
+ 
+   LocalFrame* frame = GetFrame();
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
++    return ungoogled::GetSpoofedWindowRect().width();
++
+   // FencedFrames should return innerWidth to prevent passing
+   // arbitrary data through the window width.
+   if (frame->IsInFencedFrameTree()) {
+@@ -1673,6 +1680,9 @@ int LocalDOMWindow::screenX() const {
+   if (!frame)
+     return 0;
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
++    return ungoogled::GetSpoofedWindowRect().x();
++
+   Page* page = frame->GetPage();
+   if (!page)
+     return 0;
+@@ -1691,6 +1701,9 @@ int LocalDOMWindow::screenY() const {
+   if (!frame)
+     return 0;
+ 
++  if (ungoogled::IsFingerprintScreenSpoofingEnabled())
++    return ungoogled::GetSpoofedWindowRect().y();
++
+   Page* page = frame->GetPage();
+   if (!page)
+     return 0;

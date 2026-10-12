@@ -1,0 +1,42 @@
+diff --git a/third_party/blink/renderer/core/events/mouse_event.h b/third_party/blink/renderer/core/events/mouse_event.h
+index 3ce3540e01..25648669bd 100644
+--- a/third_party/blink/renderer/core/events/mouse_event.h
++++ b/third_party/blink/renderer/core/events/mouse_event.h
+@@ -26,6 +26,8 @@
+ 
+ #include <cmath>
+ 
++#include "components/ungoogled/fingerprint_screen.h"
++
+ #include "third_party/blink/renderer/core/core_export.h"
+ #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
+ #include "third_party/blink/renderer/core/events/ui_event_with_key_state.h"
+@@ -148,8 +150,26 @@ class CORE_EXPORT MouseEvent : public UIEventWithKeyState {
+ 
+   // Note that these values are adjusted to counter the effects of zoom, so that
+   // values exposed via DOM APIs are invariant under zooming.
+-  virtual double screenX() const { return std::floor(screen_x_); }
+-  virtual double screenY() const { return std::floor(screen_y_); }
++  virtual double screenX() const {
++    if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++      const gfx::Rect bounds = ungoogled::GetSpoofedWindowRect();
++      const double raw = std::floor(screen_x_);
++      if (raw < 0.0) return 0.0;
++      if (raw > bounds.width() - 1) return bounds.width() - 1;
++      return raw;
++    }
++    return std::floor(screen_x_);
++  }
++  virtual double screenY() const {
++    if (ungoogled::IsFingerprintScreenSpoofingEnabled()) {
++      const gfx::Rect bounds = ungoogled::GetSpoofedWindowRect();
++      const double raw = std::floor(screen_y_);
++      if (raw < 0.0) return 0.0;
++      if (raw > bounds.height() - 1) return bounds.height() - 1;
++      return raw;
++    }
++    return std::floor(screen_y_);
++  }
+ 
+   virtual double clientX() const { return std::floor(client_x_); }
+   virtual double clientY() const { return std::floor(client_y_); }

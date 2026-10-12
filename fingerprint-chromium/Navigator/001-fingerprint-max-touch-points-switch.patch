@@ -1,0 +1,56 @@
+diff --git a/components/ungoogled/ungoogled_switches.cc b/components/ungoogled/ungoogled_switches.cc
+index 95307b272c..b16e5a1e4b 100644
+--- a/components/ungoogled/ungoogled_switches.cc
++++ b/components/ungoogled/ungoogled_switches.cc
+@@ -83,6 +83,15 @@ const char kFingerprintWebGLAliasedPointSizeRange[] = "fingerprint-webgl-aliased
+ const char kFingerprintHardwareConcurrency[] = "fingerprint-hardware-concurrency";
+ const char kFingerprintDeviceMemory[] = "fingerprint-device-memory";
+ 
++// Touch
++const char kFingerprintMaxTouchPoints[] = "fingerprint-max-touch-points";
++
++// Network
++const char kFingerprintConnectionType[] = "fingerprint-connection-type";
++const char kFingerprintConnectionRtt[] = "fingerprint-connection-rtt";
++const char kFingerprintConnectionDownlink[] = "fingerprint-connection-downlink";
++const char kFingerprintConnectionEct[] = "fingerprint-connection-ect";
++
+ // Locale
+ const char kFingerprintLocation[] = "fingerprint-location";
+ const char kFingerprintTimezone[] = "timezone";
+diff --git a/components/ungoogled/ungoogled_switches.h b/components/ungoogled/ungoogled_switches.h
+index 02afee9c46..cd2fe6006b 100644
+--- a/components/ungoogled/ungoogled_switches.h
++++ b/components/ungoogled/ungoogled_switches.h
+@@ -65,6 +65,15 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintWebGLAliasedPointSizeR
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintHardwareConcurrency[];
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintDeviceMemory[];
+ 
++// Touch
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintMaxTouchPoints[];
++
++// Network
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintConnectionType[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintConnectionRtt[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintConnectionDownlink[];
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintConnectionEct[];
++
+ // Locale
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintLocation[];
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintTimezone[];
+diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
+index 2709d902bd..9bb8b2f48a 100644
+--- a/content/browser/renderer_host/render_process_host_impl.cc
++++ b/content/browser/renderer_host/render_process_host_impl.cc
+@@ -3897,6 +3897,11 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+       switches::kFingerprintWebGLAliasedPointSizeRange,
+       switches::kFingerprintHardwareConcurrency,
+       switches::kFingerprintDeviceMemory,
++      switches::kFingerprintMaxTouchPoints,
++      switches::kFingerprintConnectionType,
++      switches::kFingerprintConnectionRtt,
++      switches::kFingerprintConnectionDownlink,
++      switches::kFingerprintConnectionEct,
+       switches::kFingerprintLocation,
+       switches::kFingerprintTimezone,
+       switches::kForceDeviceScaleFactor,

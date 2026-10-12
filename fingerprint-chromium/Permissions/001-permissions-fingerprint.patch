@@ -1,0 +1,189 @@
+diff --git a/components/ungoogled/ungoogled_switches.cc b/components/ungoogled/ungoogled_switches.cc
+index ac14f765c3..e315048d84 100644
+--- a/components/ungoogled/ungoogled_switches.cc
++++ b/components/ungoogled/ungoogled_switches.cc
+@@ -119,4 +119,9 @@ const char kFingerprintAudioOutputLatency[] = "fingerprint-audio-output-latency"
+ // Max channel count e.g. "2"
+ const char kFingerprintAudioMaxChannelCount[] = "fingerprint-audio-max-channel-count";
+ 
++// Permissions — boolean flag; presence forces Notification.permission "default"
++// and permissions.query() "prompt" for sensitive types (notifications, geolocation,
++// audio-capture, video-capture, clipboard-read, clipboard-write).
++const char kFingerprintPermissions[] = "fingerprint-permissions";
++
+ }  // namespace switches
+\ No newline at end of file
+diff --git a/components/ungoogled/ungoogled_switches.h b/components/ungoogled/ungoogled_switches.h
+index 95d2e3c8bf..092a292b97 100644
+--- a/components/ungoogled/ungoogled_switches.h
++++ b/components/ungoogled/ungoogled_switches.h
+@@ -91,6 +91,9 @@ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintAudioSampleRate[];
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintAudioFramesPerBuffer[];
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintAudioOutputLatency[];
+ COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintAudioMaxChannelCount[];
++
++// Permissions
++COMPONENT_EXPORT(UNGOOGLED) extern const char kFingerprintPermissions[];
+ }
+ 
+ #endif  // THIRD_PARTY_UNGOOGLED_FINGERPRINTING_SWITCHES_H_
+\ No newline at end of file
+diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
+index bb1cb3f711..2469362ad4 100644
+--- a/content/browser/renderer_host/render_process_host_impl.cc
++++ b/content/browser/renderer_host/render_process_host_impl.cc
+@@ -3917,6 +3917,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+       switches::kFingerprintNoDohCanaryProbe,
+       switches::kFingerprintDnsNoPrefetch,
+       switches::kFingerprintDnsNoSystemFallback,
++      switches::kFingerprintPermissions,
+       switches::kForceDeviceScaleFactor,
+       switches::kForceDisplayColorProfile,
+       switches::kForceHighContrast,
+diff --git a/third_party/blink/renderer/modules/notifications/BUILD.gn b/third_party/blink/renderer/modules/notifications/BUILD.gn
+index 0de3b652e1..bd4c652690 100644
+--- a/third_party/blink/renderer/modules/notifications/BUILD.gn
++++ b/third_party/blink/renderer/modules/notifications/BUILD.gn
+@@ -25,6 +25,7 @@ blink_modules_sources("notifications") {
+     "timestamp_trigger.h",
+   ]
+   deps = [
++    "//components/ungoogled:ungoogled_switches",
+     "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
+     "//third_party/blink/renderer/modules/permissions",
+     "//third_party/blink/renderer/modules/vibration",
+diff --git a/third_party/blink/renderer/modules/notifications/notification.cc b/third_party/blink/renderer/modules/notifications/notification.cc
+index 643d833935..e141ba48e1 100644
+--- a/third_party/blink/renderer/modules/notifications/notification.cc
++++ b/third_party/blink/renderer/modules/notifications/notification.cc
+@@ -33,8 +33,10 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "base/command_line.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "base/unguessable_token.h"
++#include "components/ungoogled/ungoogled_switches.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "third_party/blink/public/common/notifications/notification_constants.h"
+ #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-blink.h"
+@@ -67,6 +69,24 @@
+ 
+ namespace blink {
+ 
++namespace {
++
++bool BlutVineFingerprintEnabled() {
++  return base::CommandLine::ForCurrentProcess()->HasSwitch(
++      switches::kFingerprintPermissions);
++}
++
++mojom::blink::PermissionStatus BlutVineOverrideNotificationPermission(
++    mojom::blink::PermissionStatus status) {
++  if (status == mojom::blink::PermissionStatus::DENIED &&
++      BlutVineFingerprintEnabled()) {
++    return mojom::blink::PermissionStatus::ASK;
++  }
++  return status;
++}
++
++}  // namespace
++
+ Notification* Notification::Create(ExecutionContext* context,
+                                    const String& title,
+                                    const NotificationOptions* options,
+@@ -419,6 +439,10 @@ V8NotificationPermission::Enum Notification::PermissionToV8Enum(
+ }
+ 
+ V8NotificationPermission Notification::permission(ExecutionContext* context) {
++  if (BlutVineFingerprintEnabled()) {
++    return V8NotificationPermission(V8NotificationPermission::Enum::kDefault);
++  }
++
+   // Permission is always denied for insecure contexts. Skip the sync IPC call.
+   if (!context->IsSecureContext()) {
+     return V8NotificationPermission(V8NotificationPermission::Enum::kDenied);
+@@ -448,6 +472,8 @@ V8NotificationPermission Notification::permission(ExecutionContext* context) {
+       status = mojom::blink::PermissionStatus::DENIED;
+   }
+ 
++  status = BlutVineOverrideNotificationPermission(status);
++
+   return V8NotificationPermission(PermissionToV8Enum(status));
+ }
+ 
+diff --git a/third_party/blink/renderer/modules/permissions/BUILD.gn b/third_party/blink/renderer/modules/permissions/BUILD.gn
+index 5809817f9e..b170eb9d43 100644
+--- a/third_party/blink/renderer/modules/permissions/BUILD.gn
++++ b/third_party/blink/renderer/modules/permissions/BUILD.gn
+@@ -17,6 +17,7 @@ blink_modules_sources("permissions") {
+     "permissions.cc",
+     "permissions.h",
+   ]
++  deps = [ "//components/ungoogled:ungoogled_switches" ]
+ }
+ 
+ source_set("unit_tests") {
+diff --git a/third_party/blink/renderer/modules/permissions/permissions.cc b/third_party/blink/renderer/modules/permissions/permissions.cc
+index 7dfb580705..5975a18321 100644
+--- a/third_party/blink/renderer/modules/permissions/permissions.cc
++++ b/third_party/blink/renderer/modules/permissions/permissions.cc
+@@ -8,6 +8,8 @@
+ #include <utility>
+ 
+ #include "base/metrics/histogram_functions.h"
++#include "base/command_line.h"
++#include "components/ungoogled/ungoogled_switches.h"
+ #include "third_party/blink/public/common/permissions/permission_utils.h"
+ #include "third_party/blink/public/mojom/page/page.mojom-blink.h"
+ #include "third_party/blink/public/mojom/permissions/permission_status.mojom-blink.h"
+@@ -37,6 +39,30 @@ void RecordTopLevelStorageAccessQueryMetrics(bool is_top_level_storage_access) {
+                             is_top_level_storage_access);
+ }
+ 
++void BlutVineOverridePermissionsQuery(
++    const mojom::blink::PermissionDescriptorPtr& descriptor,
++    mojom::blink::PermissionStatus* status) {
++  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
++          switches::kFingerprintPermissions)) {
++    return;
++  }
++  if (*status != mojom::blink::PermissionStatus::DENIED) {
++    return;
++  }
++  switch (descriptor->name) {
++    case mojom::blink::PermissionName::NOTIFICATIONS:
++    case mojom::blink::PermissionName::GEOLOCATION:
++    case mojom::blink::PermissionName::AUDIO_CAPTURE:
++    case mojom::blink::PermissionName::VIDEO_CAPTURE:
++    case mojom::blink::PermissionName::CLIPBOARD_READ:
++    case mojom::blink::PermissionName::CLIPBOARD_WRITE:
++      *status = mojom::blink::PermissionStatus::ASK;
++      break;
++    default:
++      break;
++  }
++}
++
+ bool ArePermissionDescriptorsEquivalent(
+     const mojom::blink::PermissionDescriptor& left,
+     const mojom::blink::PermissionDescriptor& right) {
+@@ -270,6 +296,8 @@ void Permissions::TaskComplete(
+       resolver->GetExecutionContext()->IsContextDestroyed())
+     return;
+ 
++  BlutVineOverridePermissionsQuery(descriptor, &result->status);
++
+   PermissionStatusListener* listener = GetOrCreatePermissionStatusListener(
+       std::move(result), std::move(descriptor));
+   if (listener)
+@@ -338,6 +366,9 @@ void Permissions::VerifyPermissionsAndReturnStatus(
+     if (internal_index == last_verified_permission_index)
+       last_verified_permission_index = -1;
+ 
++    BlutVineOverridePermissionsQuery(descriptors[internal_index],
++                                     &results[internal_index]->status);
++
+     PermissionStatusListener* listener = GetOrCreatePermissionStatusListener(
+         std::move(results[internal_index]),
+         descriptors[internal_index]->Clone());

@@ -1,0 +1,12 @@
+diff --git a/content/browser/gpu/gpu_process_host.cc b/content/browser/gpu/gpu_process_host.cc
+index b6ddfa6c60..d9c87aa13e 100644
+--- a/content/browser/gpu/gpu_process_host.cc
++++ b/content/browser/gpu/gpu_process_host.cc
+@@ -337,6 +337,7 @@ static const char* const kSwitchNames[] = {
+ #if BUILDFLAG(ENABLE_VRP_FLAGS)
+     vrp_flags::switches::kVrpFlags,
+ #endif
++    "fingerprint",
+ };
+ 
+ // These values are persisted to logs. Entries should not be renumbered and
